@@ -43,7 +43,9 @@ class _AdvancedSettingsScreen extends ConsumerWidget {
               ),
               _SettingsCard(
                 title: l10n.settingsRoutingTitle,
-                subtitle: l10n.settingsRoutingSubtitle,
+                subtitle: l10n.settingsRoutingRouteCount(
+                  ref.watch(routesProvider).value?.length ?? 0,
+                ),
                 icon: Icons.account_tree_rounded,
                 accent: ExpressiveAccent.tertiary,
                 onTap: () => Navigator.push(

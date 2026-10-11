@@ -14,11 +14,11 @@ import '../models/app_settings.dart';
 import '../models/ping_test_config.dart';
 import '../models/server_group.dart';
 import '../models/tun_settings.dart';
-import '../models/routing_rule.dart';
 import '../models/server_item.dart';
 import '../models/subscription.dart';
 import '../models/subscription_card_layout.dart';
 import '../models/subscription_card_theme.dart';
+import '../models/traffic_route.dart';
 import '../models/xray_core_settings.dart';
 import '../services/app_icon_cache.dart';
 import '../services/auto_select_home.dart';
@@ -55,7 +55,7 @@ import '../utils/process_name_utils.dart';
 import '../utils/mihomo_api_session.dart';
 import '../utils/mihomo_config_gen.dart';
 import '../utils/proxy_chain.dart';
-import '../utils/routing_rules_fold.dart';
+import '../utils/traffic_routes.dart';
 import '../utils/rule_lists.dart';
 import '../utils/singbox_outbounds.dart';
 import '../utils/singbox_tun_config.dart';
@@ -74,6 +74,7 @@ export 'ui_state_providers.dart';
 // Состояние приложения разложено по темам, но остаётся одной библиотекой:
 // импортируют отсюда десятки мест, и приватные хелперы вроде
 // _resolveFirstAddress ниже нужны сразу нескольким частям.
+part 'routes_provider.dart';
 part 'rule_lists_provider.dart';
 part 'servers_provider.dart';
 part 'settings_providers.dart';

@@ -168,7 +168,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsSplitTitle => 'پروکسی به تفکیک برنامه';
 
   @override
-  String get settingsRoutingTitle => 'قوانین مسیریابی';
+  String get settingsRoutingTitle => 'مسیریابی';
 
   @override
   String settingsSplitConfigured(int count) {
@@ -176,33 +176,13 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get settingsRoutingSubtitle => 'قوانین مستقیم / پروکسی / مسدود و قالب‌های آماده';
-
-  @override
-  String get settingsResetRoutingTitle => 'بازنشانی مسیریابی به حالت پیش‌فرض';
-
-  @override
-  String get settingsRoutingResetDone => 'قوانین مسیریابی بازنشانی شد';
-
-  @override
   String get settingsRoutingPresetsTitle => 'فهرست‌های آماده';
 
   @override
-  String get settingsRoutingPresetRuTitle => 'سایت‌های روسی — مستقیم';
+  String get settingsRoutingPresetRuTitle => 'سایت‌های روسی';
 
   @override
-  String get settingsRoutingPresetRuDesc => 'سایت‌های ‎.ru‎ و ‎.рф‎ و سرویس‌های روسی روی دامنه‌های دیگر بدون VPN باز می‌شوند';
-
-  @override
-  String get settingsRoutingPresetAdsTitle => 'تبلیغات و ردیاب‌ها — مسدود';
-
-  @override
-  String get settingsRoutingPresetAdsDesc => 'دامنه‌های تبلیغاتی و آمارگیری باز نمی‌شوند';
-
-  @override
-  String settingsRoutingPresetApplied(String name) {
-    return '«$name» اضافه شد';
-  }
+  String get settingsRoutingPresetAdsTitle => 'تبلیغات و ردیاب‌ها';
 
   @override
   String get settingsRoutingDirectTitle => 'مستقیم';
@@ -217,70 +197,13 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsRoutingFinalTitle => 'بقیهٔ ترافیک';
 
   @override
-  String get settingsRoutingFinalSubtitle => 'در فهرست‌ها نیست';
-
-  @override
-  String get settingsRoutingListsTitle => 'مسیر سایت‌ها';
-
-  @override
   String get settingsRoutingReconnect => 'اتصال دوباره';
-
-  @override
-  String get settingsRoutingAdvancedTitle => 'قوانین دلخواه';
-
-  @override
-  String get settingsRoutingAdvancedHint => 'قوانین تکی با کلید جداگانه. به فهرست‌های بالا اضافه می‌شوند.';
-
-  @override
-  String get settingsRoutingAdvancedAdd => 'افزودن قانون';
-
-  @override
-  String get settingsRoutingRuleNewTitle => 'قانون جدید';
-
-  @override
-  String get settingsRoutingRuleEditTitle => 'ویرایش قانون';
-
-  @override
-  String get settingsRoutingRuleName => 'نام';
-
-  @override
-  String get settingsRoutingRuleNameHint => 'مثلاً سرویس‌های ویدیویی';
-
-  @override
-  String get settingsRoutingRuleValues => 'مقادیر';
-
-  @override
-  String get settingsRoutingRuleValuesHint => 'هر مورد در یک خط یا جدا شده با ویرگول';
-
-  @override
-  String get settingsRoutingRuleMatchBy => 'تطابق بر اساس';
-
-  @override
-  String get settingsRoutingRuleTypeDomain => 'دامنه';
-
-  @override
-  String get settingsRoutingRuleTypeIp => 'IP / CIDR';
-
-  @override
-  String get settingsRoutingRuleTypeGeoip => 'GeoIP';
-
-  @override
-  String get settingsRoutingRuleTypeGeosite => 'GeoSite';
-
-  @override
-  String get settingsRoutingRuleAction => 'عملکرد';
-
-  @override
-  String get settingsRoutingRuleSave => 'ذخیره';
-
-  @override
-  String get settingsRoutingRuleDeleteConfirm => 'این قانون حذف شود؟';
 
   @override
   String get routingCheatSheetTitle => 'نحوهٔ نوشتن قوانین';
 
   @override
-  String get routingCheatSheetBody => 'قانون‌ها فقط یک فهرست‌اند: چه چیزی از کجا برود. هر خط یک دامنه، یک آی‌پی یا یک برچسب جغرافیایی است و کنارش عملکرد آن: مستقیم (بدون VPN)، از طریق VPN (پروکسی) یا مسدود.\n\n## دامنه‌ها\nvk.com — خود دامنه و همهٔ زیردامنه‌هایش\nru — هر چیزی که به ‎.ru‎ ختم شود (یک کلمه، بدون نقطه)\n‎.example.com‎ — فقط زیردامنه‌ها، نه خود دامنه\nfull:example.com — دقیقاً همین هاست، بدون زیردامنه\n‎regexp:…‎ — عبارت منظم، اگر واقعاً لازم شد\n\n## آدرس‌های آی‌پی\n1.2.3.4 — یک آدرس\n10.0.0.0/8 — یک بازهٔ کامل (CIDR)\n\n## GeoIP: بر اساس کشور\ngeoip:ru — همهٔ آی‌پی‌های روسیه. به‌جای ru هر کشوری را بگذارید: ‎us، de، cn، ua، kz…‎\nبه‌علاوه بسته‌های آماده: geoip:private (شبکهٔ محلی)، geoip:telegram، geoip:google.\nتفکیک بر اساس کشور لازم دارید؟ همین است؛ geoip همهٔ کشورها را می‌شناسد.\n\n## GeoSite: فهرست‌های آماده\n‎geosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…‎\nاین‌ها کشور نیستند، بلکه دسته‌بندی سرویس‌هایی‌اند که از قبل برایتان جمع شده.\nکشور اینجا تقریباً نیست (فقط geolocation-⁠cn و geolocation-⁠!⁠cn)، پس برای کشورها از geoip استفاده کنید.\n\n## روی کامپیوتر (هستهٔ keqrnel)\nقانون‌های جغرافیایی مثل موبایل کار می‌کنند: xray داخل keqrnel آن‌ها را اجرا می‌کند. فقط باید geoip.dat و geosite.dat کنار keqdroid.exe باشند؛ در نسخهٔ رسمی از قبل آنجا هستند. اگر قانون‌های جغرافیایی نادیده گرفته می‌شوند، اول همین دو فایل را بررسی کنید.\n\n## ترتیب\nاز بالا به پایین: اول مسدود، بعد سرور خودتان (همیشه مستقیم، وگرنه حلقه ایجاد می‌شود)، بعد مستقیم، بعد پروکسی. هرچه باقی بماند، از کلید «ترافیک بدون قانون» در بالا پیروی می‌کند.';
+  String get routingCheatSheetBody => 'هر مسیر سه بخش دارد: کدام برنامه، چه ترافیکی، به کجا. در «سایت‌های دلخواه» هر خط یک دامنه، آی‌پی، برچسب جغرافیایی یا لینک فهرست است و مقصد را خود مسیر تعیین می‌کند: مستقیم، پروکسی یا مسدود.\n\n## دامنه‌ها\nvk.com — خود دامنه و همهٔ زیردامنه‌هایش\nru — هر چیزی که به ‎.ru‎ ختم شود (یک کلمه، بدون نقطه)\n‎.example.com‎ — فقط زیردامنه‌ها، نه خود دامنه\nfull:example.com — دقیقاً همین هاست، بدون زیردامنه\n‎regexp:…‎ — عبارت منظم، اگر واقعاً لازم شد\n\n## آدرس‌های آی‌پی\n1.2.3.4 — یک آدرس\n10.0.0.0/8 — یک بازهٔ کامل (CIDR)\n\n## GeoIP: بر اساس کشور\ngeoip:ru — همهٔ آی‌پی‌های روسیه. به‌جای ru هر کشوری را بگذارید: ‎us، de، cn، ua، kz…‎\nبه‌علاوه بسته‌های آماده: geoip:private (شبکهٔ محلی)، geoip:telegram، geoip:google.\nتفکیک بر اساس کشور لازم دارید؟ همین است؛ geoip همهٔ کشورها را می‌شناسد.\n\n## GeoSite: فهرست‌های آماده\n‎geosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…‎\nاین‌ها کشور نیستند، بلکه دسته‌بندی سرویس‌هایی‌اند که از قبل برایتان جمع شده.\nکشور اینجا تقریباً نیست (فقط geolocation-⁠cn و geolocation-⁠!⁠cn)، پس برای کشورها از geoip استفاده کنید.\n\n## روی کامپیوتر (هستهٔ keqrnel)\nقانون‌های جغرافیایی مثل موبایل کار می‌کنند: xray داخل keqrnel آن‌ها را اجرا می‌کند. فقط باید geoip.dat و geosite.dat کنار keqdroid.exe باشند؛ در نسخهٔ رسمی از قبل آنجا هستند. اگر قانون‌های جغرافیایی نادیده گرفته می‌شوند، اول همین دو فایل را بررسی کنید.\n\n## ترتیب\nمثل صفحه، از بالا به پایین: مسدودسازی، برنامه‌های مشخص، همهٔ برنامه‌ها. در همهٔ برنامه‌ها «مستقیم» پیش از «پروکسی» بررسی می‌شود. سرور خودتان همیشه پیش از همه مستقیم می‌رود، وگرنه حلقه ایجاد می‌شود. هرچه با هیچ مسیری جور نشود، از ردیف «بقیهٔ ترافیک» پیروی می‌کند.';
 
   @override
   String settingsRoutingItemCount(int count) {
@@ -293,6 +216,137 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String settingsRoutingRouteCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مسیر',
+      zero: 'بدون مسیر',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get routesSectionBlock => 'مسدودسازی';
+
+  @override
+  String get routesSectionApps => 'برنامه‌ها';
+
+  @override
+  String get routesSectionAllApps => 'همهٔ برنامه‌ها';
+
+  @override
+  String get routesHint => 'فهرست‌های «مستقیم»، «پروکسی» و «مسدود» اکنون مسیر هستند. برای تغییر، روی مسیر بزنید.';
+
+  @override
+  String get routesHintDismiss => 'متوجه شدم';
+
+  @override
+  String get routeNew => 'مسیر جدید';
+
+  @override
+  String get routeNewSubtitle => 'برنامه، سایت‌ها یا فهرست آماده';
+
+  @override
+  String get routeNewSubtitleSites => 'سایت‌ها یا فهرست آماده';
+
+  @override
+  String get routeEditorTitle => 'مسیر';
+
+  @override
+  String get routeWho => 'کدام برنامه';
+
+  @override
+  String get routeWhat => 'چه ترافیکی';
+
+  @override
+  String get routeWhere => 'به کجا';
+
+  @override
+  String get routeWhoAllSubtitle => 'هر چه از VPN عبور می‌کند';
+
+  @override
+  String get routeWhoApps => 'برنامه‌های مشخص';
+
+  @override
+  String routeWhoDone(int count) {
+    return 'تمام · $count';
+  }
+
+  @override
+  String get routeWhatAll => 'همهٔ ترافیک';
+
+  @override
+  String get routeWhatAllSubtitle => 'هر چه برنامه باز می‌کند';
+
+  @override
+  String get routeWhatSites => 'سایت‌های دلخواه';
+
+  @override
+  String get routeWhatSitesSubtitle => 'دامنه، IP و لینک فهرست‌ها';
+
+  @override
+  String routeWhatPresetValue(String name) {
+    return 'فهرست آماده · $name';
+  }
+
+  @override
+  String routeWhatSitesValue(String entries) {
+    return 'سایت‌های دلخواه · $entries';
+  }
+
+  @override
+  String get routeWhereVpnSubtitle => 'از طریق سروری که برنامه به آن وصل است';
+
+  @override
+  String get routeWhereDirectSubtitle => 'بدون VPN';
+
+  @override
+  String get routeWhereBlockSubtitle => 'اتصال‌ها باز نمی‌شوند';
+
+  @override
+  String get routeWhereServers => 'سرور دیگر';
+
+  @override
+  String get routeToVpn => 'پروکسی';
+
+  @override
+  String get routeToDirect => 'مستقیم';
+
+  @override
+  String get routeToBlock => 'مسدود';
+
+  @override
+  String get routeAllTrafficShort => 'همهٔ ترافیک';
+
+  @override
+  String get routeDisabledShort => 'خاموش';
+
+  @override
+  String get routeEnabled => 'مسیر فعال';
+
+  @override
+  String get routeDeleteConfirm => 'این مسیر حذف شود؟';
+
+  @override
+  String get routeServerMissing => 'سرور دیگر نیست، از پروکسی می‌رود';
+
+  @override
+  String get routeServerUnsupported => 'هستهٔ فعلی این سرور را نمی‌پذیرد، از پروکسی می‌رود';
+
+  @override
+  String get routeAppsUnsupported => 'هستهٔ فعلی برنامه‌ها را تشخیص نمی‌دهد، مسیر کار نمی‌کند';
+
+  @override
+  String get routeAppsNeedTun => 'فقط در حالت TUN کار می‌کند';
+
+  @override
+  String get routeSplitExcluded => 'این برنامه‌ها در پروکسی به تفکیک برنامه مستثنا شده‌اند';
+
+  @override
+  String get routeRefilterUnmatched => '«بقیهٔ ترافیک» اکنون مستقیم می‌رود';
 
   @override
   String settingsRoutingLinkDomains(int count, String formatted) {
@@ -1972,9 +2026,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsResetConfirmAction => 'بازنشانی';
 
   @override
-  String get settingsResetRoutingConfirm => 'این کار قوانین مسیریابی پیش‌فرض را برمی‌گرداند و فهرست‌های مستقیم، پروکسی و مسدود شما را پاک می‌کند. برگشت‌پذیر نیست.';
-
-  @override
   String get settingsXrayResetConfirm => 'این کار تنظیمات پیش‌فرض هستهٔ Xray، TUN و پورت‌های محلی را برمی‌گرداند. برگشت‌پذیر نیست.';
 
   @override
@@ -2071,10 +2122,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get tunRememberFailed => 'تغییر مجوز TUN ممکن نشد';
 
   @override
-  String get settingsRoutingPresetRefilterTitle => 'مسدودشده‌ها در روسیه (Re-filter) — پروکسی';
-
-  @override
-  String get settingsRoutingPresetRefilterDesc => 'سایت‌ها و آدرس‌های مسدودشده در روسیه از VPN رد می‌شوند، بقیه مستقیم می‌مانند';
+  String get settingsRoutingPresetRefilterTitle => 'مسدودشده‌ها در روسیه (Re-filter)';
 
   @override
   String get settingsRoutingGeoUnknownTitle => 'در پایگاه دادهٔ جغرافیایی نیست — نادیده گرفته می‌شود';

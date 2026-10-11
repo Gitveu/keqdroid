@@ -4,11 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/app/app.dart';
 import 'package:keqdroid/l10n/app_localizations.dart';
 import 'package:keqdroid/models/app_settings.dart';
+import 'package:keqdroid/models/traffic_route.dart';
 import 'package:keqdroid/providers/providers.dart';
 import 'package:keqdroid/screens/settings_tab.dart';
 import 'package:keqdroid/services/rule_list_service.dart';
+import 'package:keqdroid/services/storage_service.dart';
 import 'package:keqdroid/services/vpn_engine.dart';
-import 'package:keqdroid/shared/ui/expressive_button_group.dart';
 
 import '../helpers/fake_tunnel_backend.dart';
 import '../helpers/test_storage.dart';
@@ -24,20 +25,16 @@ class _FakeSettings extends SettingsNotifier {
   Future<void> save(AppSettings settings) async => state = AsyncData(settings);
 }
 
-/// Переподключение не поднимает туннель, а запоминает, с какими списками его
-/// попросили: ровно это и видит ядро при новом подключении.
 class _FakeVpn extends VpnStateNotifier {
   _FakeVpn(this._status);
   final VpnStatus _status;
-  final reconnectedWith = <String>[];
+  var reconnects = 0;
 
   @override
   Future<VpnState> build() async => VpnState(status: _status);
 
   @override
-  Future<void> reconnectToActiveServer() async {
-    reconnectedWith.add(ref.read(settingsNotifierProvider).value!.directRules);
-  }
+  Future<void> reconnectToActiveServer() async => reconnects++;
 }
 
 /// Списки по ссылкам без сети и диска: экран только показывает их состояние.
@@ -50,22 +47,28 @@ class _FakeRuleLists extends RuleListsNotifier {
 }
 
 late _FakeVpn _vpn;
+late StorageService _storage;
 
 Future<ProviderContainer> _pump(
   WidgetTester tester, {
   VpnStatus status = VpnStatus.disconnected,
-  AppSettings settings = const AppSettings(directRules: 'vk.com'),
+  AppSettings settings = const AppSettings(),
+  List<TrafficRoute>? routes,
+  bool hint = false,
   Map<String, RuleListStatus> ruleLists = const {},
 }) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 2.625;
   addTearDown(tester.view.reset);
 
-  final storage = await buildStorageService();
+  _storage = await buildStorageService(
+    initialValues: {if (hint) 'keqdis_routes_hint': true},
+  );
+  if (routes != null) await _storage.saveRoutes(routes);
   _vpn = _FakeVpn(status);
   final container = ProviderContainer(
     overrides: [
-      storageProvider.overrideWithValue(storage),
+      storageProvider.overrideWithValue(_storage),
       settingsNotifierProvider.overrideWith(() => _FakeSettings(settings)),
       vpnStateProvider.overrideWith(() => _vpn),
       ruleListsProvider.overrideWith(() => _FakeRuleLists(ruleLists)),
@@ -88,14 +91,7 @@ Future<ProviderContainer> _pump(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         locale: const Locale('ru'),
-        // Экран берёт списки из настроек в initState — в приложении они к
-        // этому времени давно загружены, здесь их надо дождаться.
-        home: Consumer(
-          builder: (context, ref, _) =>
-              ref.watch(settingsNotifierProvider).value == null
-                  ? const SizedBox()
-                  : routingScreenForTest(),
-        ),
+        home: routingScreenForTest(),
       ),
     ),
   );
@@ -103,86 +99,216 @@ Future<ProviderContainer> _pump(
   return container;
 }
 
-AppSettings _saved(ProviderContainer c) =>
-    c.read(settingsNotifierProvider).value!;
+/// Тексты на экране без изоляторов направления, которыми код обкладывает
+/// адреса для фарси.
+List<String> _texts(WidgetTester tester) => [
+      for (final t in tester.widgetList<Text>(find.byType(Text)))
+        (t.data ?? t.textSpan?.toPlainText() ?? '')
+            .replaceAll(RegExp('[\u2066-\u2069]'), ''),
+    ];
+
+const _block = TrafficRoute(
+  id: 'block',
+  sites: 'doubleclick.net, criteo.com',
+  target: RouteTarget.block,
+);
+const _direct = TrafficRoute(
+  id: 'direct',
+  sites: 'ru, yandex.ru, vk.com',
+  target: RouteTarget.direct,
+);
+const _vpnOff = TrafficRoute(
+  id: 'off',
+  sites: 'geosite:telegram',
+  target: RouteTarget.vpn,
+  enabled: false,
+);
 
 void main() {
-  testWidgets('готовый список из шторки добавляется сразу, без второго шага',
-      (tester) async {
-    final c = await _pump(tester);
+  group('главный экран', () {
+    testWidgets('разделы по порядку проверки, пустые не показываются',
+        (tester) async {
+      await _pump(tester, routes: const [_direct, _block]);
+      final texts = _texts(tester);
+      expect(texts, contains('Блокировка'));
+      expect(texts, isNot(contains('Приложения')),
+          reason: 'маршрутов отдельных приложений нет — и раздела нет');
+      expect(
+        texts.indexOf('Блокировка'),
+        lessThan(texts.indexOf('Все приложения')),
+      );
+      expect(texts, contains('doubleclick.net, criteo.com'));
+      expect(texts, contains('→ блокировать'));
+      expect(texts, contains('→ напрямую'));
+      // «Всё остальное» — последней строкой раздела всех приложений.
+      expect(
+        texts.indexOf('ru, yandex.ru, vk.com'),
+        lessThan(texts.indexOf('Всё остальное')),
+      );
+    });
 
-    await tester.tap(find.text('Готовые списки'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Российские сайты напрямую'));
-    await tester.pumpAndSettle();
+    testWidgets('выключенный маршрут подписан', (tester) async {
+      await _pump(tester, routes: const [_vpnOff]);
+      expect(_texts(tester), contains('→ через VPN · выключен'));
+    });
 
-    expect(_saved(c).directRules, contains('vk.com'));
-    expect(_saved(c).directRules, contains('geosite:category-ru'));
-    expect(find.text('Добавлено: «Российские сайты напрямую»'), findsOneWidget);
-    expect(_saved(c).finalOutbound, AppSettings.finalOutboundProxy);
+    testWidgets('подсказка после обновления закрывается навсегда',
+        (tester) async {
+      await _pump(tester, routes: const [_direct], hint: true);
+      expect(find.text('Понятно'), findsOneWidget);
+      await tester.tap(find.text('Понятно'));
+      await tester.pumpAndSettle();
+      expect(find.text('Понятно'), findsNothing);
+      expect(_storage.routesHintPending, isFalse);
+    });
+
+    testWidgets('«Всё остальное» — те же три пути, что у маршрутов',
+        (tester) async {
+      final c = await _pump(tester, routes: const [_direct]);
+      await tester.tap(find.text('Всё остальное'));
+      await tester.pumpAndSettle();
+      expect(find.text('Через VPN'), findsOneWidget);
+      expect(find.text('Напрямую'), findsOneWidget);
+      await tester.tap(find.text('Блокировать'));
+      await tester.pumpAndSettle();
+      expect(
+        c.read(settingsNotifierProvider).value!.finalOutbound,
+        AppSettings.finalOutboundBlock,
+      );
+      expect(_texts(tester), contains('→ блокировать'));
+    });
+
+    testWidgets('при поднятом туннеле — напоминание и переподключение',
+        (tester) async {
+      await _pump(tester, routes: const [_direct], status: VpnStatus.connected);
+      await tester.tap(find.text('Переподключить'));
+      await tester.pumpAndSettle();
+      expect(_vpn.reconnects, 1);
+    });
+
+    testWidgets('без туннеля напоминания нет', (tester) async {
+      await _pump(tester, routes: const [_direct]);
+      expect(find.text('Переподключить'), findsNothing);
+    });
   });
 
-  testWidgets('Re-filter заодно отправляет остальной трафик напрямую',
-      (tester) async {
-    // Без переключения пресет ничего не менял: при «остальное через VPN»
-    // заблокированное и так уходило в туннель вместе со всем прочим.
-    final c = await _pump(tester);
+  group('редактор', () {
+    Future<void> openNew(WidgetTester tester) async {
+      await tester.tap(find.text('Новый маршрут'));
+      await tester.pumpAndSettle();
+    }
 
-    await tester.tap(find.text('Готовые списки'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Заблокировано в РФ (Re-filter) через VPN'));
-    await tester.pumpAndSettle();
+    testWidgets('новый маршрут: по умолчанию свои сайты через VPN',
+        (tester) async {
+      await _pump(tester, routes: const []);
+      await openNew(tester);
+      expect(find.text('Новый маршрут'), findsWidgets);
+      // Без отдельных приложений строки «Кто» нет: выбирать не из чего.
+      expect(find.text('Кто'), findsNothing);
+      expect(find.text('Свои сайты · пусто'), findsOneWidget);
+      expect(find.text('Через VPN'), findsOneWidget);
+    });
 
-    expect(_saved(c).proxyRules, contains('geosite:refilter'));
-    expect(_saved(c).proxyRules, contains('geoip:refilter'));
-    expect(_saved(c).finalOutbound, AppSettings.finalOutboundDirect);
-    expect(_saved(c).directRules, 'vk.com');
-  });
+    testWidgets('пустой новый маршрут при уходе не сохраняется',
+        (tester) async {
+      await _pump(tester, routes: const []);
+      await openNew(tester);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(await _storage.getRoutes(), isEmpty);
+    });
 
-  testWidgets('«всё остальное» — те же три пути и в том же порядке, что списки',
-      (tester) async {
-    final c = await _pump(tester);
+    // Набор сохраняется на паузе; уйти со страницы можно раньше паузы.
+    testWidgets('набранное сразу перед уходом не теряется', (tester) async {
+      await _pump(tester, routes: const []);
+      await openNew(tester);
+      await tester.enterText(find.byType(TextField), 'youtube.com');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      final saved = await _storage.getRoutes();
+      expect(saved.single.sites, 'youtube.com');
+      expect(saved.single.target, RouteTarget.vpn);
+      expect(_texts(tester), contains('youtube.com'));
+    });
 
-    final buttons = tester.widget<ExpressiveConnectedButtons<String>>(
-      find.byType(ExpressiveConnectedButtons<String>),
-    );
-    expect(buttons.segments.map((s) => s.value), [
-      AppSettings.finalOutboundDirect,
-      AppSettings.finalOutboundProxy,
-      AppSettings.finalOutboundBlock,
-    ]);
-    expect(
-      buttons.segments.map((s) => s.label),
-      ['Напрямую', 'Через VPN', 'Блокировать'],
-    );
+    testWidgets('готовый список ставит своё «куда»', (tester) async {
+      await _pump(tester, routes: const []);
+      await openNew(tester);
+      await tester.tap(find.text('Что'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Реклама и трекеры'));
+      await tester.pumpAndSettle();
+      expect(find.text('Готовый список · Реклама и трекеры'), findsOneWidget);
+      final saved = (await _storage.getRoutes()).single;
+      expect(saved.content, RouteContent.preset);
+      expect(saved.presetId, 'ads');
+      expect(saved.target, RouteTarget.block);
+    });
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(ExpressiveConnectedButtons<String>),
-        matching: find.text('Блокировать'),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(_saved(c).finalOutbound, AppSettings.finalOutboundBlock);
-  });
+    testWidgets('Re-filter заодно отправляет «Всё остальное» напрямую',
+        (tester) async {
+      final c = await _pump(tester, routes: const []);
+      await openNew(tester);
+      await tester.tap(find.text('Что'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Заблокировано в РФ (Re-filter)'));
+      await tester.pumpAndSettle();
+      expect(
+        c.read(settingsNotifierProvider).value!.finalOutbound,
+        AppSettings.finalOutboundDirect,
+      );
+      expect(find.text('«Всё остальное» теперь идёт напрямую'), findsOneWidget);
+      expect((await _storage.getRoutes()).single.target, RouteTarget.vpn);
+    });
 
-  testWidgets('«Переподключить» сперва сохраняет недописанный ввод',
-      (tester) async {
-    await _pump(tester, status: VpnStatus.connected);
+    testWidgets('«куда» меняется в шторке', (tester) async {
+      await _pump(tester, routes: const [_direct]);
+      await tester.tap(find.text('ru, yandex.ru, vk.com'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Куда'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Блокировать').last);
+      await tester.pumpAndSettle();
+      expect((await _storage.getRoutes()).single.target, RouteTarget.block);
+    });
 
-    // Сохранение ждёт паузы в наборе; кнопку жмут сразу после правки.
-    await tester.enterText(find.text('vk.com'), 'vk.com, example.org');
-    await tester.pump();
-    await tester.tap(find.text('Переподключить'));
-    await tester.pumpAndSettle();
+    testWidgets('маршрут выключается и удаляется', (tester) async {
+      await _pump(tester, routes: const [_direct]);
+      await tester.tap(find.text('ru, yandex.ru, vk.com'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect((await _storage.getRoutes()).single.enabled, isFalse);
 
-    expect(_vpn.reconnectedWith, ['vk.com, example.org']);
-  });
+      await tester.tap(find.byTooltip('Удалить'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Удалить'));
+      await tester.pumpAndSettle();
+      expect(await _storage.getRoutes(), isEmpty);
+      expect(find.text('Всё остальное'), findsOneWidget,
+          reason: 'после удаления — снова главный экран');
+    });
 
-  testWidgets('без поднятого туннеля подсказки о переподключении нет',
-      (tester) async {
-    await _pump(tester);
-    expect(find.text('Переподключить'), findsNothing);
+    // Перенесённое правило по процессу: отдельные приложения ядро пока не
+    // различает, и карточка обязана сказать, что маршрут не работает.
+    testWidgets('маршрут приложений без поддержки ядра — с причиной',
+        (tester) async {
+      await _pump(tester, routes: const [
+        TrafficRoute(
+          id: 'app',
+          apps: ['chrome.exe'],
+          content: RouteContent.allTraffic,
+          target: RouteTarget.direct,
+          enabled: false,
+        ),
+      ]);
+      expect(_texts(tester), contains('Приложения'));
+      expect(_texts(tester), contains('chrome'));
+      expect(
+        _texts(tester).any((t) => t.contains('не различает приложения')),
+        isTrue,
+      );
+    });
   });
 
   group('списки по ссылкам', () {
@@ -194,10 +320,13 @@ void main() {
         (tester) async {
       await _pump(
         tester,
-        settings: const AppSettings(
-          directRules: 'vk.com',
-          blockedRules: 'doubleclick.net, $ads\n$big\n$local',
-        ),
+        routes: const [
+          TrafficRoute(
+            id: 'b',
+            sites: 'doubleclick.net, $ads\n$big\n$local',
+            target: RouteTarget.block,
+          ),
+        ],
         ruleLists: {
           ads: RuleListStatus(
             url: ads,
@@ -217,14 +346,14 @@ void main() {
           ),
         },
       );
+      await tester.tap(find.textContaining('doubleclick.net'));
+      await tester.pumpAndSettle();
 
-      String plain(String s) => s.replaceAll(RegExp('[\u2066-\u2069]'), '');
-      final texts = tester
-          .widgetList<Text>(find.byType(Text))
-          .map((t) => plain(t.data ?? ''))
-          .toList();
-
-      expect(texts, contains('1 запись, 82\u00a0461 домен по ссылкам'));
+      final texts = _texts(tester);
+      expect(
+        texts,
+        contains('Свои сайты · 1 запись, 82\u00a0461 домен по ссылкам'),
+      );
       expect(
         texts,
         contains('adguardteam.github.io — 82\u00a0341 домен, обновлён 3ч назад'),
@@ -249,14 +378,15 @@ void main() {
         (tester) async {
       await _pump(
         tester,
-        settings: const AppSettings(blockedRules: ads),
+        routes: const [
+          TrafficRoute(id: 'b', sites: ads, target: RouteTarget.block),
+        ],
         ruleLists: {ads: const RuleListStatus(url: ads, loading: true)},
       );
-      final texts = tester
-          .widgetList<Text>(find.byType(Text))
-          .map((t) => (t.data ?? '').replaceAll(RegExp('[\u2066-\u2069]'), ''))
-          .toList();
-      expect(texts, contains('1 запись'));
+      await tester.tap(find.textContaining('adguardteam'));
+      await tester.pumpAndSettle();
+      final texts = _texts(tester);
+      expect(texts, contains('Свои сайты · 1 запись'));
       expect(texts, contains('adguardteam.github.io — загружается…'));
     });
   });
@@ -268,5 +398,7 @@ void main() {
     expect(ru.settingsRoutingItemCount(21), '21 запись');
     expect(ru.settingsRoutingItemCount(22), '22 записи');
     expect(ru.settingsRoutingItemCount(25), '25 записей');
+    expect(ru.settingsRoutingRouteCount(21), '21 маршрут');
+    expect(ru.settingsRoutingRouteCount(5), '5 маршрутов');
   });
 }

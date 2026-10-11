@@ -83,7 +83,7 @@
   "settingsTitle": "设置",
   "settingsThemeTitle": "外观",
   "settingsSplitTitle": "分应用代理",
-  "settingsRoutingTitle": "路由规则",
+  "settingsRoutingTitle": "路由",
   "settingsSplitConfigured": "已配置 {count} 个应用",
   "@settingsSplitConfigured": {
     "placeholders": {
@@ -92,48 +92,16 @@
       }
     }
   },
-  "settingsRoutingSubtitle": "直连 / 代理 / 阻止规则及预设",
-  "settingsResetRoutingTitle": "重置路由为默认值",
-  "settingsRoutingResetDone": "路由规则已重置",
   "settingsRoutingPresetsTitle": "现成列表",
-  "settingsRoutingPresetRuTitle": "俄罗斯网站走直连",
-  "settingsRoutingPresetRuDesc": ".ru 和 .рф 网站以及其他域名上的俄罗斯服务绕过 VPN",
-  "settingsRoutingPresetAdsTitle": "阻止广告和跟踪器",
-  "settingsRoutingPresetAdsDesc": "广告和统计分析域名无法打开",
-  "settingsRoutingPresetApplied": "已添加“{name}”",
-  "@settingsRoutingPresetApplied": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
+  "settingsRoutingPresetRuTitle": "俄罗斯网站",
+  "settingsRoutingPresetAdsTitle": "广告和跟踪器",
   "settingsRoutingDirectTitle": "直连",
   "settingsRoutingProxyTitle": "代理",
   "settingsRoutingBlockTitle": "阻止",
   "settingsRoutingFinalTitle": "其他所有",
-  "settingsRoutingFinalSubtitle": "不在列表中",
-  "settingsRoutingListsTitle": "网站去向",
   "settingsRoutingReconnect": "重新连接",
-  "settingsRoutingAdvancedTitle": "自定义规则",
-  "settingsRoutingAdvancedHint": "带独立开关的单条规则，会并入上面的列表。",
-  "settingsRoutingAdvancedAdd": "添加规则",
-  "settingsRoutingRuleNewTitle": "新建规则",
-  "settingsRoutingRuleEditTitle": "编辑规则",
-  "settingsRoutingRuleName": "名称",
-  "settingsRoutingRuleNameHint": "例如 流媒体",
-  "settingsRoutingRuleValues": "值",
-  "settingsRoutingRuleValuesHint": "每行一个或用逗号分隔",
-  "settingsRoutingRuleMatchBy": "匹配方式",
-  "settingsRoutingRuleTypeDomain": "域名",
-  "settingsRoutingRuleTypeIp": "IP / CIDR",
-  "settingsRoutingRuleTypeGeoip": "GeoIP",
-  "settingsRoutingRuleTypeGeosite": "GeoSite",
-  "settingsRoutingRuleAction": "动作",
-  "settingsRoutingRuleSave": "保存",
-  "settingsRoutingRuleDeleteConfirm": "删除此规则？",
   "routingCheatSheetTitle": "怎么写规则",
-  "routingCheatSheetBody": "规则就是一张清单：什么流量走哪里。每一行写一个域名、IP 或地理标签，旁边是动作：直连（不走 VPN）、走 VPN（代理）或阻止。\n\n## 域名\nvk.com — 这个域名本身及其所有子域名\nru — 所有以 .ru 结尾的域名（只写这个词，不带点）\n.example.com — 只匹配子域名，不含域名本身\nfull:example.com — 只匹配这一个主机，不含子域名\nregexp:… — 正则表达式，确实需要复杂匹配时再用\n\n## IP 地址\n1.2.3.4 — 单个地址\n10.0.0.0/8 — 一整段地址（CIDR）\n\n## GeoIP：按国家\ngeoip:ru — 所有俄罗斯 IP。把 ru 换成任意国家代码：us、de、cn、ua、kz……\n另有现成的集合：geoip:private（局域网）、geoip:telegram、geoip:google。\n要按国家分流？就用它，geoip 认得所有国家。\n\n## GeoSite：现成的列表\ngeosite:google、geosite:netflix、geosite:telegram、geosite:category-ads-all……\n这些不是国家，而是别人已经整理好的服务分类。\n这里几乎没有国家（只有 geolocation-cn 和 geolocation-!cn），所以按国家还是要用 geoip。\n\n## 在电脑上（keqrnel 内核）\n地理规则和手机上一样生效：由 keqrnel 内置的 xray 负责匹配。只需让 geoip.dat 和 geosite.dat 与 keqdroid.exe 放在同一目录，正式版里已经放好了。如果地理规则似乎没有生效，请先检查这两个文件。\n\n## 顺序\n从上到下：先阻止，再是您的服务器（始终直连，否则会形成回环），然后直连，最后代理。其余的流量按上方“其余流量”开关处理。",
+  "routingCheatSheetBody": "路由读作“对象 → 内容 → 去向”。在“自定义网站”中，每一行写一个域名、IP、地理标签或列表链接，去向由路由本身选择：直连、代理或阻止。\n\n## 域名\nvk.com — 这个域名本身及其所有子域名\nru — 所有以 .ru 结尾的域名（只写这个词，不带点）\n.example.com — 只匹配子域名，不含域名本身\nfull:example.com — 只匹配这一个主机，不含子域名\nregexp:… — 正则表达式，确实需要复杂匹配时再用\n\n## IP 地址\n1.2.3.4 — 单个地址\n10.0.0.0/8 — 一整段地址（CIDR）\n\n## GeoIP：按国家\ngeoip:ru — 所有俄罗斯 IP。把 ru 换成任意国家代码：us、de、cn、ua、kz……\n另有现成的集合：geoip:private（局域网）、geoip:telegram、geoip:google。\n要按国家分流？就用它，geoip 认得所有国家。\n\n## GeoSite：现成的列表\ngeosite:google、geosite:netflix、geosite:telegram、geosite:category-ads-all……\n这些不是国家，而是别人已经整理好的服务分类。\n这里几乎没有国家（只有 geolocation-cn 和 geolocation-!cn），所以按国家还是要用 geoip。\n\n## 在电脑上（keqrnel 内核）\n地理规则和手机上一样生效：由 keqrnel 内置的 xray 负责匹配。只需让 geoip.dat 和 geosite.dat 与 keqdroid.exe 放在同一目录，正式版里已经放好了。如果地理规则似乎没有生效，请先检查这两个文件。\n\n## 顺序\n与屏幕一致，从上到下：阻止、指定应用、所有应用。所有应用中先检查直连，再检查代理。您的服务器始终最先直连，否则会形成回环。不匹配任何路由的流量按“其他所有”这一行处理。",
   "settingsRoutingItemCount": "{count, plural, =0{空} =1{1 个条目} other{{count} 个条目}}",
   "@settingsRoutingItemCount": {
     "placeholders": {
@@ -142,6 +110,108 @@
       }
     }
   },
+  "settingsRoutingRouteCount": "{count, plural, =0{没有路由} other{{count} 条路由}}",
+  "@settingsRoutingRouteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "routesSectionBlock": "阻止",
+  "@routesSectionBlock": {},
+  "routesSectionApps": "应用",
+  "@routesSectionApps": {},
+  "routesSectionAllApps": "所有应用",
+  "@routesSectionAllApps": {},
+  "routesHint": "“直连”、“代理”和“阻止”列表现在是路由。点击路由即可修改。",
+  "@routesHint": {},
+  "routesHintDismiss": "知道了",
+  "@routesHintDismiss": {},
+  "routeNew": "新建路由",
+  "@routeNew": {},
+  "routeNewSubtitle": "应用、网站或现成列表",
+  "@routeNewSubtitle": {},
+  "routeNewSubtitleSites": "网站或现成列表",
+  "@routeNewSubtitleSites": {},
+  "routeEditorTitle": "路由",
+  "@routeEditorTitle": {},
+  "routeWho": "对象",
+  "@routeWho": {},
+  "routeWhat": "内容",
+  "@routeWhat": {},
+  "routeWhere": "去向",
+  "@routeWhere": {},
+  "routeWhoAllSubtitle": "所有经过 VPN 的流量",
+  "@routeWhoAllSubtitle": {},
+  "routeWhoApps": "指定应用",
+  "@routeWhoApps": {},
+  "routeWhoDone": "完成 · {count}",
+  "@routeWhoDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "routeWhatAll": "所有流量",
+  "@routeWhatAll": {},
+  "routeWhatAllSubtitle": "应用打开的一切",
+  "@routeWhatAllSubtitle": {},
+  "routeWhatSites": "自定义网站",
+  "@routeWhatSites": {},
+  "routeWhatSitesSubtitle": "域名、IP 和列表链接",
+  "@routeWhatSitesSubtitle": {},
+  "routeWhatPresetValue": "现成列表 · {name}",
+  "@routeWhatPresetValue": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "routeWhatSitesValue": "自定义网站 · {entries}",
+  "@routeWhatSitesValue": {
+    "placeholders": {
+      "entries": {
+        "type": "String"
+      }
+    }
+  },
+  "routeWhereVpnSubtitle": "通过应用当前连接的服务器",
+  "@routeWhereVpnSubtitle": {},
+  "routeWhereDirectSubtitle": "绕过 VPN",
+  "@routeWhereDirectSubtitle": {},
+  "routeWhereBlockSubtitle": "不建立连接",
+  "@routeWhereBlockSubtitle": {},
+  "routeWhereServers": "其他服务器",
+  "@routeWhereServers": {},
+  "routeToVpn": "代理",
+  "@routeToVpn": {},
+  "routeToDirect": "直连",
+  "@routeToDirect": {},
+  "routeToBlock": "阻止",
+  "@routeToBlock": {},
+  "routeAllTrafficShort": "所有流量",
+  "@routeAllTrafficShort": {},
+  "routeDisabledShort": "已关闭",
+  "@routeDisabledShort": {},
+  "routeEnabled": "启用路由",
+  "@routeEnabled": {},
+  "routeDeleteConfirm": "删除此路由？",
+  "@routeDeleteConfirm": {},
+  "routeServerMissing": "服务器已不存在，改走代理",
+  "@routeServerMissing": {},
+  "routeServerUnsupported": "当前内核无法使用此服务器，改走代理",
+  "@routeServerUnsupported": {},
+  "routeAppsUnsupported": "当前内核无法区分应用，此路由不生效",
+  "@routeAppsUnsupported": {},
+  "routeAppsNeedTun": "仅在 TUN 模式下生效",
+  "@routeAppsNeedTun": {},
+  "routeSplitExcluded": "这些应用已被分应用代理排除",
+  "@routeSplitExcluded": {},
+  "routeRefilterUnmatched": "“其他所有”现在走直连",
+  "@routeRefilterUnmatched": {},
   "settingsRoutingLinkDomains": "{count, plural, other{来自链接的 {formatted} 个域名}}",
   "@settingsRoutingLinkDomains": {
     "placeholders": {
@@ -967,7 +1037,6 @@
   "appearanceFontSystem": "系统",
   "settingsResetConfirmTitle": "重置设置？",
   "settingsResetConfirmAction": "重置",
-  "settingsResetRoutingConfirm": "将恢复内置路由规则并清除您的直连/代理/阻止列表。此操作无法撤销。",
   "settingsXrayResetConfirm": "将恢复 Xray 内核、TUN 和本地端口的默认设置。此操作无法撤销。",
   "settingsPermissionsTitle": "权限",
   "settingsPermissionsSubtitle": "可查看和撤销的应用权限",
@@ -1000,8 +1069,7 @@
   "tunRememberNotNow": "暂不",
   "tunRememberInstalled": "已启用免密码 TUN",
   "tunRememberFailed": "无法更改 TUN 授权",
-  "settingsRoutingPresetRefilterTitle": "俄罗斯封锁的网站（Re-filter）走 VPN",
-  "settingsRoutingPresetRefilterDesc": "在俄罗斯被封锁的网站和地址走 VPN，其余直连",
+  "settingsRoutingPresetRefilterTitle": "俄罗斯封锁的网站（Re-filter）",
   "settingsRoutingGeoUnknownTitle": "地理数据库中不存在，将被忽略",
   "settingsRoutingGeoUnknownHint": "遇到未知的地理代码，内核会拒绝整个配置，因此这些条目会在连接前被丢弃。请用上面的地球按钮选择已有代码。",
   "settingsRoutingGeoPickerTooltip": "插入地理代码",

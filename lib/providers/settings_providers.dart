@@ -1,51 +1,5 @@
 part of 'providers.dart';
 
-class RoutingRulesNotifier extends AsyncNotifier<List<RoutingRule>> {
-  @override
-  Future<List<RoutingRule>> build() async {
-    return ref.read(storageProvider).getRules();
-  }
-
-  Future<void> add(RoutingRule rule) async {
-    final rules = [...?state.value, rule];
-    await ref.read(storageProvider).saveRules(rules);
-    state = AsyncData(rules);
-  }
-
-  Future<void> updateRule(RoutingRule rule) async {
-    final rules = (state.value ?? [])
-        .map((r) => r.id == rule.id ? rule : r)
-        .toList();
-    await ref.read(storageProvider).saveRules(rules);
-    state = AsyncData(rules);
-  }
-
-  Future<void> remove(String id) async {
-    final rules = (state.value ?? []).where((r) => r.id != id).toList();
-    await ref.read(storageProvider).saveRules(rules);
-    state = AsyncData(rules);
-  }
-
-  Future<void> toggle(String id) async {
-    final rules = (state.value ?? [])
-        .map((r) => r.id == id ? r.copyWith(enabled: !r.enabled) : r)
-        .toList();
-    await ref.read(storageProvider).saveRules(rules);
-    state = AsyncData(rules);
-  }
-
-  Future<void> resetToDefaults() async {
-    final rules = RoutingRule.defaults;
-    await ref.read(storageProvider).saveRules(rules);
-    state = AsyncData(rules);
-  }
-}
-
-final routingRulesProvider =
-AsyncNotifierProvider<RoutingRulesNotifier, List<RoutingRule>>(
-  RoutingRulesNotifier.new,
-);
-
 class SplitTunnelingState {
   final Set<String> excludePackages;
   final Set<String> includePackages;

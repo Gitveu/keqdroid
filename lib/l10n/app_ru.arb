@@ -83,7 +83,7 @@
   "settingsTitle": "Настройки",
   "settingsThemeTitle": "Внешний вид",
   "settingsSplitTitle": "Раздельное туннелирование",
-  "settingsRoutingTitle": "Правила маршрутизации",
+  "settingsRoutingTitle": "Маршрутизация",
   "settingsSplitConfigured": "Настроено приложений: {count}",
   "@settingsSplitConfigured": {
     "placeholders": {
@@ -92,48 +92,16 @@
       }
     }
   },
-  "settingsRoutingSubtitle": "Правила direct / proxy / block и пресеты",
-  "settingsResetRoutingTitle": "Сбросить настройки маршрутизации",
-  "settingsRoutingResetDone": "Правила маршрутизации сброшены",
   "settingsRoutingPresetsTitle": "Готовые списки",
-  "settingsRoutingPresetRuTitle": "Российские сайты напрямую",
-  "settingsRoutingPresetRuDesc": "Сайты на .ru и .рф и российские сервисы на других доменах идут мимо VPN",
-  "settingsRoutingPresetAdsTitle": "Реклама и трекеры в блок",
-  "settingsRoutingPresetAdsDesc": "Рекламные и аналитические домены не открываются",
-  "settingsRoutingPresetApplied": "Добавлено: «{name}»",
-  "@settingsRoutingPresetApplied": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
+  "settingsRoutingPresetRuTitle": "Российские сайты",
+  "settingsRoutingPresetAdsTitle": "Реклама и трекеры",
   "settingsRoutingDirectTitle": "Напрямую",
   "settingsRoutingProxyTitle": "Через VPN",
   "settingsRoutingBlockTitle": "Блокировать",
   "settingsRoutingFinalTitle": "Всё остальное",
-  "settingsRoutingFinalSubtitle": "Нет в списках",
-  "settingsRoutingListsTitle": "Куда идут сайты",
   "settingsRoutingReconnect": "Переподключить",
-  "settingsRoutingAdvancedTitle": "Свои правила",
-  "settingsRoutingAdvancedHint": "Отдельные правила со своим переключателем. Добавляются к спискам выше.",
-  "settingsRoutingAdvancedAdd": "Добавить правило",
-  "settingsRoutingRuleNewTitle": "Новое правило",
-  "settingsRoutingRuleEditTitle": "Изменить правило",
-  "settingsRoutingRuleName": "Название",
-  "settingsRoutingRuleNameHint": "напр. Стриминг",
-  "settingsRoutingRuleValues": "Значения",
-  "settingsRoutingRuleValuesHint": "По одному в строке или через запятую",
-  "settingsRoutingRuleMatchBy": "Сопоставлять по",
-  "settingsRoutingRuleTypeDomain": "Домен",
-  "settingsRoutingRuleTypeIp": "IP / CIDR",
-  "settingsRoutingRuleTypeGeoip": "GeoIP",
-  "settingsRoutingRuleTypeGeosite": "GeoSite",
-  "settingsRoutingRuleAction": "Действие",
-  "settingsRoutingRuleSave": "Сохранить",
-  "settingsRoutingRuleDeleteConfirm": "Удалить это правило?",
   "routingCheatSheetTitle": "Как писать правила",
-  "routingCheatSheetBody": "Правила работают как список: что куда отправить. В каждой строке домен, IP или гео-метка, а рядом действие: напрямую (обход), через VPN (прокси) или в блок.\n\n## Домены\nvk.com — сам домен и все его поддомены\nru — всё, что оканчивается на .ru (просто слово без точки)\n.example.com — только поддомены, без самого домена\nfull:example.com — ровно этот адрес, без поддоменов\nregexp:… — если совсем надо, можно регуляркой\n\n## IP-адреса\n1.2.3.4 — один адрес\n10.0.0.0/8 — целый диапазон (CIDR)\n\n## GeoIP: по стране\ngeoip:ru — все российские IP. Вместо ru любая страна: us, de, cn, ua, kz…\nПлюс готовые пачки: geoip:private (локалка), geoip:telegram, geoip:google.\nНужно «по стране»? Это сюда, geoip знает все.\n\n## GeoSite: готовые списки\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nЭто не страны, а категории сервисов, которые уже собрали за тебя.\nСтран тут почти нет (только geolocation-cn и geolocation-!cn), так что «по стране» всё-таки geoip.\n\n## На ПК (ядро keqrnel)\nГео работает так же, как на телефоне: его считает встроенный в keqrnel xray. Нужно лишь, чтобы рядом с keqdroid.exe лежали geoip.dat и geosite.dat. В релизе они уже там. Если гео-правила будто не работают, первым делом проверь эти два файла.\n\n## Порядок\nСверху вниз: сначала блок, потом твой сервер (он всегда напрямую, иначе будет петля), потом обход, потом прокси. Всё, что не подошло, идёт по переключателю «Остальной трафик» вверху.",
+  "routingCheatSheetBody": "Маршрут читается как «кто → что → куда». В «Своих сайтах» каждая строка — домен, IP, гео-метка или ссылка на список, а куда они пойдут, выбирает сам маршрут: напрямую, через VPN или в блок.\n\n## Домены\nvk.com — сам домен и все его поддомены\nru — всё, что оканчивается на .ru (просто слово без точки)\n.example.com — только поддомены, без самого домена\nfull:example.com — ровно этот адрес, без поддоменов\nregexp:… — если совсем надо, можно регуляркой\n\n## IP-адреса\n1.2.3.4 — один адрес\n10.0.0.0/8 — целый диапазон (CIDR)\n\n## GeoIP: по стране\ngeoip:ru — все российские IP. Вместо ru любая страна: us, de, cn, ua, kz…\nПлюс готовые пачки: geoip:private (локалка), geoip:telegram, geoip:google.\nНужно «по стране»? Это сюда, geoip знает все.\n\n## GeoSite: готовые списки\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nЭто не страны, а категории сервисов, которые уже собрали за тебя.\nСтран тут почти нет (только geolocation-cn и geolocation-!cn), так что «по стране» всё-таки geoip.\n\n## На ПК (ядро keqrnel)\nГео работает так же, как на телефоне: его считает встроенный в keqrnel xray. Нужно лишь, чтобы рядом с keqdroid.exe лежали geoip.dat и geosite.dat. В релизе они уже там. Если гео-правила будто не работают, первым делом проверь эти два файла.\n\n## Порядок\nКак на экране, сверху вниз: блокировка, отдельные приложения, все приложения. У всех приложений «Напрямую» проверяется раньше «Через VPN». Твой сервер всегда идёт напрямую раньше всего, иначе будет петля. Всё, что не подошло ни под один маршрут, идёт по строке «Всё остальное».",
   "settingsRoutingItemCount": "{count, plural, =0{пусто} one{{count} запись} few{{count} записи} many{{count} записей} other{{count} записи}}",
   "@settingsRoutingItemCount": {
     "placeholders": {
@@ -142,6 +110,108 @@
       }
     }
   },
+  "settingsRoutingRouteCount": "{count, plural, =0{нет маршрутов} one{{count} маршрут} few{{count} маршрута} many{{count} маршрутов} other{{count} маршрута}}",
+  "@settingsRoutingRouteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "routesSectionBlock": "Блокировка",
+  "@routesSectionBlock": {},
+  "routesSectionApps": "Приложения",
+  "@routesSectionApps": {},
+  "routesSectionAllApps": "Все приложения",
+  "@routesSectionAllApps": {},
+  "routesHint": "Списки «Напрямую», «Через VPN» и «Блокировать» стали маршрутами. Нажмите на маршрут, чтобы изменить его.",
+  "@routesHint": {},
+  "routesHintDismiss": "Понятно",
+  "@routesHintDismiss": {},
+  "routeNew": "Новый маршрут",
+  "@routeNew": {},
+  "routeNewSubtitle": "Приложение, сайты или готовый список",
+  "@routeNewSubtitle": {},
+  "routeNewSubtitleSites": "Сайты или готовый список",
+  "@routeNewSubtitleSites": {},
+  "routeEditorTitle": "Маршрут",
+  "@routeEditorTitle": {},
+  "routeWho": "Кто",
+  "@routeWho": {},
+  "routeWhat": "Что",
+  "@routeWhat": {},
+  "routeWhere": "Куда",
+  "@routeWhere": {},
+  "routeWhoAllSubtitle": "Всё, что идёт через VPN",
+  "@routeWhoAllSubtitle": {},
+  "routeWhoApps": "Отдельные приложения",
+  "@routeWhoApps": {},
+  "routeWhoDone": "Готово · {count}",
+  "@routeWhoDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "routeWhatAll": "Весь трафик",
+  "@routeWhatAll": {},
+  "routeWhatAllSubtitle": "Всё, что открывает приложение",
+  "@routeWhatAllSubtitle": {},
+  "routeWhatSites": "Свои сайты",
+  "@routeWhatSites": {},
+  "routeWhatSitesSubtitle": "Домены, IP и ссылки на списки",
+  "@routeWhatSitesSubtitle": {},
+  "routeWhatPresetValue": "Готовый список · {name}",
+  "@routeWhatPresetValue": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "routeWhatSitesValue": "Свои сайты · {entries}",
+  "@routeWhatSitesValue": {
+    "placeholders": {
+      "entries": {
+        "type": "String"
+      }
+    }
+  },
+  "routeWhereVpnSubtitle": "Через сервер, к которому подключено приложение",
+  "@routeWhereVpnSubtitle": {},
+  "routeWhereDirectSubtitle": "Мимо VPN",
+  "@routeWhereDirectSubtitle": {},
+  "routeWhereBlockSubtitle": "Соединения не открываются",
+  "@routeWhereBlockSubtitle": {},
+  "routeWhereServers": "Другой сервер",
+  "@routeWhereServers": {},
+  "routeToVpn": "через VPN",
+  "@routeToVpn": {},
+  "routeToDirect": "напрямую",
+  "@routeToDirect": {},
+  "routeToBlock": "блокировать",
+  "@routeToBlock": {},
+  "routeAllTrafficShort": "весь трафик",
+  "@routeAllTrafficShort": {},
+  "routeDisabledShort": "выключен",
+  "@routeDisabledShort": {},
+  "routeEnabled": "Маршрут включён",
+  "@routeEnabled": {},
+  "routeDeleteConfirm": "Удалить маршрут?",
+  "@routeDeleteConfirm": {},
+  "routeServerMissing": "сервера больше нет, идёт через VPN",
+  "@routeServerMissing": {},
+  "routeServerUnsupported": "текущее ядро не возьмёт этот сервер, идёт через VPN",
+  "@routeServerUnsupported": {},
+  "routeAppsUnsupported": "текущее ядро не различает приложения, маршрут не работает",
+  "@routeAppsUnsupported": {},
+  "routeAppsNeedTun": "работает только в режиме TUN",
+  "@routeAppsNeedTun": {},
+  "routeSplitExcluded": "эти приложения исключены раздельным туннелированием",
+  "@routeSplitExcluded": {},
+  "routeRefilterUnmatched": "«Всё остальное» теперь идёт напрямую",
+  "@routeRefilterUnmatched": {},
   "settingsRoutingLinkDomains": "{count, plural, one{{formatted} домен по ссылкам} few{{formatted} домена по ссылкам} many{{formatted} доменов по ссылкам} other{{formatted} домена по ссылкам}}",
   "@settingsRoutingLinkDomains": {
     "placeholders": {
@@ -969,7 +1039,6 @@
   "appearanceFontSystem": "Системный",
   "settingsResetConfirmTitle": "Сбросить настройки?",
   "settingsResetConfirmAction": "Сбросить",
-  "settingsResetRoutingConfirm": "Вернутся встроенные правила маршрутизации, ваши списки direct/proxy/block будут удалены. Действие нельзя отменить.",
   "settingsXrayResetConfirm": "Настройки ядра Xray, TUN и локальные порты вернутся к значениям по умолчанию. Действие нельзя отменить.",
   "settingsPermissionsTitle": "Разрешения",
   "settingsPermissionsSubtitle": "Посмотреть и отозвать разрешения приложения",
@@ -1002,8 +1071,7 @@
   "tunRememberNotNow": "Не сейчас",
   "tunRememberInstalled": "Беспарольный TUN включён",
   "tunRememberFailed": "Не удалось изменить авторизацию TUN",
-  "settingsRoutingPresetRefilterTitle": "Заблокировано в РФ (Re-filter) через VPN",
-  "settingsRoutingPresetRefilterDesc": "Заблокированные в России сайты и адреса идут через VPN, остальное напрямую",
+  "settingsRoutingPresetRefilterTitle": "Заблокировано в РФ (Re-filter)",
   "settingsRoutingGeoUnknownTitle": "Нет в гео-базах, будет проигнорировано",
   "settingsRoutingGeoUnknownHint": "На неизвестном гео-коде ядро роняет весь конфиг, поэтому такие записи выкидываются перед подключением. Выберите существующий код кнопкой с глобусом выше.",
   "settingsRoutingGeoPickerTooltip": "Вставить гео-код",

@@ -168,7 +168,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsSplitTitle => 'Раздельное туннелирование';
 
   @override
-  String get settingsRoutingTitle => 'Правила маршрутизации';
+  String get settingsRoutingTitle => 'Маршрутизация';
 
   @override
   String settingsSplitConfigured(int count) {
@@ -176,33 +176,13 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get settingsRoutingSubtitle => 'Правила direct / proxy / block и пресеты';
-
-  @override
-  String get settingsResetRoutingTitle => 'Сбросить настройки маршрутизации';
-
-  @override
-  String get settingsRoutingResetDone => 'Правила маршрутизации сброшены';
-
-  @override
   String get settingsRoutingPresetsTitle => 'Готовые списки';
 
   @override
-  String get settingsRoutingPresetRuTitle => 'Российские сайты напрямую';
+  String get settingsRoutingPresetRuTitle => 'Российские сайты';
 
   @override
-  String get settingsRoutingPresetRuDesc => 'Сайты на .ru и .рф и российские сервисы на других доменах идут мимо VPN';
-
-  @override
-  String get settingsRoutingPresetAdsTitle => 'Реклама и трекеры в блок';
-
-  @override
-  String get settingsRoutingPresetAdsDesc => 'Рекламные и аналитические домены не открываются';
-
-  @override
-  String settingsRoutingPresetApplied(String name) {
-    return 'Добавлено: «$name»';
-  }
+  String get settingsRoutingPresetAdsTitle => 'Реклама и трекеры';
 
   @override
   String get settingsRoutingDirectTitle => 'Напрямую';
@@ -217,70 +197,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsRoutingFinalTitle => 'Всё остальное';
 
   @override
-  String get settingsRoutingFinalSubtitle => 'Нет в списках';
-
-  @override
-  String get settingsRoutingListsTitle => 'Куда идут сайты';
-
-  @override
   String get settingsRoutingReconnect => 'Переподключить';
-
-  @override
-  String get settingsRoutingAdvancedTitle => 'Свои правила';
-
-  @override
-  String get settingsRoutingAdvancedHint => 'Отдельные правила со своим переключателем. Добавляются к спискам выше.';
-
-  @override
-  String get settingsRoutingAdvancedAdd => 'Добавить правило';
-
-  @override
-  String get settingsRoutingRuleNewTitle => 'Новое правило';
-
-  @override
-  String get settingsRoutingRuleEditTitle => 'Изменить правило';
-
-  @override
-  String get settingsRoutingRuleName => 'Название';
-
-  @override
-  String get settingsRoutingRuleNameHint => 'напр. Стриминг';
-
-  @override
-  String get settingsRoutingRuleValues => 'Значения';
-
-  @override
-  String get settingsRoutingRuleValuesHint => 'По одному в строке или через запятую';
-
-  @override
-  String get settingsRoutingRuleMatchBy => 'Сопоставлять по';
-
-  @override
-  String get settingsRoutingRuleTypeDomain => 'Домен';
-
-  @override
-  String get settingsRoutingRuleTypeIp => 'IP / CIDR';
-
-  @override
-  String get settingsRoutingRuleTypeGeoip => 'GeoIP';
-
-  @override
-  String get settingsRoutingRuleTypeGeosite => 'GeoSite';
-
-  @override
-  String get settingsRoutingRuleAction => 'Действие';
-
-  @override
-  String get settingsRoutingRuleSave => 'Сохранить';
-
-  @override
-  String get settingsRoutingRuleDeleteConfirm => 'Удалить это правило?';
 
   @override
   String get routingCheatSheetTitle => 'Как писать правила';
 
   @override
-  String get routingCheatSheetBody => 'Правила работают как список: что куда отправить. В каждой строке домен, IP или гео-метка, а рядом действие: напрямую (обход), через VPN (прокси) или в блок.\n\n## Домены\nvk.com — сам домен и все его поддомены\nru — всё, что оканчивается на .ru (просто слово без точки)\n.example.com — только поддомены, без самого домена\nfull:example.com — ровно этот адрес, без поддоменов\nregexp:… — если совсем надо, можно регуляркой\n\n## IP-адреса\n1.2.3.4 — один адрес\n10.0.0.0/8 — целый диапазон (CIDR)\n\n## GeoIP: по стране\ngeoip:ru — все российские IP. Вместо ru любая страна: us, de, cn, ua, kz…\nПлюс готовые пачки: geoip:private (локалка), geoip:telegram, geoip:google.\nНужно «по стране»? Это сюда, geoip знает все.\n\n## GeoSite: готовые списки\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nЭто не страны, а категории сервисов, которые уже собрали за тебя.\nСтран тут почти нет (только geolocation-cn и geolocation-!cn), так что «по стране» всё-таки geoip.\n\n## На ПК (ядро keqrnel)\nГео работает так же, как на телефоне: его считает встроенный в keqrnel xray. Нужно лишь, чтобы рядом с keqdroid.exe лежали geoip.dat и geosite.dat. В релизе они уже там. Если гео-правила будто не работают, первым делом проверь эти два файла.\n\n## Порядок\nСверху вниз: сначала блок, потом твой сервер (он всегда напрямую, иначе будет петля), потом обход, потом прокси. Всё, что не подошло, идёт по переключателю «Остальной трафик» вверху.';
+  String get routingCheatSheetBody => 'Маршрут читается как «кто → что → куда». В «Своих сайтах» каждая строка — домен, IP, гео-метка или ссылка на список, а куда они пойдут, выбирает сам маршрут: напрямую, через VPN или в блок.\n\n## Домены\nvk.com — сам домен и все его поддомены\nru — всё, что оканчивается на .ru (просто слово без точки)\n.example.com — только поддомены, без самого домена\nfull:example.com — ровно этот адрес, без поддоменов\nregexp:… — если совсем надо, можно регуляркой\n\n## IP-адреса\n1.2.3.4 — один адрес\n10.0.0.0/8 — целый диапазон (CIDR)\n\n## GeoIP: по стране\ngeoip:ru — все российские IP. Вместо ru любая страна: us, de, cn, ua, kz…\nПлюс готовые пачки: geoip:private (локалка), geoip:telegram, geoip:google.\nНужно «по стране»? Это сюда, geoip знает все.\n\n## GeoSite: готовые списки\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nЭто не страны, а категории сервисов, которые уже собрали за тебя.\nСтран тут почти нет (только geolocation-cn и geolocation-!cn), так что «по стране» всё-таки geoip.\n\n## На ПК (ядро keqrnel)\nГео работает так же, как на телефоне: его считает встроенный в keqrnel xray. Нужно лишь, чтобы рядом с keqdroid.exe лежали geoip.dat и geosite.dat. В релизе они уже там. Если гео-правила будто не работают, первым делом проверь эти два файла.\n\n## Порядок\nКак на экране, сверху вниз: блокировка, отдельные приложения, все приложения. У всех приложений «Напрямую» проверяется раньше «Через VPN». Твой сервер всегда идёт напрямую раньше всего, иначе будет петля. Всё, что не подошло ни под один маршрут, идёт по строке «Всё остальное».';
 
   @override
   String settingsRoutingItemCount(int count) {
@@ -295,6 +218,140 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String settingsRoutingRouteCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count маршрута',
+      many: '$count маршрутов',
+      few: '$count маршрута',
+      one: '$count маршрут',
+      zero: 'нет маршрутов',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get routesSectionBlock => 'Блокировка';
+
+  @override
+  String get routesSectionApps => 'Приложения';
+
+  @override
+  String get routesSectionAllApps => 'Все приложения';
+
+  @override
+  String get routesHint => 'Списки «Напрямую», «Через VPN» и «Блокировать» стали маршрутами. Нажмите на маршрут, чтобы изменить его.';
+
+  @override
+  String get routesHintDismiss => 'Понятно';
+
+  @override
+  String get routeNew => 'Новый маршрут';
+
+  @override
+  String get routeNewSubtitle => 'Приложение, сайты или готовый список';
+
+  @override
+  String get routeNewSubtitleSites => 'Сайты или готовый список';
+
+  @override
+  String get routeEditorTitle => 'Маршрут';
+
+  @override
+  String get routeWho => 'Кто';
+
+  @override
+  String get routeWhat => 'Что';
+
+  @override
+  String get routeWhere => 'Куда';
+
+  @override
+  String get routeWhoAllSubtitle => 'Всё, что идёт через VPN';
+
+  @override
+  String get routeWhoApps => 'Отдельные приложения';
+
+  @override
+  String routeWhoDone(int count) {
+    return 'Готово · $count';
+  }
+
+  @override
+  String get routeWhatAll => 'Весь трафик';
+
+  @override
+  String get routeWhatAllSubtitle => 'Всё, что открывает приложение';
+
+  @override
+  String get routeWhatSites => 'Свои сайты';
+
+  @override
+  String get routeWhatSitesSubtitle => 'Домены, IP и ссылки на списки';
+
+  @override
+  String routeWhatPresetValue(String name) {
+    return 'Готовый список · $name';
+  }
+
+  @override
+  String routeWhatSitesValue(String entries) {
+    return 'Свои сайты · $entries';
+  }
+
+  @override
+  String get routeWhereVpnSubtitle => 'Через сервер, к которому подключено приложение';
+
+  @override
+  String get routeWhereDirectSubtitle => 'Мимо VPN';
+
+  @override
+  String get routeWhereBlockSubtitle => 'Соединения не открываются';
+
+  @override
+  String get routeWhereServers => 'Другой сервер';
+
+  @override
+  String get routeToVpn => 'через VPN';
+
+  @override
+  String get routeToDirect => 'напрямую';
+
+  @override
+  String get routeToBlock => 'блокировать';
+
+  @override
+  String get routeAllTrafficShort => 'весь трафик';
+
+  @override
+  String get routeDisabledShort => 'выключен';
+
+  @override
+  String get routeEnabled => 'Маршрут включён';
+
+  @override
+  String get routeDeleteConfirm => 'Удалить маршрут?';
+
+  @override
+  String get routeServerMissing => 'сервера больше нет, идёт через VPN';
+
+  @override
+  String get routeServerUnsupported => 'текущее ядро не возьмёт этот сервер, идёт через VPN';
+
+  @override
+  String get routeAppsUnsupported => 'текущее ядро не различает приложения, маршрут не работает';
+
+  @override
+  String get routeAppsNeedTun => 'работает только в режиме TUN';
+
+  @override
+  String get routeSplitExcluded => 'эти приложения исключены раздельным туннелированием';
+
+  @override
+  String get routeRefilterUnmatched => '«Всё остальное» теперь идёт напрямую';
 
   @override
   String settingsRoutingLinkDomains(int count, String formatted) {
@@ -1980,9 +2037,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsResetConfirmAction => 'Сбросить';
 
   @override
-  String get settingsResetRoutingConfirm => 'Вернутся встроенные правила маршрутизации, ваши списки direct/proxy/block будут удалены. Действие нельзя отменить.';
-
-  @override
   String get settingsXrayResetConfirm => 'Настройки ядра Xray, TUN и локальные порты вернутся к значениям по умолчанию. Действие нельзя отменить.';
 
   @override
@@ -2079,10 +2133,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get tunRememberFailed => 'Не удалось изменить авторизацию TUN';
 
   @override
-  String get settingsRoutingPresetRefilterTitle => 'Заблокировано в РФ (Re-filter) через VPN';
-
-  @override
-  String get settingsRoutingPresetRefilterDesc => 'Заблокированные в России сайты и адреса идут через VPN, остальное напрямую';
+  String get settingsRoutingPresetRefilterTitle => 'Заблокировано в РФ (Re-filter)';
 
   @override
   String get settingsRoutingGeoUnknownTitle => 'Нет в гео-базах, будет проигнорировано';

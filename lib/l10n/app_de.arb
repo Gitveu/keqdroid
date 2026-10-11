@@ -83,7 +83,7 @@
   "settingsTitle": "Einstellungen",
   "settingsThemeTitle": "Erscheinungsbild",
   "settingsSplitTitle": "Split-Tunneling",
-  "settingsRoutingTitle": "Routing-Regeln",
+  "settingsRoutingTitle": "Routing",
   "settingsSplitConfigured": "{count} Apps konfiguriert",
   "@settingsSplitConfigured": {
     "placeholders": {
@@ -92,48 +92,16 @@
       }
     }
   },
-  "settingsRoutingSubtitle": "Regeln für Direkt, Proxy und Blockieren, fertige Vorlagen",
-  "settingsResetRoutingTitle": "Routing auf Standard zurücksetzen",
-  "settingsRoutingResetDone": "Routing-Regeln zurückgesetzt",
   "settingsRoutingPresetsTitle": "Fertige Listen",
-  "settingsRoutingPresetRuTitle": "Russische Websites direkt",
-  "settingsRoutingPresetRuDesc": ".ru- und .рф-Websites und russische Dienste auf anderen Domains gehen am VPN vorbei",
-  "settingsRoutingPresetAdsTitle": "Werbung und Tracker blockieren",
-  "settingsRoutingPresetAdsDesc": "Werbe- und Analyse-Domains werden nicht geladen",
-  "settingsRoutingPresetApplied": "„{name}“ hinzugefügt",
-  "@settingsRoutingPresetApplied": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
+  "settingsRoutingPresetRuTitle": "Russische Websites",
+  "settingsRoutingPresetAdsTitle": "Werbung und Tracker",
   "settingsRoutingDirectTitle": "Direkt",
   "settingsRoutingProxyTitle": "Über das VPN",
   "settingsRoutingBlockTitle": "Blockieren",
   "settingsRoutingFinalTitle": "Alles andere",
-  "settingsRoutingFinalSubtitle": "Nicht in den Listen",
-  "settingsRoutingListsTitle": "Wohin Websites gehen",
   "settingsRoutingReconnect": "Neu verbinden",
-  "settingsRoutingAdvancedTitle": "Eigene Regeln",
-  "settingsRoutingAdvancedHint": "Einzelne Regeln mit eigenem Schalter. Werden zu den Listen oben hinzugefügt.",
-  "settingsRoutingAdvancedAdd": "Regel hinzufügen",
-  "settingsRoutingRuleNewTitle": "Neue Regel",
-  "settingsRoutingRuleEditTitle": "Regel bearbeiten",
-  "settingsRoutingRuleName": "Name",
-  "settingsRoutingRuleNameHint": "z. B. Streaming",
-  "settingsRoutingRuleValues": "Werte",
-  "settingsRoutingRuleValuesHint": "Ein Eintrag pro Zeile oder durch Kommas getrennt",
-  "settingsRoutingRuleMatchBy": "Abgleich nach",
-  "settingsRoutingRuleTypeDomain": "Domain",
-  "settingsRoutingRuleTypeIp": "IP / CIDR",
-  "settingsRoutingRuleTypeGeoip": "GeoIP",
-  "settingsRoutingRuleTypeGeosite": "GeoSite",
-  "settingsRoutingRuleAction": "Aktion",
-  "settingsRoutingRuleSave": "Speichern",
-  "settingsRoutingRuleDeleteConfirm": "Diese Regel löschen?",
   "routingCheatSheetTitle": "So schreibst du Regeln",
-  "routingCheatSheetBody": "Regeln sind einfach eine Liste: was wohin geht. Jede Zeile ist eine Domain, eine IP oder ein Geo-Tag, daneben steht die Aktion: direkt (am VPN vorbei), über das VPN (Proxy) oder blockiert.\n\n## Domains\nvk.com – die Domain selbst und alle ihre Subdomains\nru – alles, was auf .ru endet (nur das Wort, ohne Punkt)\n.example.com – nur Subdomains, nicht die Domain selbst\nfull:example.com – genau dieser Host, ohne Subdomains\nregexp:… – ein regulärer Ausdruck, falls es wirklich knifflig wird\n\n## IP-Adressen\n1.2.3.4 – eine einzelne Adresse\n10.0.0.0/8 – ein ganzer Bereich (CIDR)\n\n## GeoIP: nach Land\ngeoip:ru – alle russischen IPs. Statt ru geht jedes Land: us, de, cn, ua, kz…\nDazu fertige Pakete: geoip:private (LAN), geoip:telegram, geoip:google.\nDu willst nach Land filtern? Dann hier, geoip kennt sie alle.\n\n## GeoSite: fertige Listen\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nDas sind keine Länder, sondern Kategorien von Diensten, die schon jemand für dich zusammengestellt hat.\nLänder gibt es hier kaum (nur geolocation-cn und geolocation-!cn), nach Land geht es also mit geoip.\n\n## Am PC (Kern keqrnel)\nGeo funktioniert wie auf dem Handy: Den Abgleich macht das in keqrnel eingebaute xray. Es braucht nur geoip.dat und geosite.dat neben keqdroid.exe. Im Release liegen sie schon dort. Wenn Geo-Regeln ignoriert werden, prüfe zuerst diese beiden Dateien.\n\n## Reihenfolge\nVon oben nach unten: zuerst Blockieren, dann dein Server (immer direkt, sonst entsteht eine Schleife), dann Direkt, dann Proxy. Alles Übrige folgt dem Schalter „Übriger Datenverkehr“ oben.",
+  "routingCheatSheetBody": "Eine Route liest sich „wer → was → wohin“. Unter „Eigene Websites“ ist jede Zeile eine Domain, eine IP, ein Geo-Tag oder ein Link zu einer Liste; wohin sie gehen, wählt die Route selbst: direkt, über das VPN oder blockiert.\n\n## Domains\nvk.com – die Domain selbst und alle ihre Subdomains\nru – alles, was auf .ru endet (nur das Wort, ohne Punkt)\n.example.com – nur Subdomains, nicht die Domain selbst\nfull:example.com – genau dieser Host, ohne Subdomains\nregexp:… – ein regulärer Ausdruck, falls es wirklich knifflig wird\n\n## IP-Adressen\n1.2.3.4 – eine einzelne Adresse\n10.0.0.0/8 – ein ganzer Bereich (CIDR)\n\n## GeoIP: nach Land\ngeoip:ru – alle russischen IPs. Statt ru geht jedes Land: us, de, cn, ua, kz…\nDazu fertige Pakete: geoip:private (LAN), geoip:telegram, geoip:google.\nDu willst nach Land filtern? Dann hier, geoip kennt sie alle.\n\n## GeoSite: fertige Listen\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nDas sind keine Länder, sondern Kategorien von Diensten, die schon jemand für dich zusammengestellt hat.\nLänder gibt es hier kaum (nur geolocation-cn und geolocation-!cn), nach Land geht es also mit geoip.\n\n## Am PC (Kern keqrnel)\nGeo funktioniert wie auf dem Handy: Den Abgleich macht das in keqrnel eingebaute xray. Es braucht nur geoip.dat und geosite.dat neben keqdroid.exe. Im Release liegen sie schon dort. Wenn Geo-Regeln ignoriert werden, prüfe zuerst diese beiden Dateien.\n\n## Reihenfolge\nVon oben nach unten, wie auf dem Bildschirm: Blockieren, einzelne Apps, alle Apps. Bei allen Apps wird „Direkt“ vor „Über das VPN“ geprüft. Dein Server geht immer zuerst direkt, sonst entsteht eine Schleife. Was zu keiner Route passt, folgt der Zeile „Alles andere“.",
   "settingsRoutingItemCount": "{count, plural, =0{leer} =1{1 Eintrag} other{{count} Einträge}}",
   "@settingsRoutingItemCount": {
     "placeholders": {
@@ -142,6 +110,108 @@
       }
     }
   },
+  "settingsRoutingRouteCount": "{count, plural, =0{keine Routen} =1{1 Route} other{{count} Routen}}",
+  "@settingsRoutingRouteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "routesSectionBlock": "Blockieren",
+  "@routesSectionBlock": {},
+  "routesSectionApps": "Apps",
+  "@routesSectionApps": {},
+  "routesSectionAllApps": "Alle Apps",
+  "@routesSectionAllApps": {},
+  "routesHint": "Die Listen „Direkt“, „Über das VPN“ und „Blockieren“ sind jetzt Routen. Tippe auf eine Route, um sie zu ändern.",
+  "@routesHint": {},
+  "routesHintDismiss": "Verstanden",
+  "@routesHintDismiss": {},
+  "routeNew": "Neue Route",
+  "@routeNew": {},
+  "routeNewSubtitle": "App, Websites oder fertige Liste",
+  "@routeNewSubtitle": {},
+  "routeNewSubtitleSites": "Websites oder fertige Liste",
+  "@routeNewSubtitleSites": {},
+  "routeEditorTitle": "Route",
+  "@routeEditorTitle": {},
+  "routeWho": "Wer",
+  "@routeWho": {},
+  "routeWhat": "Was",
+  "@routeWhat": {},
+  "routeWhere": "Wohin",
+  "@routeWhere": {},
+  "routeWhoAllSubtitle": "Alles, was über das VPN läuft",
+  "@routeWhoAllSubtitle": {},
+  "routeWhoApps": "Einzelne Apps",
+  "@routeWhoApps": {},
+  "routeWhoDone": "Fertig · {count}",
+  "@routeWhoDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "routeWhatAll": "Gesamter Datenverkehr",
+  "@routeWhatAll": {},
+  "routeWhatAllSubtitle": "Alles, was die App öffnet",
+  "@routeWhatAllSubtitle": {},
+  "routeWhatSites": "Eigene Websites",
+  "@routeWhatSites": {},
+  "routeWhatSitesSubtitle": "Domains, IPs und Links zu Listen",
+  "@routeWhatSitesSubtitle": {},
+  "routeWhatPresetValue": "Fertige Liste · {name}",
+  "@routeWhatPresetValue": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "routeWhatSitesValue": "Eigene Websites · {entries}",
+  "@routeWhatSitesValue": {
+    "placeholders": {
+      "entries": {
+        "type": "String"
+      }
+    }
+  },
+  "routeWhereVpnSubtitle": "Über den Server, mit dem die App verbunden ist",
+  "@routeWhereVpnSubtitle": {},
+  "routeWhereDirectSubtitle": "Am VPN vorbei",
+  "@routeWhereDirectSubtitle": {},
+  "routeWhereBlockSubtitle": "Verbindungen werden nicht geöffnet",
+  "@routeWhereBlockSubtitle": {},
+  "routeWhereServers": "Anderer Server",
+  "@routeWhereServers": {},
+  "routeToVpn": "über das VPN",
+  "@routeToVpn": {},
+  "routeToDirect": "direkt",
+  "@routeToDirect": {},
+  "routeToBlock": "blockieren",
+  "@routeToBlock": {},
+  "routeAllTrafficShort": "gesamter Datenverkehr",
+  "@routeAllTrafficShort": {},
+  "routeDisabledShort": "aus",
+  "@routeDisabledShort": {},
+  "routeEnabled": "Route aktiv",
+  "@routeEnabled": {},
+  "routeDeleteConfirm": "Route löschen?",
+  "@routeDeleteConfirm": {},
+  "routeServerMissing": "Server fehlt, läuft über das VPN",
+  "@routeServerMissing": {},
+  "routeServerUnsupported": "der aktuelle Kern kann diesen Server nicht nutzen, läuft über das VPN",
+  "@routeServerUnsupported": {},
+  "routeAppsUnsupported": "der aktuelle Kern unterscheidet keine Apps, die Route wirkt nicht",
+  "@routeAppsUnsupported": {},
+  "routeAppsNeedTun": "wirkt nur im TUN-Modus",
+  "@routeAppsNeedTun": {},
+  "routeSplitExcluded": "diese Apps sind durch Split-Tunneling ausgeschlossen",
+  "@routeSplitExcluded": {},
+  "routeRefilterUnmatched": "„Alles andere“ läuft jetzt direkt",
+  "@routeRefilterUnmatched": {},
   "settingsRoutingLinkDomains": "{count, plural, =1{1 Domain aus Links} other{{formatted} Domains aus Links}}",
   "@settingsRoutingLinkDomains": {
     "placeholders": {
@@ -967,7 +1037,6 @@
   "appearanceFontSystem": "System",
   "settingsResetConfirmTitle": "Einstellungen zurücksetzen?",
   "settingsResetConfirmAction": "Zurücksetzen",
-  "settingsResetRoutingConfirm": "Die integrierten Routing-Regeln werden wiederhergestellt, deine Listen für Direkt, Proxy und Blockieren werden verworfen. Das kann nicht rückgängig gemacht werden.",
   "settingsXrayResetConfirm": "Die Standardeinstellungen für den Xray-Kern, TUN und die lokalen Ports werden wiederhergestellt. Das kann nicht rückgängig gemacht werden.",
   "settingsPermissionsTitle": "Berechtigungen",
   "settingsPermissionsSubtitle": "App-Berechtigungen ansehen und widerrufen",
@@ -1000,8 +1069,7 @@
   "tunRememberNotNow": "Nicht jetzt",
   "tunRememberInstalled": "TUN ohne Passwort aktiviert",
   "tunRememberFailed": "TUN-Autorisierung konnte nicht geändert werden",
-  "settingsRoutingPresetRefilterTitle": "In Russland gesperrt (Re-filter) über das VPN",
-  "settingsRoutingPresetRefilterDesc": "In Russland gesperrte Websites und Adressen laufen über das VPN, alles andere direkt",
+  "settingsRoutingPresetRefilterTitle": "In Russland gesperrt (Re-filter)",
   "settingsRoutingGeoUnknownTitle": "Nicht in den Geo-Datenbanken – wird ignoriert",
   "settingsRoutingGeoUnknownHint": "Bei einem unbekannten Geo-Code verwirft der Kern die gesamte Konfiguration, daher werden solche Einträge vor dem Verbinden entfernt. Wähle oben mit der Globus-Schaltfläche einen vorhandenen Code.",
   "settingsRoutingGeoPickerTooltip": "Geo-Code einfügen",

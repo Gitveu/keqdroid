@@ -7,9 +7,9 @@ final ruleListServiceProvider = Provider<RuleListService>((ref) {
   );
 });
 
-/// Состояние списков по ссылкам из полей маршрутизации, по ссылке.
+/// Состояние списков по ссылкам из маршрутов, по ссылке.
 ///
-/// Новая ссылка скачивается, как только поле сохранено; дальше списки
+/// Новая ссылка скачивается, как только маршрут сохранён; дальше списки
 /// обновляются раз в сутки — при возвращении в приложение и при каждом
 /// подключении, уже через туннель. Скачанное доезжает до ядра на следующем
 /// подключении, как и любая другая правка списков.
@@ -47,9 +47,9 @@ class RuleListsNotifier extends Notifier<Map<String, RuleListStatus>> {
     // Поле сохраняется на паузе в наборе, и ссылка, которую ещё печатают,
     // успела бы уйти на скачивание по кусочку. Ждём, пока правка устоится.
     ref.listen<String?>(
-      settingsNotifierProvider.select((a) {
-        final s = a.value;
-        return s == null ? null : _allUrls(s).join('\n');
+      routesProvider.select((a) {
+        final routes = a.value;
+        return routes == null ? null : routeListUrls(routes).join('\n');
       }),
       (_, urls) {
         _syncDebounce?.cancel();
@@ -68,16 +68,10 @@ class RuleListsNotifier extends Notifier<Map<String, RuleListStatus>> {
     return const {};
   }
 
-  static List<String> _allUrls(AppSettings s) => {
-        ...ruleListUrls(s.directRules),
-        ...ruleListUrls(s.proxyRules),
-        ...ruleListUrls(s.blockedRules),
-      }.toList();
-
   Future<void> _sync() async {
-    final settings = await ref.read(settingsNotifierProvider.future);
+    final routes = await ref.read(routesProvider.future);
     if (!ref.mounted) return;
-    final urls = _allUrls(settings);
+    final urls = routeListUrls(routes);
     final service = ref.read(ruleListServiceProvider);
     final next = <String, RuleListStatus>{};
     for (final url in urls) {

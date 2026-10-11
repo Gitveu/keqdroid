@@ -1,0 +1,629 @@
+part of '../settings_tab.dart';
+
+/// Выбор в шторке «Что».
+sealed class _ContentChoice {
+  const _ContentChoice();
+}
+
+class _ContentKind extends _ContentChoice {
+  const _ContentKind(this.content);
+  final RouteContent content;
+}
+
+class _ContentPreset extends _ContentChoice {
+  const _ContentPreset(this.preset);
+  final RoutingPreset preset;
+}
+
+/// Редактор маршрута: три строки «Кто / Что / Куда» и переключатель.
+///
+/// Сохраняет сам, без кнопки: выбор в шторке — сразу, набор в поле сайтов —
+/// на паузе, как на прежнем экране списков. Новый маршрут появляется в списке,
+/// только когда начал что-то забирать: пустой маршрут ничего бы не делал.
+class _RouteEditorScreen extends ConsumerStatefulWidget {
+  const _RouteEditorScreen({this.initial});
+
+  final TrafficRoute? initial;
+
+  @override
+  ConsumerState<_RouteEditorScreen> createState() => _RouteEditorScreenState();
+}
+
+class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
+  late TrafficRoute _route;
+  late final TextEditingController _sites;
+  late bool _stored;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _route = widget.initial ?? TrafficRoute.create();
+    _stored = widget.initial != null;
+    _sites = TextEditingController(text: _route.sites);
+  }
+
+  @override
+  void dispose() {
+    // Без ref: см. PopScope ниже — несохранённое дописывается на уходе.
+    _debounce?.cancel();
+    _sites.dispose();
+    super.dispose();
+  }
+
+  /// «Все приложения + весь трафик» — это и есть «Всё остальное»; такой
+  /// маршрут в редакторе не собрать, но страхуемся и при сохранении.
+  bool get _savable =>
+      !(_route.allApps && _route.content == RouteContent.allTraffic) &&
+      (_stored || !routeIsEmpty(_route));
+
+  void _change(TrafficRoute next, {bool typing = false}) {
+    setState(() => _route = next);
+    _debounce?.cancel();
+    if (typing) {
+      _debounce = Timer(const Duration(milliseconds: 500), _persist);
+    } else {
+      unawaited(_persist());
+    }
+  }
+
+  Future<void> _persist() async {
+    _debounce?.cancel();
+    if (!_savable) return;
+    _stored = true;
+    await ref.read(routesProvider.notifier).upsert(_route);
+  }
+
+  Future<void> _delete() async {
+    final l10n = AppLocalizations.of(context)!;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: Text(l10n.routeDeleteConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n.subscriptionsCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.subscriptionsDelete),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    _debounce?.cancel();
+    _stored = false;
+    await ref.read(routesProvider.notifier).remove(_route.id);
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final caps = ref.watch(routeCapabilitiesProvider);
+    final servers = ref.watch(serversProvider.select((s) => s.servers));
+    final issue = _routeIssue(l10n, _route, caps, servers);
+    return PopScope(
+      // Набор в поле сохраняется на паузе; уход с экрана раньше паузы её не
+      // теряет. Здесь, а не в dispose: там ref уже нельзя трогать.
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop && (_debounce?.isActive ?? false)) unawaited(_persist());
+      },
+      child: ExpressivePage(
+        title: widget.initial == null && !_stored
+            ? l10n.routeNew
+            : l10n.routeEditorTitle,
+        physics: const ClampingScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          ExpressiveSpacing.large,
+          ExpressiveSpacing.none,
+          ExpressiveSpacing.large,
+          ExpressiveSpacing.extraLargeIncreased,
+        ),
+        actions: [
+          if (_stored)
+            IconButton(
+              tooltip: l10n.subscriptionsDelete,
+              icon: const Icon(Icons.delete_outline_rounded),
+              onPressed: _delete,
+            ),
+        ],
+        children: [
+          if (issue != null) ...[
+            ExpressiveNotice(
+              color: Theme.of(context).colorScheme.error,
+              icon: Icons.error_outline_rounded,
+              text: issue,
+            ),
+            const SizedBox(height: ExpressiveSpacing.medium),
+          ],
+          ExpressiveGroup(
+            children: [
+              // Без отдельных приложений «кто» один — все приложения, и
+              // строка с единственным вариантом была бы пустым нажатием.
+              if (caps.apps || !_route.allApps) _whoTile(l10n),
+              _whatTile(l10n),
+              _whereTile(l10n, servers),
+            ],
+          ),
+          const SizedBox(height: ExpressiveSpacing.large),
+          ExpressiveGroup(
+            children: [
+              ExpressiveGroupTile(
+                onTap: () => _change(_route.copyWith(enabled: !_route.enabled)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        l10n.routeEnabled,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(color: AppTheme.text(context)),
+                      ),
+                    ),
+                    Switch(
+                      value: _route.enabled,
+                      onChanged: (v) => _change(_route.copyWith(enabled: v)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Кто ────────────────────────────────────────────────────────────────
+
+  Widget _whoTile(AppLocalizations l10n) => ExpressiveGroupTile(
+        onTap: () => unawaited(_pickWho(l10n)),
+        child: _RouteRowContent(
+          badge: const ExpressiveIconBadge(icon: Icons.apps_rounded),
+          title: Text(l10n.routeWho),
+          subtitle: Text(
+            _route.allApps
+                ? l10n.routesSectionAllApps
+                : _route.apps.map(_appLabel).join(', '),
+          ),
+        ),
+      );
+
+  Future<void> _pickWho(AppLocalizations l10n) async {
+    final all = await _showChoiceSheet<bool>(
+      context,
+      title: l10n.routeWho,
+      children: (ctx) => [
+        ExpressiveGroup(
+          children: [
+            ExpressiveActionTile(
+              icon: Icons.apps_rounded,
+              title: l10n.routesSectionAllApps,
+              subtitle: l10n.routeWhoAllSubtitle,
+              selected: _route.allApps,
+              onTap: () => Navigator.pop(ctx, true),
+            ),
+          ],
+        ),
+      ],
+    );
+    if (all != true || !mounted) return;
+    _change(_route.copyWith(
+      apps: const [],
+      // «Все приложения + весь трафик» — это «Всё остальное», не маршрут.
+      content: _route.content == RouteContent.allTraffic
+          ? RouteContent.sites
+          : _route.content,
+    ));
+  }
+
+  // ── Что ────────────────────────────────────────────────────────────────
+
+  Widget _whatTile(AppLocalizations l10n) {
+    final header = _RouteRowContent(
+      badge: ExpressiveIconBadge(icon: _contentIcon(_route)),
+      title: Text(l10n.routeWhat),
+      subtitle: Text(switch (_route.content) {
+        RouteContent.allTraffic => l10n.routeWhatAll,
+        RouteContent.preset => l10n.routeWhatPresetValue(
+            _presetName(l10n, _route.presetId),
+          ),
+        RouteContent.sites => l10n.routeWhatSitesValue(_sitesCount(l10n)),
+      }),
+    );
+    if (_route.content != RouteContent.sites) {
+      return ExpressiveGroupTile(
+        onTap: () => unawaited(_pickWhat(l10n)),
+        child: header,
+      );
+    }
+    // Поле внутри той же карточки: нажатие по нему — ввод, а не шторка.
+    return ExpressiveGroupTile(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            borderRadius: ExpressiveShape.radius(ExpressiveShape.medium),
+            onTap: () => unawaited(_pickWhat(l10n)),
+            child: header,
+          ),
+          const SizedBox(height: ExpressiveSpacing.medium),
+          ..._sitesEditor(l10n),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickWhat(AppLocalizations l10n) async {
+    final choice = await _showChoiceSheet<_ContentChoice>(
+      context,
+      title: l10n.routeWhat,
+      children: (ctx) => [
+        ExpressiveGroup(
+          children: [
+            if (!_route.allApps)
+              ExpressiveActionTile(
+                icon: Icons.all_inclusive_rounded,
+                title: l10n.routeWhatAll,
+                subtitle: l10n.routeWhatAllSubtitle,
+                selected: _route.content == RouteContent.allTraffic,
+                onTap: () => Navigator.pop(
+                  ctx,
+                  const _ContentKind(RouteContent.allTraffic),
+                ),
+              ),
+            ExpressiveActionTile(
+              icon: Icons.language_rounded,
+              title: l10n.routeWhatSites,
+              subtitle: l10n.routeWhatSitesSubtitle,
+              selected: _route.content == RouteContent.sites,
+              onTap: () =>
+                  Navigator.pop(ctx, const _ContentKind(RouteContent.sites)),
+            ),
+          ],
+        ),
+        ExpressiveSectionHeader(l10n.settingsRoutingPresetsTitle),
+        ExpressiveGroup(
+          children: [
+            for (final preset in RoutingPresets.all)
+              ExpressiveActionTile(
+                icon: _presetIcon(preset.id),
+                title: _presetName(l10n, preset.id),
+                selected: _route.content == RouteContent.preset &&
+                    _route.presetId == preset.id,
+                onTap: () => Navigator.pop(ctx, _ContentPreset(preset)),
+              ),
+          ],
+        ),
+      ],
+    );
+    if (choice == null || !mounted) return;
+    switch (choice) {
+      case _ContentKind(:final content):
+        _change(_route.copyWith(content: content));
+      case _ContentPreset(:final preset):
+        // Готовый список несёт и разумное «куда» — российские сайты
+        // напрямую, рекламу в блок; поменять можно следующей строкой.
+        _change(_route.copyWith(
+          content: RouteContent.preset,
+          presetId: preset.id,
+          target: switch (preset.field) {
+            RoutingField.direct => RouteTarget.direct,
+            RoutingField.proxy => RouteTarget.vpn,
+            RoutingField.blocked => RouteTarget.block,
+          },
+        ));
+        await _applyPresetUnmatched(l10n, preset);
+    }
+  }
+
+  /// Re-filter заодно ставит «Всё остальное» напрямую: заблокированное идёт
+  /// через VPN, прочее мимо него — ради этого пресет и берут.
+  Future<void> _applyPresetUnmatched(
+    AppLocalizations l10n,
+    RoutingPreset preset,
+  ) async {
+    final unmatched = preset.unmatched;
+    if (unmatched == null) return;
+    final settings = ref.read(settingsNotifierProvider).value;
+    if (settings == null) return;
+    final value = switch (unmatched) {
+      RoutingField.direct => AppSettings.finalOutboundDirect,
+      RoutingField.proxy => AppSettings.finalOutboundProxy,
+      RoutingField.blocked => AppSettings.finalOutboundBlock,
+    };
+    if (settings.finalOutbound == value) return;
+    await ref
+        .read(settingsNotifierProvider.notifier)
+        .save(settings.copyWith(finalOutbound: value));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.routeRefilterUnmatched)),
+    );
+  }
+
+  // ── Куда ───────────────────────────────────────────────────────────────
+
+  Widget _whereTile(AppLocalizations l10n, List<ServerItem> servers) {
+    final color = _targetColor(context, _route.target);
+    return ExpressiveGroupTile(
+      onTap: () => unawaited(_pickWhere(l10n)),
+      child: _RouteRowContent(
+        badge: ExpressiveIconBadge(
+          icon: _targetIcon(_route.target),
+          background: color.withValues(alpha: 0.16),
+          foreground: color,
+        ),
+        title: Text(l10n.routeWhere),
+        subtitle: Text(switch (_route.target) {
+          RouteTarget.vpn => l10n.settingsRoutingProxyTitle,
+          RouteTarget.direct => l10n.settingsRoutingDirectTitle,
+          RouteTarget.block => l10n.settingsRoutingBlockTitle,
+          RouteTarget.server => _targetLabel(l10n, _route, servers),
+        }),
+      ),
+    );
+  }
+
+  Future<void> _pickWhere(AppLocalizations l10n) async {
+    final target = await _showTargetSheet(
+      context,
+      title: l10n.routeWhere,
+      current: _route.target,
+    );
+    if (target == null || !mounted) return;
+    _change(_route.copyWith(target: target, serverId: ''));
+  }
+
+  // ── Поле сайтов ────────────────────────────────────────────────────────
+
+  String _sitesCount(AppLocalizations l10n) {
+    final entries = routingEntries(_sites.text);
+    final statuses = ref.watch(ruleListsProvider);
+    final linked = [
+      for (final url in ruleListUrls(_sites.text)) ?statuses[url],
+    ].fold(0, (sum, s) => sum + s.domains);
+    if (linked == 0) return l10n.settingsRoutingItemCount(entries.length);
+    final plain = entries.where((e) => !isRuleListUrl(e)).length;
+    final links =
+        l10n.settingsRoutingLinkDomains(linked, _groupedCount(linked));
+    if (plain == 0) return links;
+    return l10n.settingsRoutingCountWithLinks(
+      l10n.settingsRoutingItemCount(plain),
+      links,
+    );
+  }
+
+  /// Тысячи разделены по-местному, но цифры латинские и в фарси: остальные
+  /// числа в приложении печатает код, и персидские стояли бы одни на экране.
+  String _groupedCount(int n) {
+    final lang = Localizations.localeOf(context).languageCode;
+    return NumberFormat.decimalPattern(lang == 'fa' ? 'en' : lang).format(n);
+  }
+
+  List<Widget> _sitesEditor(AppLocalizations l10n) {
+    final geoIndex =
+        ref.watch(geoAssetIndexProvider).value ?? GeoAssetIndex.empty;
+    final unknown = unknownGeoTokens(_sites.text, geoIndex);
+    // Статус есть только у сохранённых ссылок: недопечатанная ещё не ушла в
+    // маршрут, и строки под ней пока нет.
+    final statuses = ref.watch(ruleListsProvider);
+    final lists = [
+      for (final url in ruleListUrls(_sites.text)) ?statuses[url],
+    ];
+    final linkedDomains = lists.fold(0, (sum, s) => sum + s.domains);
+    return [
+      _sitesField(l10n, geoIndex),
+      if (lists.isNotEmpty) ...[
+        const SizedBox(height: ExpressiveSpacing.small),
+        for (final status in lists) _ruleListLine(l10n, status),
+      ],
+      if (Platform.isAndroid &&
+          linkedDomains > ruleListPhoneDomainBudget &&
+          ref.watch(activeVpnBackendProvider) == VpnBackend.xray) ...[
+        const SizedBox(height: ExpressiveSpacing.small),
+        ExpressiveNotice(
+          color: AppTheme.orange(context),
+          icon: Icons.memory_rounded,
+          text: l10n.ruleListMemoryWarning(
+            _groupedCount(ruleListPhoneDomainBudget),
+          ),
+        ),
+      ],
+      if (unknown.isNotEmpty) ...[
+        const SizedBox(height: ExpressiveSpacing.small),
+        _unknownGeoWarning(l10n, unknown),
+      ],
+    ];
+  }
+
+  /// Поле — залитое, на уровень ниже карточки, а не с рамкой: оно здесь и есть
+  /// содержимое строки. Рамка только в фокусе — видно, где сейчас ввод.
+  Widget _sitesField(AppLocalizations l10n, GeoAssetIndex geoIndex) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final radius = ExpressiveShape.radius(ExpressiveShape.large);
+    final withPicker = !geoIndex.isEmpty;
+    return Stack(
+      children: [
+        TextField(
+          controller: _sites,
+          textDirection: technicalInputDirection,
+          minLines: 2,
+          maxLines: 8,
+          style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
+          decoration: InputDecoration(
+            hintText: 'youtube.com, 1.1.1.1, geosite:google',
+            filled: true,
+            fillColor: scheme.surfaceContainerLowest,
+            border: OutlineInputBorder(
+              borderRadius: radius,
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: radius,
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: radius,
+              borderSide: BorderSide(color: scheme.primary, width: 2),
+            ),
+            // Справа место под кнопку кодов, чтобы текст под неё не заезжал.
+            contentPadding: EdgeInsetsDirectional.fromSTEB(
+              16,
+              14,
+              withPicker ? 48 : 16,
+              14,
+            ),
+          ),
+          onChanged: (text) =>
+              _change(_route.copyWith(sites: text), typing: true),
+        ),
+        if (withPicker)
+          PositionedDirectional(
+            top: 4,
+            end: 4,
+            child: IconButton(
+              tooltip: l10n.settingsRoutingGeoPickerTooltip,
+              icon: const Icon(Icons.travel_explore_rounded, size: 20),
+              color: scheme.onSurfaceVariant,
+              onPressed: () => unawaited(_pickGeoCode(geoIndex)),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Пикер кодов из реальных баз: 1500+ geosite и 260+ geoip кодов руками не
+  /// вспомнишь, а опечатка молча ломает правило.
+  Future<void> _pickGeoCode(GeoAssetIndex index) async {
+    final token = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _GeoCodePickerSheet(index: index),
+    );
+    if (token == null || token.isEmpty || !mounted) return;
+    _sites.text = RoutingPresets.mergeValues(_sites.text, [token]);
+    _change(_route.copyWith(sites: _sites.text));
+  }
+
+  /// Одна строка под полем на каждую ссылку: сколько в списке доменов и когда
+  /// он обновился, либо почему не скачался. Скачанное раньше при неудаче
+  /// остаётся в силе, поэтому такая строка не красная, а предупреждающая.
+  Widget _ruleListLine(AppLocalizations l10n, RuleListStatus s) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final parsedHost = Uri.tryParse(s.url)?.host ?? '';
+    final host = ltrIsolate(parsedHost.isEmpty ? s.url : parsedHost);
+    String domains() =>
+        l10n.ruleListDomainCount(s.domains, _groupedCount(s.domains));
+    String when() => timeAgo(l10n, s.updatedAt!);
+    final (IconData icon, Color color, String text) = switch (s) {
+      _ when s.loading || (!s.loaded && s.failure == null) => (
+          Icons.cloud_sync_outlined,
+          scheme.onSurfaceVariant,
+          l10n.ruleListLoading(host),
+        ),
+      _ when s.loaded && s.failure == null => (
+          Icons.cloud_done_outlined,
+          scheme.onSurfaceVariant,
+          l10n.ruleListLoaded(host, domains(), when()),
+        ),
+      _ when s.loaded => (
+          Icons.cloud_off_outlined,
+          AppTheme.orange(context),
+          l10n.ruleListLoadedStale(host, domains(), when()),
+        ),
+      _ => (
+          Icons.error_outline_rounded,
+          scheme.error,
+          switch (s.failure) {
+            RuleListFailure.insecure => l10n.ruleListFailedInsecure(host),
+            RuleListFailure.http =>
+              l10n.ruleListFailedHttp(host, s.httpStatus ?? 0),
+            RuleListFailure.tooLarge => l10n.ruleListFailedTooLarge(host),
+            RuleListFailure.empty => l10n.ruleListFailedEmpty(host),
+            RuleListFailure.network || null =>
+              l10n.ruleListFailedNetwork(host),
+          },
+        ),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: ExpressiveSpacing.small),
+          Expanded(
+            child: Text(
+              text,
+              // Оранжевый текст на светлой теме не проходит по контрасту, его
+              // несёт иконка; красный проходит и остаётся у ошибки целиком.
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: color == scheme.error ? color : scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Токены, которых нет в поставляемых базах. Ядро на неизвестном geo-коде не
+  /// игнорирует правило, а падает на разборе всего конфига, поэтому такие
+  /// записи выкидываются перед подключением — и видеть это надо здесь.
+  Widget _unknownGeoWarning(AppLocalizations l10n, List<String> tokens) {
+    final orange = AppTheme.orange(context);
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: orange.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(ExpressiveShape.medium),
+        border: Border.all(color: orange.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 16, color: orange),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  l10n.settingsRoutingGeoUnknownTitle,
+                  style: textTheme
+                      .emphasized(textTheme.labelMedium)
+                      ?.copyWith(color: orange),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            tokens.join(', '),
+            style: textTheme.bodySmall?.copyWith(
+              fontFamily: 'monospace',
+              color: AppTheme.text(context),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n.settingsRoutingGeoUnknownHint,
+            style: textTheme.bodySmall?.copyWith(
+              height: 1.35,
+              color: AppTheme.textLight(context),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

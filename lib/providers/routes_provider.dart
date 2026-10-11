@@ -1,0 +1,73 @@
+part of 'providers.dart';
+
+/// Маршруты экрана «Маршрутизация». Порядок в списке значения не имеет:
+/// разделы и место в них выводятся из самих маршрутов ([orderedRoutes]).
+///
+/// Состояние меняется раньше записи на диск, как у настроек: правка не
+/// транзакция, а круговой рейс до SharedPreferences не должен тормозить
+/// экран. Порядок записей держит очередь StorageService.
+class RoutesNotifier extends AsyncNotifier<List<TrafficRoute>> {
+  @override
+  Future<List<TrafficRoute>> build() => ref.read(storageProvider).getRoutes();
+
+  Future<void> _save(List<TrafficRoute> routes) async {
+    state = AsyncData(routes);
+    await ref.read(storageProvider).saveRoutes(routes);
+  }
+
+  /// Новый маршрут добавляется в конец, существующий меняется на месте.
+  Future<void> upsert(TrafficRoute route) async {
+    final current = await future;
+    final exists = current.any((r) => r.id == route.id);
+    await _save([
+      if (exists)
+        for (final r in current) r.id == route.id ? route : r
+      else ...[...current, route],
+    ]);
+  }
+
+  Future<void> remove(String id) async {
+    final current = await future;
+    await _save([
+      for (final r in current)
+        if (r.id != id) r,
+    ]);
+  }
+
+  /// Замена целиком — импорт резервной копии.
+  Future<void> replaceAll(List<TrafficRoute> routes) => _save(routes);
+}
+
+final routesProvider =
+    AsyncNotifierProvider<RoutesNotifier, List<TrafficRoute>>(
+  RoutesNotifier.new,
+);
+
+/// Что маршруты умеют прямо сейчас: различать приложения и вести трафик на
+/// другой сервер. Зависит от платформы и ядра активного сервера. Чего ядро
+/// не умеет, того в шторках нет, а уже заведённый маршрут с таким пунктом
+/// показывает на карточке, почему не работает.
+class RouteCapabilities {
+  const RouteCapabilities({this.apps = false, this.servers = false});
+
+  final bool apps;
+  final bool servers;
+}
+
+final routeCapabilitiesProvider = Provider<RouteCapabilities>(
+  (ref) => const RouteCapabilities(),
+);
+
+/// Разовая подсказка «списки стали маршрутами» после обновления.
+class RoutesHintNotifier extends Notifier<bool> {
+  @override
+  bool build() => ref.read(storageProvider).routesHintPending;
+
+  Future<void> dismiss() async {
+    state = false;
+    await ref.read(storageProvider).dismissRoutesHint();
+  }
+}
+
+final routesHintProvider =
+    NotifierProvider<RoutesHintNotifier, bool>(RoutesHintNotifier.new);

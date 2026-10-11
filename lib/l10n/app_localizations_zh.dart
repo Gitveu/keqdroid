@@ -168,7 +168,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSplitTitle => '分应用代理';
 
   @override
-  String get settingsRoutingTitle => '路由规则';
+  String get settingsRoutingTitle => '路由';
 
   @override
   String settingsSplitConfigured(int count) {
@@ -176,33 +176,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get settingsRoutingSubtitle => '直连 / 代理 / 阻止规则及预设';
-
-  @override
-  String get settingsResetRoutingTitle => '重置路由为默认值';
-
-  @override
-  String get settingsRoutingResetDone => '路由规则已重置';
-
-  @override
   String get settingsRoutingPresetsTitle => '现成列表';
 
   @override
-  String get settingsRoutingPresetRuTitle => '俄罗斯网站走直连';
+  String get settingsRoutingPresetRuTitle => '俄罗斯网站';
 
   @override
-  String get settingsRoutingPresetRuDesc => '.ru 和 .рф 网站以及其他域名上的俄罗斯服务绕过 VPN';
-
-  @override
-  String get settingsRoutingPresetAdsTitle => '阻止广告和跟踪器';
-
-  @override
-  String get settingsRoutingPresetAdsDesc => '广告和统计分析域名无法打开';
-
-  @override
-  String settingsRoutingPresetApplied(String name) {
-    return '已添加“$name”';
-  }
+  String get settingsRoutingPresetAdsTitle => '广告和跟踪器';
 
   @override
   String get settingsRoutingDirectTitle => '直连';
@@ -217,70 +197,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRoutingFinalTitle => '其他所有';
 
   @override
-  String get settingsRoutingFinalSubtitle => '不在列表中';
-
-  @override
-  String get settingsRoutingListsTitle => '网站去向';
-
-  @override
   String get settingsRoutingReconnect => '重新连接';
-
-  @override
-  String get settingsRoutingAdvancedTitle => '自定义规则';
-
-  @override
-  String get settingsRoutingAdvancedHint => '带独立开关的单条规则，会并入上面的列表。';
-
-  @override
-  String get settingsRoutingAdvancedAdd => '添加规则';
-
-  @override
-  String get settingsRoutingRuleNewTitle => '新建规则';
-
-  @override
-  String get settingsRoutingRuleEditTitle => '编辑规则';
-
-  @override
-  String get settingsRoutingRuleName => '名称';
-
-  @override
-  String get settingsRoutingRuleNameHint => '例如 流媒体';
-
-  @override
-  String get settingsRoutingRuleValues => '值';
-
-  @override
-  String get settingsRoutingRuleValuesHint => '每行一个或用逗号分隔';
-
-  @override
-  String get settingsRoutingRuleMatchBy => '匹配方式';
-
-  @override
-  String get settingsRoutingRuleTypeDomain => '域名';
-
-  @override
-  String get settingsRoutingRuleTypeIp => 'IP / CIDR';
-
-  @override
-  String get settingsRoutingRuleTypeGeoip => 'GeoIP';
-
-  @override
-  String get settingsRoutingRuleTypeGeosite => 'GeoSite';
-
-  @override
-  String get settingsRoutingRuleAction => '动作';
-
-  @override
-  String get settingsRoutingRuleSave => '保存';
-
-  @override
-  String get settingsRoutingRuleDeleteConfirm => '删除此规则？';
 
   @override
   String get routingCheatSheetTitle => '怎么写规则';
 
   @override
-  String get routingCheatSheetBody => '规则就是一张清单：什么流量走哪里。每一行写一个域名、IP 或地理标签，旁边是动作：直连（不走 VPN）、走 VPN（代理）或阻止。\n\n## 域名\nvk.com — 这个域名本身及其所有子域名\nru — 所有以 .ru 结尾的域名（只写这个词，不带点）\n.example.com — 只匹配子域名，不含域名本身\nfull:example.com — 只匹配这一个主机，不含子域名\nregexp:… — 正则表达式，确实需要复杂匹配时再用\n\n## IP 地址\n1.2.3.4 — 单个地址\n10.0.0.0/8 — 一整段地址（CIDR）\n\n## GeoIP：按国家\ngeoip:ru — 所有俄罗斯 IP。把 ru 换成任意国家代码：us、de、cn、ua、kz……\n另有现成的集合：geoip:private（局域网）、geoip:telegram、geoip:google。\n要按国家分流？就用它，geoip 认得所有国家。\n\n## GeoSite：现成的列表\ngeosite:google、geosite:netflix、geosite:telegram、geosite:category-ads-all……\n这些不是国家，而是别人已经整理好的服务分类。\n这里几乎没有国家（只有 geolocation-cn 和 geolocation-!cn），所以按国家还是要用 geoip。\n\n## 在电脑上（keqrnel 内核）\n地理规则和手机上一样生效：由 keqrnel 内置的 xray 负责匹配。只需让 geoip.dat 和 geosite.dat 与 keqdroid.exe 放在同一目录，正式版里已经放好了。如果地理规则似乎没有生效，请先检查这两个文件。\n\n## 顺序\n从上到下：先阻止，再是您的服务器（始终直连，否则会形成回环），然后直连，最后代理。其余的流量按上方“其余流量”开关处理。';
+  String get routingCheatSheetBody => '路由读作“对象 → 内容 → 去向”。在“自定义网站”中，每一行写一个域名、IP、地理标签或列表链接，去向由路由本身选择：直连、代理或阻止。\n\n## 域名\nvk.com — 这个域名本身及其所有子域名\nru — 所有以 .ru 结尾的域名（只写这个词，不带点）\n.example.com — 只匹配子域名，不含域名本身\nfull:example.com — 只匹配这一个主机，不含子域名\nregexp:… — 正则表达式，确实需要复杂匹配时再用\n\n## IP 地址\n1.2.3.4 — 单个地址\n10.0.0.0/8 — 一整段地址（CIDR）\n\n## GeoIP：按国家\ngeoip:ru — 所有俄罗斯 IP。把 ru 换成任意国家代码：us、de、cn、ua、kz……\n另有现成的集合：geoip:private（局域网）、geoip:telegram、geoip:google。\n要按国家分流？就用它，geoip 认得所有国家。\n\n## GeoSite：现成的列表\ngeosite:google、geosite:netflix、geosite:telegram、geosite:category-ads-all……\n这些不是国家，而是别人已经整理好的服务分类。\n这里几乎没有国家（只有 geolocation-cn 和 geolocation-!cn），所以按国家还是要用 geoip。\n\n## 在电脑上（keqrnel 内核）\n地理规则和手机上一样生效：由 keqrnel 内置的 xray 负责匹配。只需让 geoip.dat 和 geosite.dat 与 keqdroid.exe 放在同一目录，正式版里已经放好了。如果地理规则似乎没有生效，请先检查这两个文件。\n\n## 顺序\n与屏幕一致，从上到下：阻止、指定应用、所有应用。所有应用中先检查直连，再检查代理。您的服务器始终最先直连，否则会形成回环。不匹配任何路由的流量按“其他所有”这一行处理。';
 
   @override
   String settingsRoutingItemCount(int count) {
@@ -293,6 +216,137 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String settingsRoutingRouteCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条路由',
+      zero: '没有路由',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get routesSectionBlock => '阻止';
+
+  @override
+  String get routesSectionApps => '应用';
+
+  @override
+  String get routesSectionAllApps => '所有应用';
+
+  @override
+  String get routesHint => '“直连”、“代理”和“阻止”列表现在是路由。点击路由即可修改。';
+
+  @override
+  String get routesHintDismiss => '知道了';
+
+  @override
+  String get routeNew => '新建路由';
+
+  @override
+  String get routeNewSubtitle => '应用、网站或现成列表';
+
+  @override
+  String get routeNewSubtitleSites => '网站或现成列表';
+
+  @override
+  String get routeEditorTitle => '路由';
+
+  @override
+  String get routeWho => '对象';
+
+  @override
+  String get routeWhat => '内容';
+
+  @override
+  String get routeWhere => '去向';
+
+  @override
+  String get routeWhoAllSubtitle => '所有经过 VPN 的流量';
+
+  @override
+  String get routeWhoApps => '指定应用';
+
+  @override
+  String routeWhoDone(int count) {
+    return '完成 · $count';
+  }
+
+  @override
+  String get routeWhatAll => '所有流量';
+
+  @override
+  String get routeWhatAllSubtitle => '应用打开的一切';
+
+  @override
+  String get routeWhatSites => '自定义网站';
+
+  @override
+  String get routeWhatSitesSubtitle => '域名、IP 和列表链接';
+
+  @override
+  String routeWhatPresetValue(String name) {
+    return '现成列表 · $name';
+  }
+
+  @override
+  String routeWhatSitesValue(String entries) {
+    return '自定义网站 · $entries';
+  }
+
+  @override
+  String get routeWhereVpnSubtitle => '通过应用当前连接的服务器';
+
+  @override
+  String get routeWhereDirectSubtitle => '绕过 VPN';
+
+  @override
+  String get routeWhereBlockSubtitle => '不建立连接';
+
+  @override
+  String get routeWhereServers => '其他服务器';
+
+  @override
+  String get routeToVpn => '代理';
+
+  @override
+  String get routeToDirect => '直连';
+
+  @override
+  String get routeToBlock => '阻止';
+
+  @override
+  String get routeAllTrafficShort => '所有流量';
+
+  @override
+  String get routeDisabledShort => '已关闭';
+
+  @override
+  String get routeEnabled => '启用路由';
+
+  @override
+  String get routeDeleteConfirm => '删除此路由？';
+
+  @override
+  String get routeServerMissing => '服务器已不存在，改走代理';
+
+  @override
+  String get routeServerUnsupported => '当前内核无法使用此服务器，改走代理';
+
+  @override
+  String get routeAppsUnsupported => '当前内核无法区分应用，此路由不生效';
+
+  @override
+  String get routeAppsNeedTun => '仅在 TUN 模式下生效';
+
+  @override
+  String get routeSplitExcluded => '这些应用已被分应用代理排除';
+
+  @override
+  String get routeRefilterUnmatched => '“其他所有”现在走直连';
 
   @override
   String settingsRoutingLinkDomains(int count, String formatted) {
@@ -1972,9 +2026,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsResetConfirmAction => '重置';
 
   @override
-  String get settingsResetRoutingConfirm => '将恢复内置路由规则并清除您的直连/代理/阻止列表。此操作无法撤销。';
-
-  @override
   String get settingsXrayResetConfirm => '将恢复 Xray 内核、TUN 和本地端口的默认设置。此操作无法撤销。';
 
   @override
@@ -2071,10 +2122,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tunRememberFailed => '无法更改 TUN 授权';
 
   @override
-  String get settingsRoutingPresetRefilterTitle => '俄罗斯封锁的网站（Re-filter）走 VPN';
-
-  @override
-  String get settingsRoutingPresetRefilterDesc => '在俄罗斯被封锁的网站和地址走 VPN，其余直连';
+  String get settingsRoutingPresetRefilterTitle => '俄罗斯封锁的网站（Re-filter）';
 
   @override
   String get settingsRoutingGeoUnknownTitle => '地理数据库中不存在，将被忽略';

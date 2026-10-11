@@ -29,7 +29,7 @@ void main() {
       expect(l10n.localeName, 'fa');
       expect(l10n.navServers, 'سرورها');
       expect(l10n.navSubscriptions, 'اشتراک‌ها');
-      expect(l10n.settingsRoutingTitle, 'قوانین مسیریابی');
+      expect(l10n.settingsRoutingTitle, 'مسیریابی');
       // Термины сверены с Hiddify, v2rayNG, v2rayN и NekoBox, а не переведены
       // дословно. «Мимо VPN» — «مستقیم»: «دور زدن» в Иране читается как обход
       // блокировок, то есть наоборот, через VPN. Те же слова и у списков, и у

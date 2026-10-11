@@ -4,6 +4,8 @@ import '../core/app_logger.dart';
 import '../models/app_settings.dart';
 import '../models/server_item.dart';
 import '../models/subscription.dart';
+import '../models/traffic_route.dart';
+import '../utils/traffic_routes.dart';
 import 'card_image_service.dart';
 import 'storage_service.dart';
 
@@ -229,6 +231,7 @@ class SettingsBackupService {
         for (final key in portableSettingKeys)
           if (json.containsKey(key)) key: json[key],
       };
+      data['routes'] = [for (final r in await storage.getRoutes()) r.toJson()];
     }
 
     return KeqdisBackup(
@@ -318,6 +321,41 @@ class SettingsBackupService {
         merged['fakeIp'] = raw['mihomoFakeIp'];
       }
       await storage.saveSettings(AppSettings.fromJson(merged));
+      await _applyRoutes(storage, backup.data['routes'], raw);
     }
+  }
+
+  /// Маршруты из копии. Копии до маршрутов несут три списка, и они
+  /// переносятся так же, как при обновлении. Такая копия описывает только
+  /// общие маршруты и заменяет только их: маршрутов отдельных приложений и
+  /// на другие серверы в ней быть не могло, и стирать их импортом незачем.
+  static Future<void> _applyRoutes(
+    StorageService storage,
+    Object? rawRoutes,
+    Map<dynamic, dynamic> appSettings,
+  ) async {
+    if (rawRoutes is List) {
+      await storage.saveRoutes([
+        for (final r in rawRoutes)
+          if (r is Map) TrafficRoute.fromJson(r.cast<String, dynamic>()),
+      ]);
+      return;
+    }
+    const legacyKeys = ['directRules', 'proxyRules', 'blockedRules'];
+    if (!legacyKeys.any(appSettings.containsKey)) return;
+    String field(String key) => appSettings[key]?.toString() ?? '';
+    final converted = routesFromLegacy(
+      AppSettings(
+        directRules: field('directRules'),
+        proxyRules: field('proxyRules'),
+        blockedRules: field('blockedRules'),
+      ),
+      const [],
+    );
+    final kept = [
+      for (final r in await storage.getRoutes())
+        if (!r.allApps || r.target == RouteTarget.server) r,
+    ];
+    await storage.saveRoutes([...converted, ...kept]);
   }
 }

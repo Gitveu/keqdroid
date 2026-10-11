@@ -111,8 +111,9 @@ class _BackupRestoreScreenState extends ConsumerState<_BackupRestoreScreen> {
       ref.invalidate(splitTunnelingProvider);
       // Настройки живут отдельным нотифаером с собственным состоянием: без
       // сброса импортированная тема и списки маршрутизации доехали бы до диска,
-      // а на экране остались прежними до перезапуска.
+      // а на экране остались прежними до перезапуска. Маршруты — так же.
       ref.invalidate(settingsNotifierProvider);
+      ref.invalidate(routesProvider);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -40,7 +40,8 @@ extension RuleTypeX on RuleType {
   };
 }
 
-/// правило роутинга, sing-box/xray читает при старте
+/// «Своё правило» прежних версий. Хранится только до переноса в маршруты
+/// (`routesFromLegacy`); новых правил приложение не заводит.
 class RoutingRule {
   final String id;
   final String name;
@@ -114,48 +115,4 @@ class RoutingRule {
         enabled: enabled ?? this.enabled,
         priority: priority ?? this.priority,
       );
-
-  /// Преобразует правило в формат libsingbox.so route rule
-  Map<String, dynamic> toSingBoxRule() {
-    final Map<String, dynamic> rule = {};
-    switch (type) {
-      case RuleType.domain:
-      // отделяем точные домены от keyword-масок (с +)
-        final exact = values.where((v) => !v.startsWith('+')).toList();
-        final keywords = values
-            .where((v) => v.startsWith('+'))
-            .map((v) => v.substring(1))
-            .toList();
-        if (exact.isNotEmpty) rule['domain'] = exact;
-        if (keywords.isNotEmpty) rule['domain_keyword'] = keywords;
-      case RuleType.ipCidr:
-        rule['ip_cidr'] = values;
-      case RuleType.geoip:
-        rule['geoip'] = values;
-      case RuleType.geosite:
-        rule['geosite'] = values;
-      case RuleType.processName:
-        rule['process_name'] = values;
-    }
-    rule['outbound'] = action.value;
-    return rule;
-  }
-
-  /// Встроенные дефолтные правила для обхода локальных адресов
-  static List<RoutingRule> get defaults => [
-    RoutingRule.create(
-      name: 'Local IPs — Direct',
-      type: RuleType.ipCidr,
-      values: ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '127.0.0.0/8'],
-      action: RuleAction.direct,
-      priority: 1,
-    ),
-    RoutingRule.create(
-      name: 'Russia GeoIP — Direct',
-      type: RuleType.geoip,
-      values: ['RU'],
-      action: RuleAction.direct,
-      priority: 10,
-    ),
-  ];
 }

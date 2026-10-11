@@ -168,7 +168,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSplitTitle => 'Split Tunneling';
 
   @override
-  String get settingsRoutingTitle => 'Routing Rules';
+  String get settingsRoutingTitle => 'Routing';
 
   @override
   String settingsSplitConfigured(int count) {
@@ -176,33 +176,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settingsRoutingSubtitle => 'Direct / proxy / block rules and presets';
-
-  @override
-  String get settingsResetRoutingTitle => 'Reset routing to defaults';
-
-  @override
-  String get settingsRoutingResetDone => 'Routing rules reset';
-
-  @override
   String get settingsRoutingPresetsTitle => 'Ready-made lists';
 
   @override
-  String get settingsRoutingPresetRuTitle => 'Russian sites go direct';
+  String get settingsRoutingPresetRuTitle => 'Russian sites';
 
   @override
-  String get settingsRoutingPresetRuDesc => '.ru and .рф sites and Russian services on other domains bypass the VPN';
-
-  @override
-  String get settingsRoutingPresetAdsTitle => 'Ads & trackers get blocked';
-
-  @override
-  String get settingsRoutingPresetAdsDesc => 'Ad and analytics domains won’t load';
-
-  @override
-  String settingsRoutingPresetApplied(String name) {
-    return 'Added \"$name\"';
-  }
+  String get settingsRoutingPresetAdsTitle => 'Ads & trackers';
 
   @override
   String get settingsRoutingDirectTitle => 'Direct';
@@ -217,70 +197,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsRoutingFinalTitle => 'Everything else';
 
   @override
-  String get settingsRoutingFinalSubtitle => 'Not in the lists';
-
-  @override
-  String get settingsRoutingListsTitle => 'Where sites go';
-
-  @override
   String get settingsRoutingReconnect => 'Reconnect';
-
-  @override
-  String get settingsRoutingAdvancedTitle => 'Custom rules';
-
-  @override
-  String get settingsRoutingAdvancedHint => 'Individual rules with their own switch. Added to the lists above.';
-
-  @override
-  String get settingsRoutingAdvancedAdd => 'Add rule';
-
-  @override
-  String get settingsRoutingRuleNewTitle => 'New rule';
-
-  @override
-  String get settingsRoutingRuleEditTitle => 'Edit rule';
-
-  @override
-  String get settingsRoutingRuleName => 'Name';
-
-  @override
-  String get settingsRoutingRuleNameHint => 'e.g. Streaming';
-
-  @override
-  String get settingsRoutingRuleValues => 'Values';
-
-  @override
-  String get settingsRoutingRuleValuesHint => 'One per line or comma-separated';
-
-  @override
-  String get settingsRoutingRuleMatchBy => 'Match by';
-
-  @override
-  String get settingsRoutingRuleTypeDomain => 'Domain';
-
-  @override
-  String get settingsRoutingRuleTypeIp => 'IP / CIDR';
-
-  @override
-  String get settingsRoutingRuleTypeGeoip => 'GeoIP';
-
-  @override
-  String get settingsRoutingRuleTypeGeosite => 'GeoSite';
-
-  @override
-  String get settingsRoutingRuleAction => 'Action';
-
-  @override
-  String get settingsRoutingRuleSave => 'Save';
-
-  @override
-  String get settingsRoutingRuleDeleteConfirm => 'Delete this rule?';
 
   @override
   String get routingCheatSheetTitle => 'How to write rules';
 
   @override
-  String get routingCheatSheetBody => 'Rules are just a list: what goes where. Each line is a domain, an IP, or a geo tag, and next to it the action: straight out (bypass), through the VPN (proxy), or blocked.\n\n## Domains\nvk.com — the domain itself and all its subdomains\nru — anything ending in .ru (a bare word, no dot)\n.example.com — subdomains only, not the domain itself\nfull:example.com — exactly this host, no subdomains\nregexp:… — a regex, if you really need to get fancy\n\n## IP addresses\n1.2.3.4 — a single address\n10.0.0.0/8 — a whole range (CIDR)\n\n## GeoIP: by country\ngeoip:ru — every Russian IP. Swap ru for any country: us, de, cn, ua, kz…\nPlus ready-made bundles: geoip:private (LAN), geoip:telegram, geoip:google.\nNeed it by country? This is the one, geoip knows them all.\n\n## GeoSite: ready-made lists\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nThese aren\'t countries but service categories someone already put together for you.\nHardly any countries here (just geolocation-cn and geolocation-!cn), so by-country is really geoip\'s job.\n\n## On PC (keqrnel core)\nGeo works the same as on the phone: the xray built into keqrnel does the matching. It just needs geoip.dat and geosite.dat sitting next to keqdroid.exe. A release build already has them there. If geo rules look ignored, check those two files first.\n\n## Order\nTop to bottom: block first, then your server (always direct, or you\'d get a loop), then bypass, then proxy. Whatever is left follows the Unmatched traffic switch up top.';
+  String get routingCheatSheetBody => 'A route reads “who → what → where”. In Custom sites each line is a domain, an IP, a geo tag or a link to a list, and where they go is the route’s own choice: direct, via VPN or blocked.\n\n## Domains\nvk.com — the domain itself and all its subdomains\nru — anything ending in .ru (a bare word, no dot)\n.example.com — subdomains only, not the domain itself\nfull:example.com — exactly this host, no subdomains\nregexp:… — a regex, if you really need to get fancy\n\n## IP addresses\n1.2.3.4 — a single address\n10.0.0.0/8 — a whole range (CIDR)\n\n## GeoIP: by country\ngeoip:ru — every Russian IP. Swap ru for any country: us, de, cn, ua, kz…\nPlus ready-made bundles: geoip:private (LAN), geoip:telegram, geoip:google.\nNeed it by country? This is the one, geoip knows them all.\n\n## GeoSite: ready-made lists\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nThese aren\'t countries but service categories someone already put together for you.\nHardly any countries here (just geolocation-cn and geolocation-!cn), so by-country is really geoip\'s job.\n\n## On PC (keqrnel core)\nGeo works the same as on the phone: the xray built into keqrnel does the matching. It just needs geoip.dat and geosite.dat sitting next to keqdroid.exe. A release build already has them there. If geo rules look ignored, check those two files first.\n\n## Order\nTop to bottom, as on the screen: blocking, specific apps, all apps. Among all apps, Direct is checked before Via VPN. Your server always goes direct before anything else, or you would get a loop. Whatever matches no route follows the Everything else row.';
 
   @override
   String settingsRoutingItemCount(int count) {
@@ -293,6 +216,138 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String settingsRoutingRouteCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count routes',
+      one: '1 route',
+      zero: 'no routes',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get routesSectionBlock => 'Blocking';
+
+  @override
+  String get routesSectionApps => 'Apps';
+
+  @override
+  String get routesSectionAllApps => 'All apps';
+
+  @override
+  String get routesHint => 'The Direct, Via VPN and Block lists are now routes. Tap a route to change it.';
+
+  @override
+  String get routesHintDismiss => 'Got it';
+
+  @override
+  String get routeNew => 'New route';
+
+  @override
+  String get routeNewSubtitle => 'An app, sites or a ready-made list';
+
+  @override
+  String get routeNewSubtitleSites => 'Sites or a ready-made list';
+
+  @override
+  String get routeEditorTitle => 'Route';
+
+  @override
+  String get routeWho => 'Who';
+
+  @override
+  String get routeWhat => 'What';
+
+  @override
+  String get routeWhere => 'Where';
+
+  @override
+  String get routeWhoAllSubtitle => 'Everything that goes through the VPN';
+
+  @override
+  String get routeWhoApps => 'Specific apps';
+
+  @override
+  String routeWhoDone(int count) {
+    return 'Done · $count';
+  }
+
+  @override
+  String get routeWhatAll => 'All traffic';
+
+  @override
+  String get routeWhatAllSubtitle => 'Everything the app opens';
+
+  @override
+  String get routeWhatSites => 'Custom sites';
+
+  @override
+  String get routeWhatSitesSubtitle => 'Domains, IPs and links to lists';
+
+  @override
+  String routeWhatPresetValue(String name) {
+    return 'Ready-made list · $name';
+  }
+
+  @override
+  String routeWhatSitesValue(String entries) {
+    return 'Custom sites · $entries';
+  }
+
+  @override
+  String get routeWhereVpnSubtitle => 'Through the server the app is connected to';
+
+  @override
+  String get routeWhereDirectSubtitle => 'Bypassing the VPN';
+
+  @override
+  String get routeWhereBlockSubtitle => 'Connections are not opened';
+
+  @override
+  String get routeWhereServers => 'Another server';
+
+  @override
+  String get routeToVpn => 'via VPN';
+
+  @override
+  String get routeToDirect => 'direct';
+
+  @override
+  String get routeToBlock => 'block';
+
+  @override
+  String get routeAllTrafficShort => 'all traffic';
+
+  @override
+  String get routeDisabledShort => 'off';
+
+  @override
+  String get routeEnabled => 'Route enabled';
+
+  @override
+  String get routeDeleteConfirm => 'Delete this route?';
+
+  @override
+  String get routeServerMissing => 'server is gone, goes via VPN';
+
+  @override
+  String get routeServerUnsupported => 'the current core can\'t use this server, goes via VPN';
+
+  @override
+  String get routeAppsUnsupported => 'the current core can\'t tell apps apart, the route does nothing';
+
+  @override
+  String get routeAppsNeedTun => 'works only in TUN mode';
+
+  @override
+  String get routeSplitExcluded => 'these apps are excluded by split tunneling';
+
+  @override
+  String get routeRefilterUnmatched => 'Everything else now goes direct';
 
   @override
   String settingsRoutingLinkDomains(int count, String formatted) {
@@ -1974,9 +2029,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsResetConfirmAction => 'Reset';
 
   @override
-  String get settingsResetRoutingConfirm => 'This restores the built-in routing rules and discards your direct/proxy/blocked lists. This can\'t be undone.';
-
-  @override
   String get settingsXrayResetConfirm => 'This restores the default Xray core, TUN and local port settings. This can\'t be undone.';
 
   @override
@@ -2073,10 +2125,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tunRememberFailed => 'Could not change TUN authorization';
 
   @override
-  String get settingsRoutingPresetRefilterTitle => 'Blocked in Russia (Re-filter) through the VPN';
-
-  @override
-  String get settingsRoutingPresetRefilterDesc => 'Sites and addresses blocked in Russia go through the VPN, everything else goes direct';
+  String get settingsRoutingPresetRefilterTitle => 'Blocked in Russia (Re-filter)';
 
   @override
   String get settingsRoutingGeoUnknownTitle => 'Missing from the geo databases, will be ignored';

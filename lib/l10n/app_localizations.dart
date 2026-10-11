@@ -398,7 +398,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsRoutingTitle.
   ///
   /// In en, this message translates to:
-  /// **'Routing Rules'**
+  /// **'Routing'**
   String get settingsRoutingTitle;
 
   /// No description provided for @settingsSplitConfigured.
@@ -406,24 +406,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} apps configured'**
   String settingsSplitConfigured(int count);
-
-  /// No description provided for @settingsRoutingSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Direct / proxy / block rules and presets'**
-  String get settingsRoutingSubtitle;
-
-  /// No description provided for @settingsResetRoutingTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Reset routing to defaults'**
-  String get settingsResetRoutingTitle;
-
-  /// No description provided for @settingsRoutingResetDone.
-  ///
-  /// In en, this message translates to:
-  /// **'Routing rules reset'**
-  String get settingsRoutingResetDone;
 
   /// No description provided for @settingsRoutingPresetsTitle.
   ///
@@ -434,32 +416,14 @@ abstract class AppLocalizations {
   /// No description provided for @settingsRoutingPresetRuTitle.
   ///
   /// In en, this message translates to:
-  /// **'Russian sites go direct'**
+  /// **'Russian sites'**
   String get settingsRoutingPresetRuTitle;
-
-  /// No description provided for @settingsRoutingPresetRuDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'.ru and .рф sites and Russian services on other domains bypass the VPN'**
-  String get settingsRoutingPresetRuDesc;
 
   /// No description provided for @settingsRoutingPresetAdsTitle.
   ///
   /// In en, this message translates to:
-  /// **'Ads & trackers get blocked'**
+  /// **'Ads & trackers'**
   String get settingsRoutingPresetAdsTitle;
-
-  /// No description provided for @settingsRoutingPresetAdsDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Ad and analytics domains won’t load'**
-  String get settingsRoutingPresetAdsDesc;
-
-  /// No description provided for @settingsRoutingPresetApplied.
-  ///
-  /// In en, this message translates to:
-  /// **'Added \"{name}\"'**
-  String settingsRoutingPresetApplied(String name);
 
   /// No description provided for @settingsRoutingDirectTitle.
   ///
@@ -485,125 +449,11 @@ abstract class AppLocalizations {
   /// **'Everything else'**
   String get settingsRoutingFinalTitle;
 
-  /// No description provided for @settingsRoutingFinalSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Not in the lists'**
-  String get settingsRoutingFinalSubtitle;
-
-  /// No description provided for @settingsRoutingListsTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Where sites go'**
-  String get settingsRoutingListsTitle;
-
   /// No description provided for @settingsRoutingReconnect.
   ///
   /// In en, this message translates to:
   /// **'Reconnect'**
   String get settingsRoutingReconnect;
-
-  /// No description provided for @settingsRoutingAdvancedTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Custom rules'**
-  String get settingsRoutingAdvancedTitle;
-
-  /// No description provided for @settingsRoutingAdvancedHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Individual rules with their own switch. Added to the lists above.'**
-  String get settingsRoutingAdvancedHint;
-
-  /// No description provided for @settingsRoutingAdvancedAdd.
-  ///
-  /// In en, this message translates to:
-  /// **'Add rule'**
-  String get settingsRoutingAdvancedAdd;
-
-  /// No description provided for @settingsRoutingRuleNewTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'New rule'**
-  String get settingsRoutingRuleNewTitle;
-
-  /// No description provided for @settingsRoutingRuleEditTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Edit rule'**
-  String get settingsRoutingRuleEditTitle;
-
-  /// No description provided for @settingsRoutingRuleName.
-  ///
-  /// In en, this message translates to:
-  /// **'Name'**
-  String get settingsRoutingRuleName;
-
-  /// No description provided for @settingsRoutingRuleNameHint.
-  ///
-  /// In en, this message translates to:
-  /// **'e.g. Streaming'**
-  String get settingsRoutingRuleNameHint;
-
-  /// No description provided for @settingsRoutingRuleValues.
-  ///
-  /// In en, this message translates to:
-  /// **'Values'**
-  String get settingsRoutingRuleValues;
-
-  /// No description provided for @settingsRoutingRuleValuesHint.
-  ///
-  /// In en, this message translates to:
-  /// **'One per line or comma-separated'**
-  String get settingsRoutingRuleValuesHint;
-
-  /// No description provided for @settingsRoutingRuleMatchBy.
-  ///
-  /// In en, this message translates to:
-  /// **'Match by'**
-  String get settingsRoutingRuleMatchBy;
-
-  /// No description provided for @settingsRoutingRuleTypeDomain.
-  ///
-  /// In en, this message translates to:
-  /// **'Domain'**
-  String get settingsRoutingRuleTypeDomain;
-
-  /// No description provided for @settingsRoutingRuleTypeIp.
-  ///
-  /// In en, this message translates to:
-  /// **'IP / CIDR'**
-  String get settingsRoutingRuleTypeIp;
-
-  /// No description provided for @settingsRoutingRuleTypeGeoip.
-  ///
-  /// In en, this message translates to:
-  /// **'GeoIP'**
-  String get settingsRoutingRuleTypeGeoip;
-
-  /// No description provided for @settingsRoutingRuleTypeGeosite.
-  ///
-  /// In en, this message translates to:
-  /// **'GeoSite'**
-  String get settingsRoutingRuleTypeGeosite;
-
-  /// No description provided for @settingsRoutingRuleAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Action'**
-  String get settingsRoutingRuleAction;
-
-  /// No description provided for @settingsRoutingRuleSave.
-  ///
-  /// In en, this message translates to:
-  /// **'Save'**
-  String get settingsRoutingRuleSave;
-
-  /// No description provided for @settingsRoutingRuleDeleteConfirm.
-  ///
-  /// In en, this message translates to:
-  /// **'Delete this rule?'**
-  String get settingsRoutingRuleDeleteConfirm;
 
   /// No description provided for @routingCheatSheetTitle.
   ///
@@ -614,7 +464,7 @@ abstract class AppLocalizations {
   /// No description provided for @routingCheatSheetBody.
   ///
   /// In en, this message translates to:
-  /// **'Rules are just a list: what goes where. Each line is a domain, an IP, or a geo tag, and next to it the action: straight out (bypass), through the VPN (proxy), or blocked.\n\n## Domains\nvk.com — the domain itself and all its subdomains\nru — anything ending in .ru (a bare word, no dot)\n.example.com — subdomains only, not the domain itself\nfull:example.com — exactly this host, no subdomains\nregexp:… — a regex, if you really need to get fancy\n\n## IP addresses\n1.2.3.4 — a single address\n10.0.0.0/8 — a whole range (CIDR)\n\n## GeoIP: by country\ngeoip:ru — every Russian IP. Swap ru for any country: us, de, cn, ua, kz…\nPlus ready-made bundles: geoip:private (LAN), geoip:telegram, geoip:google.\nNeed it by country? This is the one, geoip knows them all.\n\n## GeoSite: ready-made lists\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nThese aren\'t countries but service categories someone already put together for you.\nHardly any countries here (just geolocation-cn and geolocation-!cn), so by-country is really geoip\'s job.\n\n## On PC (keqrnel core)\nGeo works the same as on the phone: the xray built into keqrnel does the matching. It just needs geoip.dat and geosite.dat sitting next to keqdroid.exe. A release build already has them there. If geo rules look ignored, check those two files first.\n\n## Order\nTop to bottom: block first, then your server (always direct, or you\'d get a loop), then bypass, then proxy. Whatever is left follows the Unmatched traffic switch up top.'**
+  /// **'A route reads “who → what → where”. In Custom sites each line is a domain, an IP, a geo tag or a link to a list, and where they go is the route’s own choice: direct, via VPN or blocked.\n\n## Domains\nvk.com — the domain itself and all its subdomains\nru — anything ending in .ru (a bare word, no dot)\n.example.com — subdomains only, not the domain itself\nfull:example.com — exactly this host, no subdomains\nregexp:… — a regex, if you really need to get fancy\n\n## IP addresses\n1.2.3.4 — a single address\n10.0.0.0/8 — a whole range (CIDR)\n\n## GeoIP: by country\ngeoip:ru — every Russian IP. Swap ru for any country: us, de, cn, ua, kz…\nPlus ready-made bundles: geoip:private (LAN), geoip:telegram, geoip:google.\nNeed it by country? This is the one, geoip knows them all.\n\n## GeoSite: ready-made lists\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nThese aren\'t countries but service categories someone already put together for you.\nHardly any countries here (just geolocation-cn and geolocation-!cn), so by-country is really geoip\'s job.\n\n## On PC (keqrnel core)\nGeo works the same as on the phone: the xray built into keqrnel does the matching. It just needs geoip.dat and geosite.dat sitting next to keqdroid.exe. A release build already has them there. If geo rules look ignored, check those two files first.\n\n## Order\nTop to bottom, as on the screen: blocking, specific apps, all apps. Among all apps, Direct is checked before Via VPN. Your server always goes direct before anything else, or you would get a loop. Whatever matches no route follows the Everything else row.'**
   String get routingCheatSheetBody;
 
   /// No description provided for @settingsRoutingItemCount.
@@ -622,6 +472,240 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =0{empty} =1{1 entry} other{{count} entries}}'**
   String settingsRoutingItemCount(int count);
+
+  /// No description provided for @settingsRoutingRouteCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{no routes} =1{1 route} other{{count} routes}}'**
+  String settingsRoutingRouteCount(int count);
+
+  /// No description provided for @routesSectionBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocking'**
+  String get routesSectionBlock;
+
+  /// No description provided for @routesSectionApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Apps'**
+  String get routesSectionApps;
+
+  /// No description provided for @routesSectionAllApps.
+  ///
+  /// In en, this message translates to:
+  /// **'All apps'**
+  String get routesSectionAllApps;
+
+  /// No description provided for @routesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The Direct, Via VPN and Block lists are now routes. Tap a route to change it.'**
+  String get routesHint;
+
+  /// No description provided for @routesHintDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get routesHintDismiss;
+
+  /// No description provided for @routeNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New route'**
+  String get routeNew;
+
+  /// No description provided for @routeNewSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'An app, sites or a ready-made list'**
+  String get routeNewSubtitle;
+
+  /// No description provided for @routeNewSubtitleSites.
+  ///
+  /// In en, this message translates to:
+  /// **'Sites or a ready-made list'**
+  String get routeNewSubtitleSites;
+
+  /// No description provided for @routeEditorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Route'**
+  String get routeEditorTitle;
+
+  /// No description provided for @routeWho.
+  ///
+  /// In en, this message translates to:
+  /// **'Who'**
+  String get routeWho;
+
+  /// No description provided for @routeWhat.
+  ///
+  /// In en, this message translates to:
+  /// **'What'**
+  String get routeWhat;
+
+  /// No description provided for @routeWhere.
+  ///
+  /// In en, this message translates to:
+  /// **'Where'**
+  String get routeWhere;
+
+  /// No description provided for @routeWhoAllSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything that goes through the VPN'**
+  String get routeWhoAllSubtitle;
+
+  /// No description provided for @routeWhoApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Specific apps'**
+  String get routeWhoApps;
+
+  /// No description provided for @routeWhoDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done · {count}'**
+  String routeWhoDone(int count);
+
+  /// No description provided for @routeWhatAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All traffic'**
+  String get routeWhatAll;
+
+  /// No description provided for @routeWhatAllSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything the app opens'**
+  String get routeWhatAllSubtitle;
+
+  /// No description provided for @routeWhatSites.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom sites'**
+  String get routeWhatSites;
+
+  /// No description provided for @routeWhatSitesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Domains, IPs and links to lists'**
+  String get routeWhatSitesSubtitle;
+
+  /// No description provided for @routeWhatPresetValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready-made list · {name}'**
+  String routeWhatPresetValue(String name);
+
+  /// No description provided for @routeWhatSitesValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom sites · {entries}'**
+  String routeWhatSitesValue(String entries);
+
+  /// No description provided for @routeWhereVpnSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Through the server the app is connected to'**
+  String get routeWhereVpnSubtitle;
+
+  /// No description provided for @routeWhereDirectSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bypassing the VPN'**
+  String get routeWhereDirectSubtitle;
+
+  /// No description provided for @routeWhereBlockSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connections are not opened'**
+  String get routeWhereBlockSubtitle;
+
+  /// No description provided for @routeWhereServers.
+  ///
+  /// In en, this message translates to:
+  /// **'Another server'**
+  String get routeWhereServers;
+
+  /// No description provided for @routeToVpn.
+  ///
+  /// In en, this message translates to:
+  /// **'via VPN'**
+  String get routeToVpn;
+
+  /// No description provided for @routeToDirect.
+  ///
+  /// In en, this message translates to:
+  /// **'direct'**
+  String get routeToDirect;
+
+  /// No description provided for @routeToBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'block'**
+  String get routeToBlock;
+
+  /// No description provided for @routeAllTrafficShort.
+  ///
+  /// In en, this message translates to:
+  /// **'all traffic'**
+  String get routeAllTrafficShort;
+
+  /// No description provided for @routeDisabledShort.
+  ///
+  /// In en, this message translates to:
+  /// **'off'**
+  String get routeDisabledShort;
+
+  /// No description provided for @routeEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Route enabled'**
+  String get routeEnabled;
+
+  /// No description provided for @routeDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this route?'**
+  String get routeDeleteConfirm;
+
+  /// No description provided for @routeServerMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'server is gone, goes via VPN'**
+  String get routeServerMissing;
+
+  /// No description provided for @routeServerUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'the current core can\'t use this server, goes via VPN'**
+  String get routeServerUnsupported;
+
+  /// No description provided for @routeAppsUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'the current core can\'t tell apps apart, the route does nothing'**
+  String get routeAppsUnsupported;
+
+  /// No description provided for @routeAppsNeedTun.
+  ///
+  /// In en, this message translates to:
+  /// **'works only in TUN mode'**
+  String get routeAppsNeedTun;
+
+  /// No description provided for @routeSplitExcluded.
+  ///
+  /// In en, this message translates to:
+  /// **'these apps are excluded by split tunneling'**
+  String get routeSplitExcluded;
+
+  /// No description provided for @routeRefilterUnmatched.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything else now goes direct'**
+  String get routeRefilterUnmatched;
 
   /// No description provided for @settingsRoutingLinkDomains.
   ///
@@ -3773,12 +3857,6 @@ abstract class AppLocalizations {
   /// **'Reset'**
   String get settingsResetConfirmAction;
 
-  /// No description provided for @settingsResetRoutingConfirm.
-  ///
-  /// In en, this message translates to:
-  /// **'This restores the built-in routing rules and discards your direct/proxy/blocked lists. This can\'t be undone.'**
-  String get settingsResetRoutingConfirm;
-
   /// No description provided for @settingsXrayResetConfirm.
   ///
   /// In en, this message translates to:
@@ -3974,14 +4052,8 @@ abstract class AppLocalizations {
   /// No description provided for @settingsRoutingPresetRefilterTitle.
   ///
   /// In en, this message translates to:
-  /// **'Blocked in Russia (Re-filter) through the VPN'**
+  /// **'Blocked in Russia (Re-filter)'**
   String get settingsRoutingPresetRefilterTitle;
-
-  /// No description provided for @settingsRoutingPresetRefilterDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Sites and addresses blocked in Russia go through the VPN, everything else goes direct'**
-  String get settingsRoutingPresetRefilterDesc;
 
   /// No description provided for @settingsRoutingGeoUnknownTitle.
   ///

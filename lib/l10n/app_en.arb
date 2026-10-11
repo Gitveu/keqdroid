@@ -83,7 +83,7 @@
   "settingsTitle": "Settings",
   "settingsThemeTitle": "Appearance",
   "settingsSplitTitle": "Split Tunneling",
-  "settingsRoutingTitle": "Routing Rules",
+  "settingsRoutingTitle": "Routing",
   "settingsSplitConfigured": "{count} apps configured",
   "@settingsSplitConfigured": {
     "placeholders": {
@@ -92,48 +92,16 @@
       }
     }
   },
-  "settingsRoutingSubtitle": "Direct / proxy / block rules and presets",
-  "settingsResetRoutingTitle": "Reset routing to defaults",
-  "settingsRoutingResetDone": "Routing rules reset",
   "settingsRoutingPresetsTitle": "Ready-made lists",
-  "settingsRoutingPresetRuTitle": "Russian sites go direct",
-  "settingsRoutingPresetRuDesc": ".ru and .рф sites and Russian services on other domains bypass the VPN",
-  "settingsRoutingPresetAdsTitle": "Ads & trackers get blocked",
-  "settingsRoutingPresetAdsDesc": "Ad and analytics domains won’t load",
-  "settingsRoutingPresetApplied": "Added \"{name}\"",
-  "@settingsRoutingPresetApplied": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
+  "settingsRoutingPresetRuTitle": "Russian sites",
+  "settingsRoutingPresetAdsTitle": "Ads & trackers",
   "settingsRoutingDirectTitle": "Direct",
   "settingsRoutingProxyTitle": "Via VPN",
   "settingsRoutingBlockTitle": "Block",
   "settingsRoutingFinalTitle": "Everything else",
-  "settingsRoutingFinalSubtitle": "Not in the lists",
-  "settingsRoutingListsTitle": "Where sites go",
   "settingsRoutingReconnect": "Reconnect",
-  "settingsRoutingAdvancedTitle": "Custom rules",
-  "settingsRoutingAdvancedHint": "Individual rules with their own switch. Added to the lists above.",
-  "settingsRoutingAdvancedAdd": "Add rule",
-  "settingsRoutingRuleNewTitle": "New rule",
-  "settingsRoutingRuleEditTitle": "Edit rule",
-  "settingsRoutingRuleName": "Name",
-  "settingsRoutingRuleNameHint": "e.g. Streaming",
-  "settingsRoutingRuleValues": "Values",
-  "settingsRoutingRuleValuesHint": "One per line or comma-separated",
-  "settingsRoutingRuleMatchBy": "Match by",
-  "settingsRoutingRuleTypeDomain": "Domain",
-  "settingsRoutingRuleTypeIp": "IP / CIDR",
-  "settingsRoutingRuleTypeGeoip": "GeoIP",
-  "settingsRoutingRuleTypeGeosite": "GeoSite",
-  "settingsRoutingRuleAction": "Action",
-  "settingsRoutingRuleSave": "Save",
-  "settingsRoutingRuleDeleteConfirm": "Delete this rule?",
   "routingCheatSheetTitle": "How to write rules",
-  "routingCheatSheetBody": "Rules are just a list: what goes where. Each line is a domain, an IP, or a geo tag, and next to it the action: straight out (bypass), through the VPN (proxy), or blocked.\n\n## Domains\nvk.com — the domain itself and all its subdomains\nru — anything ending in .ru (a bare word, no dot)\n.example.com — subdomains only, not the domain itself\nfull:example.com — exactly this host, no subdomains\nregexp:… — a regex, if you really need to get fancy\n\n## IP addresses\n1.2.3.4 — a single address\n10.0.0.0/8 — a whole range (CIDR)\n\n## GeoIP: by country\ngeoip:ru — every Russian IP. Swap ru for any country: us, de, cn, ua, kz…\nPlus ready-made bundles: geoip:private (LAN), geoip:telegram, geoip:google.\nNeed it by country? This is the one, geoip knows them all.\n\n## GeoSite: ready-made lists\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nThese aren't countries but service categories someone already put together for you.\nHardly any countries here (just geolocation-cn and geolocation-!cn), so by-country is really geoip's job.\n\n## On PC (keqrnel core)\nGeo works the same as on the phone: the xray built into keqrnel does the matching. It just needs geoip.dat and geosite.dat sitting next to keqdroid.exe. A release build already has them there. If geo rules look ignored, check those two files first.\n\n## Order\nTop to bottom: block first, then your server (always direct, or you'd get a loop), then bypass, then proxy. Whatever is left follows the Unmatched traffic switch up top.",
+  "routingCheatSheetBody": "A route reads “who → what → where”. In Custom sites each line is a domain, an IP, a geo tag or a link to a list, and where they go is the route’s own choice: direct, via VPN or blocked.\n\n## Domains\nvk.com — the domain itself and all its subdomains\nru — anything ending in .ru (a bare word, no dot)\n.example.com — subdomains only, not the domain itself\nfull:example.com — exactly this host, no subdomains\nregexp:… — a regex, if you really need to get fancy\n\n## IP addresses\n1.2.3.4 — a single address\n10.0.0.0/8 — a whole range (CIDR)\n\n## GeoIP: by country\ngeoip:ru — every Russian IP. Swap ru for any country: us, de, cn, ua, kz…\nPlus ready-made bundles: geoip:private (LAN), geoip:telegram, geoip:google.\nNeed it by country? This is the one, geoip knows them all.\n\n## GeoSite: ready-made lists\ngeosite:google, geosite:netflix, geosite:telegram, geosite:category-ads-all…\nThese aren't countries but service categories someone already put together for you.\nHardly any countries here (just geolocation-cn and geolocation-!cn), so by-country is really geoip's job.\n\n## On PC (keqrnel core)\nGeo works the same as on the phone: the xray built into keqrnel does the matching. It just needs geoip.dat and geosite.dat sitting next to keqdroid.exe. A release build already has them there. If geo rules look ignored, check those two files first.\n\n## Order\nTop to bottom, as on the screen: blocking, specific apps, all apps. Among all apps, Direct is checked before Via VPN. Your server always goes direct before anything else, or you would get a loop. Whatever matches no route follows the Everything else row.",
   "settingsRoutingItemCount": "{count, plural, =0{empty} =1{1 entry} other{{count} entries}}",
   "@settingsRoutingItemCount": {
     "placeholders": {
@@ -142,6 +110,108 @@
       }
     }
   },
+  "settingsRoutingRouteCount": "{count, plural, =0{no routes} =1{1 route} other{{count} routes}}",
+  "@settingsRoutingRouteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "routesSectionBlock": "Blocking",
+  "@routesSectionBlock": {},
+  "routesSectionApps": "Apps",
+  "@routesSectionApps": {},
+  "routesSectionAllApps": "All apps",
+  "@routesSectionAllApps": {},
+  "routesHint": "The Direct, Via VPN and Block lists are now routes. Tap a route to change it.",
+  "@routesHint": {},
+  "routesHintDismiss": "Got it",
+  "@routesHintDismiss": {},
+  "routeNew": "New route",
+  "@routeNew": {},
+  "routeNewSubtitle": "An app, sites or a ready-made list",
+  "@routeNewSubtitle": {},
+  "routeNewSubtitleSites": "Sites or a ready-made list",
+  "@routeNewSubtitleSites": {},
+  "routeEditorTitle": "Route",
+  "@routeEditorTitle": {},
+  "routeWho": "Who",
+  "@routeWho": {},
+  "routeWhat": "What",
+  "@routeWhat": {},
+  "routeWhere": "Where",
+  "@routeWhere": {},
+  "routeWhoAllSubtitle": "Everything that goes through the VPN",
+  "@routeWhoAllSubtitle": {},
+  "routeWhoApps": "Specific apps",
+  "@routeWhoApps": {},
+  "routeWhoDone": "Done · {count}",
+  "@routeWhoDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "routeWhatAll": "All traffic",
+  "@routeWhatAll": {},
+  "routeWhatAllSubtitle": "Everything the app opens",
+  "@routeWhatAllSubtitle": {},
+  "routeWhatSites": "Custom sites",
+  "@routeWhatSites": {},
+  "routeWhatSitesSubtitle": "Domains, IPs and links to lists",
+  "@routeWhatSitesSubtitle": {},
+  "routeWhatPresetValue": "Ready-made list · {name}",
+  "@routeWhatPresetValue": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "routeWhatSitesValue": "Custom sites · {entries}",
+  "@routeWhatSitesValue": {
+    "placeholders": {
+      "entries": {
+        "type": "String"
+      }
+    }
+  },
+  "routeWhereVpnSubtitle": "Through the server the app is connected to",
+  "@routeWhereVpnSubtitle": {},
+  "routeWhereDirectSubtitle": "Bypassing the VPN",
+  "@routeWhereDirectSubtitle": {},
+  "routeWhereBlockSubtitle": "Connections are not opened",
+  "@routeWhereBlockSubtitle": {},
+  "routeWhereServers": "Another server",
+  "@routeWhereServers": {},
+  "routeToVpn": "via VPN",
+  "@routeToVpn": {},
+  "routeToDirect": "direct",
+  "@routeToDirect": {},
+  "routeToBlock": "block",
+  "@routeToBlock": {},
+  "routeAllTrafficShort": "all traffic",
+  "@routeAllTrafficShort": {},
+  "routeDisabledShort": "off",
+  "@routeDisabledShort": {},
+  "routeEnabled": "Route enabled",
+  "@routeEnabled": {},
+  "routeDeleteConfirm": "Delete this route?",
+  "@routeDeleteConfirm": {},
+  "routeServerMissing": "server is gone, goes via VPN",
+  "@routeServerMissing": {},
+  "routeServerUnsupported": "the current core can't use this server, goes via VPN",
+  "@routeServerUnsupported": {},
+  "routeAppsUnsupported": "the current core can't tell apps apart, the route does nothing",
+  "@routeAppsUnsupported": {},
+  "routeAppsNeedTun": "works only in TUN mode",
+  "@routeAppsNeedTun": {},
+  "routeSplitExcluded": "these apps are excluded by split tunneling",
+  "@routeSplitExcluded": {},
+  "routeRefilterUnmatched": "Everything else now goes direct",
+  "@routeRefilterUnmatched": {},
   "settingsRoutingLinkDomains": "{count, plural, =1{1 domain from links} other{{formatted} domains from links}}",
   "@settingsRoutingLinkDomains": {
     "placeholders": {
@@ -970,7 +1040,6 @@
   "appearanceFontSystem": "System",
   "settingsResetConfirmTitle": "Reset settings?",
   "settingsResetConfirmAction": "Reset",
-  "settingsResetRoutingConfirm": "This restores the built-in routing rules and discards your direct/proxy/blocked lists. This can't be undone.",
   "settingsXrayResetConfirm": "This restores the default Xray core, TUN and local port settings. This can't be undone.",
   "settingsPermissionsTitle": "Permissions",
   "settingsPermissionsSubtitle": "App permissions you can review and revoke",
@@ -1003,8 +1072,7 @@
   "tunRememberNotNow": "Not now",
   "tunRememberInstalled": "Passwordless TUN enabled",
   "tunRememberFailed": "Could not change TUN authorization",
-  "settingsRoutingPresetRefilterTitle": "Blocked in Russia (Re-filter) through the VPN",
-  "settingsRoutingPresetRefilterDesc": "Sites and addresses blocked in Russia go through the VPN, everything else goes direct",
+  "settingsRoutingPresetRefilterTitle": "Blocked in Russia (Re-filter)",
   "settingsRoutingGeoUnknownTitle": "Missing from the geo databases, will be ignored",
   "settingsRoutingGeoUnknownHint": "The core aborts the whole config on an unknown geo code, so these entries are dropped before connecting. Pick an existing code with the globe button above.",
   "settingsRoutingGeoPickerTooltip": "Insert a geo code",

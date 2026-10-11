@@ -411,15 +411,15 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       } else {
         state = const AsyncData(VpnState(status: VpnStatus.connecting));
       }
-      // Структурированные правила (RoutingRule) складываем в текстовые списки
-      // настроек — так они попадают в оба генератора конфига без правок в них.
-      // Затем выкидываем geoip:/geosite:-коды, которых нет в поставляемых базах:
+      // Маршруты «все приложения» складываем в три текстовых списка настроек —
+      // так они попадают во все генераторы конфига без правок в них. Затем
+      // выкидываем geoip:/geosite:-коды, которых нет в поставляемых базах:
       // xray на неизвестном коде не игнорирует правило, а падает на разборе
       // всего конфига, и подключение умирает с «SOCKS port not ready».
       var settings = await GeoAssetService.sanitizeRules(
-        applyRoutingRules(
+        foldRoutes(
           await ref.read(storageProvider).getSettings(),
-          await ref.read(storageProvider).getRules(),
+          await ref.read(storageProvider).getRoutes(),
         ),
       );
       // Свои DNS-адреса, которых ядро не исполнит, генератор выбрасывает молча
