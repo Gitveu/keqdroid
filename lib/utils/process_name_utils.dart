@@ -1,6 +1,18 @@
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
+/// Чьи правила имён действуют, когда вызывающий не сказал явно. Подмена нужна
+/// тестам экрана сплита: список программ там виндовый, а гоняются они и на
+/// Linux-раннере CI, где без неё та же строка теряла бы `.exe`.
+@visibleForTesting
+bool? debugWindowsProcessRules;
+
+/// Правила имён Windows: `.exe` у имени, обратные косые и регистр пути.
+bool windowsProcessRules(bool? windows) =>
+    windows ?? debugWindowsProcessRules ?? Platform.isWindows;
+
 /// Запись сплита с путём — «только этот файл», без пути — «любая программа
 /// с таким именем». Путь записывается, только когда его указали вручную
 /// (вписали или выбрали через «Обзор…»); отметка в списке пишет имя, чтобы
@@ -12,7 +24,7 @@ bool isProcessPathEntry(String raw) =>
 /// обратными косыми, как их отдаёт система.
 String normalizeProcessPath(String raw, {bool? windows}) {
   final s = raw.trim().replaceAll('"', '');
-  return (windows ?? Platform.isWindows) ? s.replaceAll('/', r'\') : s;
+  return windowsProcessRules(windows) ? s.replaceAll('/', r'\') : s;
 }
 
 /// нормализует ввод/путь к имени процесса для sing-box (например `Telegram.exe`).
@@ -41,7 +53,7 @@ String normalizeProcessName(String raw, {bool? windows}) {
     s = s.substring(cut + 1);
   }
   final hasExe = s.toLowerCase().endsWith('.exe');
-  if (windows ?? Platform.isWindows) {
+  if (windowsProcessRules(windows)) {
     if (!hasExe) s = '$s.exe';
   } else if (hasExe) {
     s = s.substring(0, s.length - 4);

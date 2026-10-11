@@ -9,6 +9,7 @@ import 'package:keqdroid/providers/providers.dart';
 import 'package:keqdroid/screens/split_tunneling_screen.dart';
 import 'package:keqdroid/services/vpn_engine.dart';
 import 'package:keqdroid/shared/ui/expressive_group.dart';
+import 'package:keqdroid/utils/process_name_utils.dart';
 
 import '../helpers/fake_tunnel_backend.dart';
 
@@ -148,6 +149,11 @@ Future<void> _pump(
 }
 
 void main() {
+  // Программы и пути здесь виндовые, а CI гоняет тесты на Linux: без подмены
+  // экран применял бы к ним правила той машины, на которой запущен.
+  setUp(() => debugWindowsProcessRules = true);
+  tearDown(() => debugWindowsProcessRules = null);
+
   testWidgets('экран раскладывается без переполнений', (tester) async {
     await _pump(tester, excludes: {'com.telegram', 'ru.sberbank.online'});
 

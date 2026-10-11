@@ -11,8 +11,6 @@
 /// (`processNameMatchVariants` шлёт оба варианта регистра), поэтому и здесь.
 library;
 
-import 'dart:io' show Platform;
-
 import '../models/app_info.dart';
 import 'process_name_utils.dart';
 
@@ -24,7 +22,7 @@ String splitNameKey(String raw, {bool? windows}) =>
 /// Ключ пути. Регистр снимается только на Windows: там путь к файлу от
 /// регистра не зависит, а на Linux `/opt/App` и `/opt/app` — разные файлы.
 String splitPathKey(String raw, {bool? windows}) {
-  final onWindows = windows ?? Platform.isWindows;
+  final onWindows = windowsProcessRules(windows);
   final path = normalizeProcessPath(raw, windows: onWindows);
   return onWindows ? path.toLowerCase() : path;
 }
