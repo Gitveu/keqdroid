@@ -163,10 +163,14 @@ void main() {
       expect(rules, contains('DOMAIN-SUFFIX,youtube.com,🚀 Proxy'));
     });
 
-    test('сам сервер — первым правилом, иначе круг', () {
+    // Раньше него стоит только проверка выхода для флага, а она трафик
+    // туннеля не ловит.
+    test('сам сервер — раньше всех правил для трафика туннеля, иначе круг', () {
       final rules = (build()['rules'] as List).cast<String>();
-      expect(rules.first, 'DOMAIN,nl.example,DIRECT');
-      expect(rules[1], 'IP-CIDR,198.51.100.10/32,DIRECT,no-resolve');
+      expect(rules.first, MihomoConfigGen.exitIpProbeRule('🚀 Proxy'));
+      expect(rules.first, contains('NOT,((IN-TYPE,TUN))'));
+      expect(rules[1], 'DOMAIN,nl.example,DIRECT');
+      expect(rules[2], 'IP-CIDR,198.51.100.10/32,DIRECT,no-resolve');
     });
 
     test('снифер наш: без него доменные правила не сработают вовсе', () {

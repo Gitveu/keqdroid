@@ -1457,10 +1457,15 @@ void main() {
         )['rules'] as List)
             .cast<String>();
 
-    // Иначе tcp-пинг мерил бы локальный конец туннеля вместо сервера.
-    test('свой процесс — первым правилом и мимо туннеля', () {
+    // Иначе tcp-пинг мерил бы локальный конец туннеля вместо сервера. Раньше
+    // стоит только проверка выхода, а она трафик туннеля не ловит.
+    test('свой процесс из туннеля — сразу мимо туннеля', () {
       final rules = rulesFor(mode: AppRoutingMode.allProxy);
-      expect(rules.first, 'PROCESS-NAME,keqdroid.exe,DIRECT');
+      expect(rules.first, contains('NOT,((IN-TYPE,TUN))'));
+      expect(
+        rules[1],
+        r'AND,((IN-TYPE,TUN),(PROCESS-NAME-REGEX,^keqdroid\x2eexe$)),DIRECT',
+      );
     });
 
     // Замер url-пинга поднимает СВОЁ временное ядро отдельным процессом. Без

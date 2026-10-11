@@ -156,6 +156,14 @@
       },
       {
         "type": "field",
+        "ruleTag": "exit-ip-probe",
+        "domain": [
+          "full:www.cloudflare.com"
+        ],
+        "outboundTag": "proxy"
+      },
+      {
+        "type": "field",
         "ruleTag": "dns-out",
         "inboundTag": [
           "tun-in",

@@ -73,6 +73,7 @@
     }
   ],
   "rules": [
+    "AND,((NOT,((IN-TYPE,TUN))),(DOMAIN,www.cloudflare.com)),proxy",
     "DOMAIN-SUFFIX,ads.example,REJECT",
     "GEOSITE,category-ads-all,REJECT",
     "IP-CIDR,198.51.100.15/32,DIRECT,no-resolve",

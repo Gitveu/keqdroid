@@ -154,6 +154,14 @@
       {
         "type": "field",
         "domain": [
+          "full:www.cloudflare.com"
+        ],
+        "outboundTag": "proxy",
+        "ruleTag": "exit-ip-probe"
+      },
+      {
+        "type": "field",
+        "domain": [
           "domain:ads.example",
           "geosite:category-ads-all"
         ],

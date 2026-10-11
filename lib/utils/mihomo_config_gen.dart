@@ -6,6 +6,7 @@ import '../models/xray_core_settings.dart';
 import '../tunnel/app_routing_mode.dart';
 import 'awg_profile.dart';
 import 'custom_clash_config.dart';
+import 'exit_ip_probe.dart';
 import 'fake_ip.dart';
 import 'hysteria_uri.dart';
 import 'mieru_uri.dart';
@@ -338,6 +339,7 @@ class MihomoConfigGen {
       // туннеля» — решение пользователя о своей машине, и заготовка провайдера
       // его не отменяет. Ровно так же лежит `lan-deny`.
       prependRules: [
+        exitIpProbeRule(clash.primaryTarget),
         if (processRules)
           ...buildProcessRules(
             routingMode: routingMode,
@@ -2069,6 +2071,15 @@ class MihomoConfigGen {
   static List<String> _parseRuleList(String s) =>
       _parseList(s).where((e) => !isRuleListUrl(e)).toList();
 
+  /// Проверка выхода для флага в статусе — через сервер сессии, раньше
+  /// правил пользователя, автора готового конфига и сплита (его «невыбранные
+  /// — напрямую» иначе поймал бы и процесс приложения на HTTP-входе); см.
+  /// [kExitIpProbeHost]. Трафик туннеля к тому же хосту идёт по общим
+  /// правилам: адрес сервера за CDN бывает ровно этим хостом, и правило
+  /// раньше защиты от петли не должно его перехватить.
+  static String exitIpProbeRule(String proxyTarget) =>
+      'AND,((NOT,((IN-TYPE,TUN))),(DOMAIN,$kExitIpProbeHost)),$proxyTarget';
+
   /// Имена наборов со скачанными доменами — по одному на поле.
   static const blockListSet = 'keq-list-block';
   static const directListSet = 'keq-list-direct';
@@ -2122,6 +2133,7 @@ class MihomoConfigGen {
     RuleListDomains ruleLists = RuleListDomains.none,
   }) {
     final rules = <String>[
+      exitIpProbeRule(proxyTarget),
       ...buildProcessRules(
         routingMode: routingMode,
         managedProcessNames: managedProcessNames,
@@ -2199,9 +2211,15 @@ class MihomoConfigGen {
     final exe = (windows ?? Platform.isWindows) ? '.exe' : '';
 
     final rules = <String>[
-      // Наши собственные сокеты (tcp-пинг, спидтест, апдейтер) — мимо туннеля,
-      // иначе пинг мерил бы локальный конец туннеля вместо сервера.
-      if (app.isNotEmpty) 'PROCESS-NAME,$app,DIRECT',
+      // Наши собственные сокеты (tcp-пинг, спидтест) — мимо туннеля, иначе
+      // пинг мерил бы локальный конец туннеля вместо сервера. Только те, что
+      // пришли из TUN: процесс ядро ищет и у соединений на свой HTTP-вход, а
+      // туда приложение шлёт ровно то, что обязано ехать в туннель (подписки,
+      // апдейтер, флаг выхода). Тип входа проверяется первым, и для них поиск
+      // процесса не запускается вовсе. Имя закодировано по той же причине, что
+      // у сплита ниже: скобка в имени exe разорвала бы логическое правило.
+      if (app.isNotEmpty)
+        'AND,((IN-TYPE,TUN),(PROCESS-NAME-REGEX,^${processRegexLiteral(app)}\$)),DIRECT',
       // Замер url-пинга и спидтест поднимают своё временное ядро ОТДЕЛЬНЫМ
       // процессом, и его соединение к измеряемому серверу туннель забирал себе:
       // замер уезжал через живой туннель, мерил заодно и его, и обычно не

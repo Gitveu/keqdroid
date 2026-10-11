@@ -4,8 +4,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
-import '../models/ping_test_config.dart';
 import '../models/server_flag.dart';
+import '../utils/exit_ip_probe.dart';
 import '../utils/local_vpn_proxy.dart';
 
 /// Адрес, которым подключение видно сайтам, и его страна.
@@ -25,21 +25,19 @@ class ExitIp {
 }
 
 /// Узнаёт выход одним запросом к трассировке Cloudflare: она отдаёт и адрес
-/// (`ip=`), и страну (`loc=`), а сам адрес приложению уже знаком по замеру
+/// (`ip=`), и страну (`loc=`), а Cloudflare приложению уже знаком по замеру
 /// пинга — нового стороннего сервиса не появляется.
 ///
 /// Запрос идёт через локальный HTTP-инбаунд ядра. Пакет приложения из туннеля
-/// исключён, и прямой запрос показал бы адрес без VPN.
+/// исключён, и прямой запрос показал бы адрес без VPN. Мимо правил
+/// пользователя его проводят сами генераторы (см. [kExitIpProbeHost]).
 abstract final class ExitIpService {
   static Future<ExitIp?> lookup({
     required int proxyPort,
     Duration timeout = const Duration(seconds: 8),
     @visibleForTesting Uri? traceUrl,
   }) async {
-    final url = traceUrl ??
-        Uri.parse(
-          PingTestConfig.presetUrls[PingTestConfig.targetCloudflare]!,
-        );
+    final url = traceUrl ?? Uri.parse(kExitIpProbeUrl);
     final client = HttpClient()..connectionTimeout = timeout;
     configureHttpClientForLocalVpnProxy(client, () => proxyPort);
     try {

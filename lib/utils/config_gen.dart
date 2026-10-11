@@ -4,6 +4,7 @@ import 'dart:io' show InternetAddress;
 import '../models/app_settings.dart';
 import '../models/xray_core_settings.dart';
 import '../utils/custom_xray_config.dart';
+import '../utils/exit_ip_probe.dart';
 import '../utils/fake_ip.dart';
 import '../utils/geo_asset_index.dart';
 import '../utils/hysteria_uri.dart';
@@ -683,6 +684,20 @@ class ConfigGeneratorV2 {
       .where((e) => e.isNotEmpty && !isRuleListUrl(e))
       .toList();
 
+  /// Проверка выхода для флага в статусе — через сервер сессии, мимо правил
+  /// пользователя и автора готового конфига (см. [kExitIpProbeHost]).
+  ///
+  /// По одному хосту, без условия на вход: в режиме прокси на ПК локальные
+  /// входы держит sing-box внутри keqrnel и отдаёт соединение в xray без
+  /// тега, и условие не совпало бы ни разу. Перехватить соединение самих
+  /// ядер правило не может и без него: их отсекает sing-box раньше xray, а на
+  /// Android — VpnService. Цена — для этого хоста правила пользователя в xray
+  /// не действуют.
+  static Map<String, dynamic> _exitIpProbeFields(String outboundTag) => {
+        'domain': ['full:$kExitIpProbeHost'],
+        'outboundTag': outboundTag,
+      };
+
   /// Пользовательская запись домена → форма, понятная роутингу xray.
   static List<String> _normalizeDomains(List<String> domains) =>
       domains.map((d) {
@@ -1055,7 +1070,15 @@ class ConfigGeneratorV2 {
       // него не из локальной сети. Пропусти вперёд авторское правило — и любой
       // запрос снаружи, попавший под него, уедет в туннель раньше запрета,
       // то есть прокси станет открытым для интернета.
-      prependRules: [...lanRules, ...tunDnsRules],
+      prependRules: [
+        ...lanRules,
+        ...tunDnsRules,
+        {
+          'type': 'field',
+          'ruleTag': 'exit-ip-probe',
+          ..._exitIpProbeFields(custom.primaryOutboundTag),
+        },
+      ],
       appendRules: appendRules,
       geoIndex: geoIndex,
     );
@@ -2130,6 +2153,7 @@ class ConfigGeneratorV2 {
       'network': 'tcp,udp',
       'outboundTag': 'dns-out',
     }));
+    rules.add(rule('exit-ip-probe', _exitIpProbeFields('proxy')));
     if (blockedDomains.isNotEmpty) {
       rules.add(rule('block-domains',
           {'domain': blockedDomains, 'outboundTag': 'block'}));
