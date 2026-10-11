@@ -8,11 +8,15 @@ import '../models/ping_sample.dart';
 import '../models/routing_rule.dart';
 import '../models/server_item.dart';
 import '../models/subscription.dart';
+import '../models/traffic_route.dart';
+import '../utils/traffic_routes.dart';
 
 class StorageService {
   static const _kServers       = 'keqdis_servers_v2';   // v2 = формат ServerItem
   static const _kSubscriptions = 'keqdis_subscriptions';
   static const _kRules         = 'keqdis_rules';
+  static const _kRoutes        = 'keqdis_routes';
+  static const _kRoutesHint    = 'keqdis_routes_hint';
   static const _kActiveId      = 'keqdis_active_server';
   static const _kExcludePkgs   = 'keqdis_exclude_packages';
   static const _kIncludePkgs   = 'keqdis_include_packages';
@@ -254,13 +258,11 @@ class StorageService {
 
   // правила роутинга
 
+  /// «Свои правила» прежних версий. Читает их только перенос в маршруты
+  /// ([getRoutes]); не заводили — пусто.
   Future<List<RoutingRule>> getRules() async {
     try {
       final raw = _prefs.getString(_kRules);
-      // Пусто по умолчанию: структурированные правила — опциональная надстройка
-      // поверх текстовых списков (см. applyRoutingRules). Дефолтный набор
-      // RoutingRule.defaults иначе задвоил бы дефолты текстовых списков и молча
-      // поменял роутинг у всех при обновлении. Набор доступен через «Сбросить».
       if (raw == null) return const [];
       return _decodeListResilient(raw, RoutingRule.fromJson, 'routing rule');
     } catch (e) {
@@ -276,6 +278,50 @@ class StorageService {
       throw StorageException('Failed to save routing rules', cause: e);
     }
   }
+
+  // маршруты
+
+  /// Маршруты. При первом чтении после обновления собираются из прежних трёх
+  /// списков и «Своих правил» ([routesFromLegacy]) и сохраняются; дальше
+  /// прежние поля не читает никто. Перенос ровно один раз: иначе удалённый
+  /// маршрут возвращался бы из старого поля при каждом запуске.
+  Future<List<TrafficRoute>> getRoutes() async {
+    final raw = _prefs.getString(_kRoutes);
+    if (raw != null) return _decodeRoutes(raw);
+    return _serial(() async {
+      // Пока ждали очереди, перенос мог сделать другой вызов.
+      final again = _prefs.getString(_kRoutes);
+      if (again != null) return _decodeRoutes(again);
+      final settings = await getSettings();
+      final rules = await getRules();
+      final routes = routesFromLegacy(settings, rules);
+      await _prefs.setString(_kRoutes, _encodeRoutes(routes));
+      if (legacyRoutingCustomized(settings, rules)) {
+        await _prefs.setBool(_kRoutesHint, true);
+      }
+      return routes;
+    });
+  }
+
+  Future<void> saveRoutes(List<TrafficRoute> routes) =>
+      _serial(() => _prefs.setString(_kRoutes, _encodeRoutes(routes)));
+
+  /// Разовая подсказка «списки стали маршрутами» ещё не закрыта.
+  bool get routesHintPending => _prefs.getBool(_kRoutesHint) ?? false;
+
+  Future<void> dismissRoutesHint() =>
+      _serial(() => _prefs.remove(_kRoutesHint));
+
+  List<TrafficRoute> _decodeRoutes(String raw) {
+    try {
+      return _decodeListResilient(raw, TrafficRoute.fromJson, 'route');
+    } catch (e) {
+      throw StorageException('Failed to load routes', cause: e);
+    }
+  }
+
+  static String _encodeRoutes(List<TrafficRoute> routes) =>
+      jsonEncode([for (final r in routes) r.toJson()]);
 
   // активный сервер
 
