@@ -149,6 +149,12 @@ final subscriptionServiceProvider = Provider<SubscriptionService>((ref) {
 ///
 /// Спрашивается раз на подключение и на смену сервера: выход меняется только
 /// с ними, а опрос по таймеру тратил бы трафик и батарею впустую.
+///
+/// Неответ повторяется. После повторного входа в приложение на Android новый
+/// изолят видит «подключено» раньше, чем подтянет из сервиса пароль локального
+/// входа, и первый запрос получал 407 — флаг так и не появлялся. Ответ держится,
+/// пока живы подключение и сервер: шапка пересобирается при возврате на
+/// вкладку, и без этого флаг пропадал бы на время каждого нового запроса.
 final exitIpProvider = FutureProvider.autoDispose<ExitIp?>((ref) async {
   final connected = ref.watch(
     vpnStateProvider.select((a) => a.value?.status == VpnStatus.connected),
@@ -157,10 +163,32 @@ final exitIpProvider = FutureProvider.autoDispose<ExitIp?>((ref) async {
     serversProvider.select((s) => s.activeServer?.id),
   );
   if (!connected || serverId == null) return null;
-  final port = _activeLocalHttpProxyPort(ref, ref.read(storageProvider));
-  if (port == null) return null;
-  return ExitIpService.lookup(proxyPort: port);
+  for (final pause in _exitIpRetryPauses) {
+    if (pause > Duration.zero) await Future<void>.delayed(pause);
+    if (!ref.mounted) return null;
+    final port = _activeLocalHttpProxyPort(ref, ref.read(storageProvider));
+    if (port == null) return null;
+    final exit = await ref.read(exitIpLookupProvider)(port);
+    if (!ref.mounted) return null;
+    if (exit != null) {
+      ref.keepAlive();
+      return exit;
+    }
+  }
+  return null;
 });
+
+/// Сам запрос выхода через локальный вход на [int] порту; тесты подменяют его,
+/// чтобы не ходить в сеть.
+final exitIpLookupProvider = Provider<Future<ExitIp?> Function(int)>(
+  (ref) => (port) => ExitIpService.lookup(proxyPort: port),
+);
+
+const _exitIpRetryPauses = [
+  Duration.zero,
+  Duration(seconds: 3),
+  Duration(seconds: 10),
+];
 
 final vpnEngineProvider = Provider<VpnEngine>((ref) {
   final engine = VpnEngine();
