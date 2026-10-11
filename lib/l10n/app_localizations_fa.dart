@@ -191,55 +191,13 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsRoutingPresetRuTitle => 'سایت‌های روسی — مستقیم';
 
   @override
-  String get settingsRoutingPresetRuDesc => 'همهٔ دامنه‌های ‎.ru‎ و ‎.рф‎ و سرویس‌های بزرگ روسیه بدون VPN باز می‌شوند (به فهرست «مستقیم» اضافه می‌شوند)';
-
-  @override
-  String get settingsRoutingPresetRuGeoipTitle => 'آی‌پی‌های روسیه (GeoIP) — مستقیم';
-
-  @override
-  String get settingsRoutingPresetRuGeoipDesc => 'بازه‌های آی‌پی روسیه بدون VPN می‌روند. سایت‌هایی که با نام باز می‌شوند فقط با استراتژی IPIfNonMatch و DNS بدون ‎+local‎ در تنظیمات هسته شناسایی می‌شوند';
-
-  @override
-  String get settingsRoutingPresetRuGeositeTitle => 'سایت‌های روسیه (GeoSite) — مستقیم';
-
-  @override
-  String get settingsRoutingPresetRuGeositeDesc => 'دامنه‌های روسی از پایگاه دادهٔ GeoSite بدون VPN می‌روند';
-
-  @override
-  String get settingsRoutingPresetBanksTitle => 'بانک‌ها و دولتی — مستقیم';
-
-  @override
-  String get settingsRoutingPresetBanksDesc => 'بانک‌ها، درگاه‌های پرداخت و سامانه‌های دولتی بدون VPN باز می‌شوند';
-
-  @override
-  String get settingsRoutingPresetLanIpsTitle => 'شبکهٔ محلی — مستقیم';
-
-  @override
-  String get settingsRoutingPresetLanIpsDesc => 'بازه‌های آی‌پی شبکهٔ داخلی (192.168.x، 10.x، …) بدون VPN می‌روند';
+  String get settingsRoutingPresetRuDesc => 'سایت‌های ‎.ru‎ و ‎.рф‎ و سرویس‌های روسی روی دامنه‌های دیگر بدون VPN باز می‌شوند';
 
   @override
   String get settingsRoutingPresetAdsTitle => 'تبلیغات و ردیاب‌ها — مسدود';
 
   @override
-  String get settingsRoutingPresetAdsDesc => 'هاست‌های رایج تبلیغات و آمارگیری حذف می‌شوند';
-
-  @override
-  String get settingsRoutingPresetAdsGeositeTitle => 'تبلیغات (GeoSite) — مسدود';
-
-  @override
-  String get settingsRoutingPresetAdsGeositeDesc => 'مسدودسازی فهرست گستردهٔ تبلیغات و ردیاب‌ها از پایگاه دادهٔ GeoSite';
-
-  @override
-  String get settingsRoutingPresetStreamingTitle => 'سرویس‌های ویدیویی — پروکسی';
-
-  @override
-  String get settingsRoutingPresetStreamingDesc => 'یوتیوب، نتفلیکس و توییچ حتماً از VPN رد می‌شوند';
-
-  @override
-  String get settingsRoutingPresetMessengersTitle => 'پیام‌رسان‌ها — پروکسی';
-
-  @override
-  String get settingsRoutingPresetMessengersDesc => 'تلگرام، دیسکورد و واتساپ حتماً از VPN رد می‌شوند';
+  String get settingsRoutingPresetAdsDesc => 'دامنه‌های تبلیغاتی و آمارگیری باز نمی‌شوند';
 
   @override
   String settingsRoutingPresetApplied(String name) {
@@ -2113,16 +2071,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get tunRememberFailed => 'تغییر مجوز TUN ممکن نشد';
 
   @override
-  String get settingsRoutingPresetTelegramGeoTitle => 'تلگرام (GeoIP+GeoSite) — پروکسی';
-
-  @override
-  String get settingsRoutingPresetTelegramGeoDesc => 'تلگرام هم بر اساس دامنه و هم بر اساس بازه‌های آی‌پی (MTProto با آی‌پی خام کار می‌کند)';
-
-  @override
   String get settingsRoutingPresetRefilterTitle => 'مسدودشده‌ها در روسیه (Re-filter) — پروکسی';
 
   @override
-  String get settingsRoutingPresetRefilterDesc => 'دامنه‌ها و آی‌پی‌های مسدودشده در روسیه از VPN رد می‌شوند، بقیه مستقیم می‌مانند';
+  String get settingsRoutingPresetRefilterDesc => 'سایت‌ها و آدرس‌های مسدودشده در روسیه از VPN رد می‌شوند، بقیه مستقیم می‌مانند';
 
   @override
   String get settingsRoutingGeoUnknownTitle => 'در پایگاه دادهٔ جغرافیایی نیست — نادیده گرفته می‌شود';

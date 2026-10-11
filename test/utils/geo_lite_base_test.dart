@@ -49,7 +49,9 @@ void main() {
 
     final needed = presetGeoipCodes()
       // Генераторы конфига дописывают его сами, в пресетах его нет.
-      ..add('private');
+      ..add('private')
+      // Их клали убранные пресеты; в списках у людей они остались.
+      ..addAll(['ru', 'telegram']);
 
     final missing = needed.difference(present);
     expect(

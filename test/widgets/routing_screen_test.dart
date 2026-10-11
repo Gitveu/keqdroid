@@ -113,12 +113,30 @@ void main() {
 
     await tester.tap(find.text('Готовые списки'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('IP России (GeoIP) напрямую'));
+    await tester.tap(find.text('Российские сайты напрямую'));
     await tester.pumpAndSettle();
 
     expect(_saved(c).directRules, contains('vk.com'));
-    expect(_saved(c).directRules, contains('geoip:ru'));
-    expect(find.text('Добавлено: «IP России (GeoIP) напрямую»'), findsOneWidget);
+    expect(_saved(c).directRules, contains('geosite:category-ru'));
+    expect(find.text('Добавлено: «Российские сайты напрямую»'), findsOneWidget);
+    expect(_saved(c).finalOutbound, AppSettings.finalOutboundProxy);
+  });
+
+  testWidgets('Re-filter заодно отправляет остальной трафик напрямую',
+      (tester) async {
+    // Без переключения пресет ничего не менял: при «остальное через VPN»
+    // заблокированное и так уходило в туннель вместе со всем прочим.
+    final c = await _pump(tester);
+
+    await tester.tap(find.text('Готовые списки'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Заблокировано в РФ (Re-filter) через VPN'));
+    await tester.pumpAndSettle();
+
+    expect(_saved(c).proxyRules, contains('geosite:refilter'));
+    expect(_saved(c).proxyRules, contains('geoip:refilter'));
+    expect(_saved(c).finalOutbound, AppSettings.finalOutboundDirect);
+    expect(_saved(c).directRules, 'vk.com');
   });
 
   testWidgets('«всё остальное» — те же три пути и в том же порядке, что списки',

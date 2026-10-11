@@ -440,56 +440,8 @@ abstract class AppLocalizations {
   /// No description provided for @settingsRoutingPresetRuDesc.
   ///
   /// In en, this message translates to:
-  /// **'All .ru / .рф domains and major RU services bypass the VPN (adds domains to Direct)'**
+  /// **'.ru and .рф sites and Russian services on other domains bypass the VPN'**
   String get settingsRoutingPresetRuDesc;
-
-  /// No description provided for @settingsRoutingPresetRuGeoipTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Russia IPs (GeoIP) go direct'**
-  String get settingsRoutingPresetRuGeoipTitle;
-
-  /// No description provided for @settingsRoutingPresetRuGeoipDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Russian IP ranges bypass the VPN. Sites opened by name are matched only with the IPIfNonMatch domain strategy and DNS without +local in Core settings.'**
-  String get settingsRoutingPresetRuGeoipDesc;
-
-  /// No description provided for @settingsRoutingPresetRuGeositeTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Russia sites (GeoSite) go direct'**
-  String get settingsRoutingPresetRuGeositeTitle;
-
-  /// No description provided for @settingsRoutingPresetRuGeositeDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Russian domains from the GeoSite database bypass the VPN'**
-  String get settingsRoutingPresetRuGeositeDesc;
-
-  /// No description provided for @settingsRoutingPresetBanksTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Banks & gov go direct'**
-  String get settingsRoutingPresetBanksTitle;
-
-  /// No description provided for @settingsRoutingPresetBanksDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Banking, payments and state portals bypass the VPN'**
-  String get settingsRoutingPresetBanksDesc;
-
-  /// No description provided for @settingsRoutingPresetLanIpsTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Local network goes direct'**
-  String get settingsRoutingPresetLanIpsTitle;
-
-  /// No description provided for @settingsRoutingPresetLanIpsDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Private LAN IP ranges (192.168.x, 10.x, …) bypass the VPN'**
-  String get settingsRoutingPresetLanIpsDesc;
 
   /// No description provided for @settingsRoutingPresetAdsTitle.
   ///
@@ -500,44 +452,8 @@ abstract class AppLocalizations {
   /// No description provided for @settingsRoutingPresetAdsDesc.
   ///
   /// In en, this message translates to:
-  /// **'Drop common ad / analytics hosts'**
+  /// **'Ad and analytics domains won’t load'**
   String get settingsRoutingPresetAdsDesc;
-
-  /// No description provided for @settingsRoutingPresetAdsGeositeTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Ads (GeoSite) get blocked'**
-  String get settingsRoutingPresetAdsGeositeTitle;
-
-  /// No description provided for @settingsRoutingPresetAdsGeositeDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Block a broad ad / tracker list from the GeoSite database'**
-  String get settingsRoutingPresetAdsGeositeDesc;
-
-  /// No description provided for @settingsRoutingPresetStreamingTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Streaming through the VPN'**
-  String get settingsRoutingPresetStreamingTitle;
-
-  /// No description provided for @settingsRoutingPresetStreamingDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Force YouTube, Netflix, Twitch through the VPN'**
-  String get settingsRoutingPresetStreamingDesc;
-
-  /// No description provided for @settingsRoutingPresetMessengersTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Messengers through the VPN'**
-  String get settingsRoutingPresetMessengersTitle;
-
-  /// No description provided for @settingsRoutingPresetMessengersDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Force Telegram, Discord, WhatsApp through the VPN'**
-  String get settingsRoutingPresetMessengersDesc;
 
   /// No description provided for @settingsRoutingPresetApplied.
   ///
@@ -4055,18 +3971,6 @@ abstract class AppLocalizations {
   /// **'Could not change TUN authorization'**
   String get tunRememberFailed;
 
-  /// No description provided for @settingsRoutingPresetTelegramGeoTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Telegram (GeoIP+GeoSite) through the VPN'**
-  String get settingsRoutingPresetTelegramGeoTitle;
-
-  /// No description provided for @settingsRoutingPresetTelegramGeoDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Telegram by domains and by IP ranges (MTProto uses bare IPs)'**
-  String get settingsRoutingPresetTelegramGeoDesc;
-
   /// No description provided for @settingsRoutingPresetRefilterTitle.
   ///
   /// In en, this message translates to:
@@ -4076,7 +3980,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsRoutingPresetRefilterDesc.
   ///
   /// In en, this message translates to:
-  /// **'Domains and IPs blocked in Russia go through the VPN, everything else stays direct'**
+  /// **'Sites and addresses blocked in Russia go through the VPN, everything else goes direct'**
   String get settingsRoutingPresetRefilterDesc;
 
   /// No description provided for @settingsRoutingGeoUnknownTitle.

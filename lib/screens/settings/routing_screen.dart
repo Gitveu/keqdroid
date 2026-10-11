@@ -128,7 +128,16 @@ class _RoutingScreenState extends ConsumerState<_RoutingScreen> {
   Future<void> _applyPreset(RoutingPreset preset, String label) async {
     final ctrl = _controllerFor(preset.field);
     ctrl.text = RoutingPresets.mergeValues(ctrl.text, preset.values);
-    await _persist();
+    final unmatched = preset.unmatched;
+    if (unmatched == null) {
+      await _persist();
+    } else {
+      await _saveFinalOutbound(switch (unmatched) {
+        RoutingField.direct => AppSettings.finalOutboundDirect,
+        RoutingField.proxy => AppSettings.finalOutboundProxy,
+        RoutingField.blocked => AppSettings.finalOutboundBlock,
+      });
+    }
     if (!mounted) return;
     setState(() {});
     final l10n = AppLocalizations.of(context)!;
@@ -161,45 +170,21 @@ class _RoutingScreenState extends ConsumerState<_RoutingScreen> {
 
   String _presetTitle(AppLocalizations l10n, String id) => switch (id) {
         'ru' => l10n.settingsRoutingPresetRuTitle,
-        'ru_geoip' => l10n.settingsRoutingPresetRuGeoipTitle,
-        'ru_geosite' => l10n.settingsRoutingPresetRuGeositeTitle,
-        'banks' => l10n.settingsRoutingPresetBanksTitle,
-        'lan_ips' => l10n.settingsRoutingPresetLanIpsTitle,
         'ads' => l10n.settingsRoutingPresetAdsTitle,
-        'ads_geosite' => l10n.settingsRoutingPresetAdsGeositeTitle,
-        'streaming' => l10n.settingsRoutingPresetStreamingTitle,
-        'messengers' => l10n.settingsRoutingPresetMessengersTitle,
-        'telegram_geo' => l10n.settingsRoutingPresetTelegramGeoTitle,
         'refilter' => l10n.settingsRoutingPresetRefilterTitle,
         _ => id,
       };
 
   String _presetDesc(AppLocalizations l10n, String id) => switch (id) {
         'ru' => l10n.settingsRoutingPresetRuDesc,
-        'ru_geoip' => l10n.settingsRoutingPresetRuGeoipDesc,
-        'ru_geosite' => l10n.settingsRoutingPresetRuGeositeDesc,
-        'banks' => l10n.settingsRoutingPresetBanksDesc,
-        'lan_ips' => l10n.settingsRoutingPresetLanIpsDesc,
         'ads' => l10n.settingsRoutingPresetAdsDesc,
-        'ads_geosite' => l10n.settingsRoutingPresetAdsGeositeDesc,
-        'streaming' => l10n.settingsRoutingPresetStreamingDesc,
-        'messengers' => l10n.settingsRoutingPresetMessengersDesc,
-        'telegram_geo' => l10n.settingsRoutingPresetTelegramGeoDesc,
         'refilter' => l10n.settingsRoutingPresetRefilterDesc,
         _ => '',
       };
 
   IconData _presetIcon(String id) => switch (id) {
         'ru' => Icons.flag_rounded,
-        'ru_geoip' => Icons.public_rounded,
-        'ru_geosite' => Icons.travel_explore_rounded,
-        'banks' => Icons.account_balance_rounded,
-        'lan_ips' => Icons.lan_rounded,
         'ads' => Icons.block_rounded,
-        'ads_geosite' => Icons.block_rounded,
-        'streaming' => Icons.play_circle_outline_rounded,
-        'messengers' => Icons.chat_bubble_outline_rounded,
-        'telegram_geo' => Icons.send_rounded,
         'refilter' => Icons.shield_rounded,
         _ => Icons.tune_rounded,
       };

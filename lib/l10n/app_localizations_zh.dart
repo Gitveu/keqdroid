@@ -191,55 +191,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRoutingPresetRuTitle => '俄罗斯网站走直连';
 
   @override
-  String get settingsRoutingPresetRuDesc => '所有 .ru / .рф 域名及主要俄罗斯服务绕过 VPN（向“直连”添加域名）';
-
-  @override
-  String get settingsRoutingPresetRuGeoipTitle => '俄罗斯 IP（GeoIP）走直连';
-
-  @override
-  String get settingsRoutingPresetRuGeoipDesc => '俄罗斯 IP 段绕过 VPN。按域名打开的网站，只有在内核设置中选用 IPIfNonMatch 策略、且 DNS 不带 +local 时才会匹配。';
-
-  @override
-  String get settingsRoutingPresetRuGeositeTitle => '俄罗斯网站（GeoSite）走直连';
-
-  @override
-  String get settingsRoutingPresetRuGeositeDesc => 'GeoSite 数据库中的俄罗斯域名绕过 VPN';
-
-  @override
-  String get settingsRoutingPresetBanksTitle => '银行和政务网站走直连';
-
-  @override
-  String get settingsRoutingPresetBanksDesc => '银行、支付和政务门户绕过 VPN';
-
-  @override
-  String get settingsRoutingPresetLanIpsTitle => '局域网走直连';
-
-  @override
-  String get settingsRoutingPresetLanIpsDesc => '局域网私有 IP 段（192.168.x、10.x 等）绕过 VPN';
+  String get settingsRoutingPresetRuDesc => '.ru 和 .рф 网站以及其他域名上的俄罗斯服务绕过 VPN';
 
   @override
   String get settingsRoutingPresetAdsTitle => '阻止广告和跟踪器';
 
   @override
-  String get settingsRoutingPresetAdsDesc => '阻止常见的广告和统计分析主机';
-
-  @override
-  String get settingsRoutingPresetAdsGeositeTitle => '阻止广告（GeoSite）';
-
-  @override
-  String get settingsRoutingPresetAdsGeositeDesc => '阻止 GeoSite 数据库中的完整广告和跟踪器列表';
-
-  @override
-  String get settingsRoutingPresetStreamingTitle => '流媒体走 VPN';
-
-  @override
-  String get settingsRoutingPresetStreamingDesc => '强制 YouTube、Netflix、Twitch 经过 VPN';
-
-  @override
-  String get settingsRoutingPresetMessengersTitle => '即时通讯走 VPN';
-
-  @override
-  String get settingsRoutingPresetMessengersDesc => '强制 Telegram、Discord、WhatsApp 经过 VPN';
+  String get settingsRoutingPresetAdsDesc => '广告和统计分析域名无法打开';
 
   @override
   String settingsRoutingPresetApplied(String name) {
@@ -2113,16 +2071,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tunRememberFailed => '无法更改 TUN 授权';
 
   @override
-  String get settingsRoutingPresetTelegramGeoTitle => 'Telegram（GeoIP+GeoSite）走 VPN';
-
-  @override
-  String get settingsRoutingPresetTelegramGeoDesc => '按域名和 IP 段匹配 Telegram（MTProto 直接使用 IP）';
-
-  @override
   String get settingsRoutingPresetRefilterTitle => '俄罗斯封锁的网站（Re-filter）走 VPN';
 
   @override
-  String get settingsRoutingPresetRefilterDesc => '在俄罗斯被封锁的域名和 IP 走 VPN，其余直连';
+  String get settingsRoutingPresetRefilterDesc => '在俄罗斯被封锁的网站和地址走 VPN，其余直连';
 
   @override
   String get settingsRoutingGeoUnknownTitle => '地理数据库中不存在，将被忽略';

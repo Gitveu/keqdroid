@@ -2374,7 +2374,7 @@ class MihomoConfigGen {
     if (chosen != 'AsIs') return chosen;
     List<String> ips(String raw) =>
         splitGeoipTokens(splitDomainsAndIps(_parseRuleList(raw)).ips).plainIps;
-    // Приватные сети в обходе своими не считаются — их туда кладёт пресет.
+    // Приватные сети в обходе своими не считаются: их туда клал прежний пресет.
     final hasUserIps = ips(settings.blockedRules).isNotEmpty ||
         ips(settings.proxyRules).isNotEmpty ||
         ips(settings.directRules)

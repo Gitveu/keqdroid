@@ -191,55 +191,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsRoutingPresetRuTitle => 'Российские сайты напрямую';
 
   @override
-  String get settingsRoutingPresetRuDesc => 'Все домены .ru / .рф и крупные сервисы РФ идут мимо VPN (добавляет домены в «Напрямую»)';
-
-  @override
-  String get settingsRoutingPresetRuGeoipTitle => 'IP России (GeoIP) напрямую';
-
-  @override
-  String get settingsRoutingPresetRuGeoipDesc => 'Российские диапазоны IP идут мимо VPN. Сайты, открытые по имени, ловятся только при стратегии IPIfNonMatch и DNS без +local в настройках ядра';
-
-  @override
-  String get settingsRoutingPresetRuGeositeTitle => 'Сайты РФ (GeoSite) напрямую';
-
-  @override
-  String get settingsRoutingPresetRuGeositeDesc => 'Российские домены из базы GeoSite идут мимо VPN';
-
-  @override
-  String get settingsRoutingPresetBanksTitle => 'Банки и госуслуги напрямую';
-
-  @override
-  String get settingsRoutingPresetBanksDesc => 'Банки, платежи и госпорталы идут мимо VPN';
-
-  @override
-  String get settingsRoutingPresetLanIpsTitle => 'Локальная сеть напрямую';
-
-  @override
-  String get settingsRoutingPresetLanIpsDesc => 'Приватные диапазоны IP локальной сети (192.168.x, 10.x, …) идут мимо VPN';
+  String get settingsRoutingPresetRuDesc => 'Сайты на .ru и .рф и российские сервисы на других доменах идут мимо VPN';
 
   @override
   String get settingsRoutingPresetAdsTitle => 'Реклама и трекеры в блок';
 
   @override
-  String get settingsRoutingPresetAdsDesc => 'Блокировать частые рекламные и аналитические домены';
-
-  @override
-  String get settingsRoutingPresetAdsGeositeTitle => 'Реклама (GeoSite) в блок';
-
-  @override
-  String get settingsRoutingPresetAdsGeositeDesc => 'Блокировать широкий список рекламы/трекеров из базы GeoSite';
-
-  @override
-  String get settingsRoutingPresetStreamingTitle => 'Стриминг через VPN';
-
-  @override
-  String get settingsRoutingPresetStreamingDesc => 'YouTube, Netflix, Twitch принудительно через VPN';
-
-  @override
-  String get settingsRoutingPresetMessengersTitle => 'Мессенджеры через VPN';
-
-  @override
-  String get settingsRoutingPresetMessengersDesc => 'Telegram, Discord, WhatsApp принудительно через VPN';
+  String get settingsRoutingPresetAdsDesc => 'Рекламные и аналитические домены не открываются';
 
   @override
   String settingsRoutingPresetApplied(String name) {
@@ -2121,16 +2079,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get tunRememberFailed => 'Не удалось изменить авторизацию TUN';
 
   @override
-  String get settingsRoutingPresetTelegramGeoTitle => 'Telegram (GeoIP+GeoSite) через VPN';
-
-  @override
-  String get settingsRoutingPresetTelegramGeoDesc => 'Telegram по доменам и по диапазонам IP (MTProto ходит на голые IP)';
-
-  @override
   String get settingsRoutingPresetRefilterTitle => 'Заблокировано в РФ (Re-filter) через VPN';
 
   @override
-  String get settingsRoutingPresetRefilterDesc => 'Домены и IP, заблокированные в России, идут через VPN, остальное напрямую';
+  String get settingsRoutingPresetRefilterDesc => 'Заблокированные в России сайты и адреса идут через VPN, остальное напрямую';
 
   @override
   String get settingsRoutingGeoUnknownTitle => 'Нет в гео-базах, будет проигнорировано';

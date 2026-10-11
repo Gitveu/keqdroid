@@ -191,55 +191,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsRoutingPresetRuTitle => 'Russian sites go direct';
 
   @override
-  String get settingsRoutingPresetRuDesc => 'All .ru / .рф domains and major RU services bypass the VPN (adds domains to Direct)';
-
-  @override
-  String get settingsRoutingPresetRuGeoipTitle => 'Russia IPs (GeoIP) go direct';
-
-  @override
-  String get settingsRoutingPresetRuGeoipDesc => 'Russian IP ranges bypass the VPN. Sites opened by name are matched only with the IPIfNonMatch domain strategy and DNS without +local in Core settings.';
-
-  @override
-  String get settingsRoutingPresetRuGeositeTitle => 'Russia sites (GeoSite) go direct';
-
-  @override
-  String get settingsRoutingPresetRuGeositeDesc => 'Russian domains from the GeoSite database bypass the VPN';
-
-  @override
-  String get settingsRoutingPresetBanksTitle => 'Banks & gov go direct';
-
-  @override
-  String get settingsRoutingPresetBanksDesc => 'Banking, payments and state portals bypass the VPN';
-
-  @override
-  String get settingsRoutingPresetLanIpsTitle => 'Local network goes direct';
-
-  @override
-  String get settingsRoutingPresetLanIpsDesc => 'Private LAN IP ranges (192.168.x, 10.x, …) bypass the VPN';
+  String get settingsRoutingPresetRuDesc => '.ru and .рф sites and Russian services on other domains bypass the VPN';
 
   @override
   String get settingsRoutingPresetAdsTitle => 'Ads & trackers get blocked';
 
   @override
-  String get settingsRoutingPresetAdsDesc => 'Drop common ad / analytics hosts';
-
-  @override
-  String get settingsRoutingPresetAdsGeositeTitle => 'Ads (GeoSite) get blocked';
-
-  @override
-  String get settingsRoutingPresetAdsGeositeDesc => 'Block a broad ad / tracker list from the GeoSite database';
-
-  @override
-  String get settingsRoutingPresetStreamingTitle => 'Streaming through the VPN';
-
-  @override
-  String get settingsRoutingPresetStreamingDesc => 'Force YouTube, Netflix, Twitch through the VPN';
-
-  @override
-  String get settingsRoutingPresetMessengersTitle => 'Messengers through the VPN';
-
-  @override
-  String get settingsRoutingPresetMessengersDesc => 'Force Telegram, Discord, WhatsApp through the VPN';
+  String get settingsRoutingPresetAdsDesc => 'Ad and analytics domains won’t load';
 
   @override
   String settingsRoutingPresetApplied(String name) {
@@ -2115,16 +2073,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tunRememberFailed => 'Could not change TUN authorization';
 
   @override
-  String get settingsRoutingPresetTelegramGeoTitle => 'Telegram (GeoIP+GeoSite) through the VPN';
-
-  @override
-  String get settingsRoutingPresetTelegramGeoDesc => 'Telegram by domains and by IP ranges (MTProto uses bare IPs)';
-
-  @override
   String get settingsRoutingPresetRefilterTitle => 'Blocked in Russia (Re-filter) through the VPN';
 
   @override
-  String get settingsRoutingPresetRefilterDesc => 'Domains and IPs blocked in Russia go through the VPN, everything else stays direct';
+  String get settingsRoutingPresetRefilterDesc => 'Sites and addresses blocked in Russia go through the VPN, everything else goes direct';
 
   @override
   String get settingsRoutingGeoUnknownTitle => 'Missing from the geo databases, will be ignored';
