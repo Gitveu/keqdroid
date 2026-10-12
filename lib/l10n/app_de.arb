@@ -210,8 +210,14 @@
   "@routeAppsUnsupported": {},
   "routeAppsNeedTun": "wirkt nur im TUN-Modus",
   "@routeAppsNeedTun": {},
-  "routeSplitExcluded": "diese Apps sind durch Split-Tunneling ausgeschlossen",
-  "@routeSplitExcluded": {},
+  "routeSplitExcluded": "Split-Tunneling leitet {apps} am VPN vorbei",
+  "@routeSplitExcluded": {
+    "placeholders": {
+      "apps": {
+        "type": "String"
+      }
+    }
+  },
   "routeRefilterUnmatched": "„Alles andere“ läuft jetzt direkt",
   "@routeRefilterUnmatched": {},
   "settingsRoutingLinkDomains": "{count, plural, =1{1 Domain aus Links} other{{formatted} Domains aus Links}}",

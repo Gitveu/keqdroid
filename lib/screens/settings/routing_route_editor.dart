@@ -104,7 +104,8 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     final l10n = AppLocalizations.of(context)!;
     final caps = ref.watch(routeCapabilitiesProvider);
     final servers = ref.watch(serversProvider.select((s) => s.servers));
-    final issue = _routeIssue(l10n, _route, caps, servers);
+    final split = ref.watch(splitTunnelingProvider);
+    final issue = _routeIssue(l10n, _route, caps, servers, split);
     return PopScope(
       // Набор в поле сохраняется на паузе; уход с экрана раньше паузы её не
       // теряет. Здесь, а не в dispose: там ref уже нельзя трогать.
@@ -143,7 +144,7 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
             children: [
               // Без отдельных приложений «кто» один — все приложения, и
               // строка с единственным вариантом была бы пустым нажатием.
-              if (caps.apps || !_route.allApps) _whoTile(l10n),
+              if (caps.appsOffered || !_route.allApps) _whoTile(l10n),
               _whatTile(l10n),
               _whereTile(l10n, servers),
             ],
@@ -178,42 +179,35 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
 
   // ── Кто ────────────────────────────────────────────────────────────────
 
-  Widget _whoTile(AppLocalizations l10n) => ExpressiveGroupTile(
-        onTap: () => unawaited(_pickWho(l10n)),
-        child: _RouteRowContent(
-          badge: const ExpressiveIconBadge(icon: Icons.apps_rounded),
-          title: Text(l10n.routeWho),
-          subtitle: Text(
-            _route.allApps
-                ? l10n.routesSectionAllApps
-                : _route.apps.map(_appLabel).join(', '),
-          ),
+  Widget _whoTile(AppLocalizations l10n) {
+    return ExpressiveGroupTile(
+      onTap: () => unawaited(_pickWho()),
+      child: _RouteRowContent(
+        badge: _route.allApps
+            ? const ExpressiveIconBadge(icon: Icons.apps_rounded)
+            : _appsBadge(_route.apps, ref.read(appIconCacheProvider)),
+        title: Text(l10n.routeWho),
+        subtitle: Text(
+          _route.allApps
+              ? l10n.routesSectionAllApps
+              : _route.apps.map(_appLabel).join(', '),
         ),
-      );
-
-  Future<void> _pickWho(AppLocalizations l10n) async {
-    final all = await _showChoiceSheet<bool>(
-      context,
-      title: l10n.routeWho,
-      children: (ctx) => [
-        ExpressiveGroup(
-          children: [
-            ExpressiveActionTile(
-              icon: Icons.apps_rounded,
-              title: l10n.routesSectionAllApps,
-              subtitle: l10n.routeWhoAllSubtitle,
-              selected: _route.allApps,
-              onTap: () => Navigator.pop(ctx, true),
-            ),
-          ],
-        ),
-      ],
+      ),
     );
-    if (all != true || !mounted) return;
+  }
+
+  Future<void> _pickWho() async {
+    final apps = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _WhoPickerSheet(initial: _route.apps),
+    );
+    if (apps == null || !mounted) return;
     _change(_route.copyWith(
-      apps: const [],
+      apps: apps,
       // «Все приложения + весь трафик» — это «Всё остальное», не маршрут.
-      content: _route.content == RouteContent.allTraffic
+      content: apps.isEmpty && _route.content == RouteContent.allTraffic
           ? RouteContent.sites
           : _route.content,
     ));

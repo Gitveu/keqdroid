@@ -210,8 +210,14 @@
   "@routeAppsUnsupported": {},
   "routeAppsNeedTun": "works only in TUN mode",
   "@routeAppsNeedTun": {},
-  "routeSplitExcluded": "these apps are excluded by split tunneling",
-  "@routeSplitExcluded": {},
+  "routeSplitExcluded": "split tunneling sends {apps} around the VPN",
+  "@routeSplitExcluded": {
+    "placeholders": {
+      "apps": {
+        "type": "String"
+      }
+    }
+  },
   "routeRefilterUnmatched": "Everything else now goes direct",
   "@routeRefilterUnmatched": {},
   "settingsRoutingLinkDomains": "{count, plural, =1{1 domain from links} other{{formatted} domains from links}}",

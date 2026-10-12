@@ -65,14 +65,40 @@ String _appLabel(String entry) {
   return name;
 }
 
+/// Значок маршрута приложений — первого из них: у записи с путём это иконка
+/// самой программы, у имени — его буква, как в шторке «Кто».
+Widget _appsBadge(List<String> apps, AppIconCache cache) => AppIconView(
+      iconBase64: null,
+      appName: _appLabel(apps.first),
+      iconPath: isProcessPathEntry(apps.first) ? apps.first : null,
+      cache: cache,
+    );
+
 /// Почему маршрут работает не так, как написан; null — работает.
 String? _routeIssue(
   AppLocalizations l10n,
   TrafficRoute route,
   RouteCapabilities caps,
   List<ServerItem> servers,
+  SplitTunnelingState split,
 ) {
-  if (!route.allApps && !caps.apps) return l10n.routeAppsUnsupported;
+  if (!route.allApps) {
+    if (!caps.apps) {
+      return caps.appsNeedTun
+          ? l10n.routeAppsNeedTun
+          : l10n.routeAppsUnsupported;
+    }
+    final outside = appsOutsideSplit(
+      route.apps,
+      include: split.includePackages,
+      exclude: split.excludePackages,
+    );
+    if (outside.isNotEmpty) {
+      return l10n.routeSplitExcluded(
+        ltrIsolate(outside.map(_appLabel).join(', ')),
+      );
+    }
+  }
   if (route.target == RouteTarget.server) {
     final server = servers.where((s) => s.id == route.serverId).firstOrNull;
     if (server == null) return l10n.routeServerMissing;
@@ -146,6 +172,8 @@ class _RoutingScreen extends ConsumerWidget {
     final hint = ref.watch(routesHintProvider);
     final caps = ref.watch(routeCapabilitiesProvider);
     final servers = ref.watch(serversProvider.select((s) => s.servers));
+    final split = ref.watch(splitTunnelingProvider);
+    final iconCache = ref.read(appIconCacheProvider);
     final finalTarget = _finalTarget(
       ref.watch(
         settingsNotifierProvider.select(
@@ -157,7 +185,8 @@ class _RoutingScreen extends ConsumerWidget {
     Widget tile(TrafficRoute route) => _RouteTile(
           route: route,
           servers: servers,
-          issue: _routeIssue(l10n, route, caps, servers),
+          iconCache: iconCache,
+          issue: _routeIssue(l10n, route, caps, servers, split),
           onTap: () => _openRouteEditor(context, route),
         );
 
@@ -236,7 +265,9 @@ class _RoutingScreen extends ConsumerWidget {
                 badge: const ExpressiveIconBadge(icon: Icons.add_rounded),
                 title: Text(l10n.routeNew),
                 subtitle: Text(
-                  caps.apps ? l10n.routeNewSubtitle : l10n.routeNewSubtitleSites,
+                  caps.appsOffered
+                      ? l10n.routeNewSubtitle
+                      : l10n.routeNewSubtitleSites,
                 ),
                 chevron: false,
               ),
@@ -290,12 +321,17 @@ class _RouteRowContent extends StatelessWidget {
     required this.subtitle,
     this.chevron = true,
     this.dimmed = false,
+    this.note,
   });
 
   final Widget badge;
   final Widget title;
   final Widget subtitle;
   final bool chevron;
+
+  /// Третья строка — почему маршрут не работает. Своей строкой, а не в хвосте
+  /// подписи: там её обрезал бы длинный список сайтов.
+  final Widget? note;
 
   /// Выключенный маршрут бледнее: на месте и редактируется, но не действует.
   final bool dimmed;
@@ -326,6 +362,15 @@ class _RouteRowContent extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 child: subtitle,
               ),
+              if (note != null)
+                DefaultTextStyle.merge(
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  child: note!,
+                ),
             ],
           ),
         ),
@@ -344,12 +389,14 @@ class _RouteTile extends StatelessWidget {
   const _RouteTile({
     required this.route,
     required this.servers,
+    required this.iconCache,
     required this.issue,
     required this.onTap,
   });
 
   final TrafficRoute route;
   final List<ServerItem> servers;
+  final AppIconCache iconCache;
   final String? issue;
   final VoidCallback onTap;
 
@@ -368,10 +415,11 @@ class _RouteTile extends StatelessWidget {
       onTap: onTap,
       child: _RouteRowContent(
         dimmed: !route.enabled,
-        badge: ExpressiveIconBadge(
-          icon: route.allApps ? _contentIcon(route) : Icons.apps_rounded,
-        ),
+        badge: route.allApps
+            ? ExpressiveIconBadge(icon: _contentIcon(route))
+            : _appsBadge(route.apps, iconCache),
         title: Text(title),
+        note: issue == null ? null : Text(issue!),
         subtitle: Text.rich(
           TextSpan(
             children: [
@@ -395,11 +443,6 @@ class _RouteTile extends StatelessWidget {
                 style: TextStyle(color: color),
               ),
               for (final d in details) TextSpan(text: ' · $d'),
-              if (issue != null)
-                TextSpan(
-                  text: ' · $issue',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
             ],
           ),
         ),

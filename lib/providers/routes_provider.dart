@@ -50,24 +50,44 @@ final routesProvider =
 class RouteCapabilities {
   const RouteCapabilities({
     this.apps = false,
+    this.appsNeedTun = false,
     this.servers = false,
     this.core = VpnBackend.xray,
   });
 
   final bool apps;
+
+  /// Ядро и платформа приложения различают, но сессия идёт в режиме прокси:
+  /// маршрут заработает после переключения в TUN. Выбор приложений тогда
+  /// не прячется — до рабочего маршрута один переключатель.
+  final bool appsNeedTun;
+
   final bool servers;
 
   /// Ядро активного сервера: от него зависит, какой сервер встанет в маршрут
   /// отдельным выходом (`routeServerSupported`).
   final VpnBackend core;
+
+  bool get appsOffered => apps || appsNeedTun;
 }
 
-final routeCapabilitiesProvider = Provider<RouteCapabilities>(
-  (ref) => RouteCapabilities(
+final routeCapabilitiesProvider = Provider<RouteCapabilities>((ref) {
+  final core = ref.watch(activeVpnBackendProvider);
+  final mode = ref.watch(
+    settingsNotifierProvider.select(
+      (a) => TunnelSessionBuilder.resolveMode(a.value ?? const AppSettings()),
+    ),
+  );
+  final desktop = Platform.isWindows || Platform.isLinux;
+  bool runIn(ConnectionMode m) =>
+      appRoutesRun(core: core, desktop: desktop, mode: m);
+  return RouteCapabilities(
+    apps: runIn(mode),
+    appsNeedTun: !runIn(mode) && runIn(ConnectionMode.tun),
     servers: true,
-    core: ref.watch(activeVpnBackendProvider),
-  ),
-);
+    core: core,
+  );
+});
 
 /// Разовая подсказка «списки стали маршрутами» после обновления.
 class RoutesHintNotifier extends Notifier<bool> {

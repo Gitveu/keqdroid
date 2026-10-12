@@ -704,8 +704,8 @@ abstract class AppLocalizations {
   /// No description provided for @routeSplitExcluded.
   ///
   /// In en, this message translates to:
-  /// **'these apps are excluded by split tunneling'**
-  String get routeSplitExcluded;
+  /// **'split tunneling sends {apps} around the VPN'**
+  String routeSplitExcluded(String apps);
 
   /// No description provided for @routeRefilterUnmatched.
   ///

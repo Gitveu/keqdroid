@@ -210,8 +210,14 @@
   "@routeAppsUnsupported": {},
   "routeAppsNeedTun": "работает только в режиме TUN",
   "@routeAppsNeedTun": {},
-  "routeSplitExcluded": "эти приложения исключены раздельным туннелированием",
-  "@routeSplitExcluded": {},
+  "routeSplitExcluded": "раздельное туннелирование ведёт мимо VPN: {apps}",
+  "@routeSplitExcluded": {
+    "placeholders": {
+      "apps": {
+        "type": "String"
+      }
+    }
+  },
   "routeRefilterUnmatched": "«Всё остальное» теперь идёт напрямую",
   "@routeRefilterUnmatched": {},
   "settingsRoutingLinkDomains": "{count, plural, one{{formatted} домен по ссылкам} few{{formatted} домена по ссылкам} many{{formatted} доменов по ссылкам} other{{formatted} домена по ссылкам}}",

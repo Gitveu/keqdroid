@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/app/app.dart';
 import 'package:keqdroid/l10n/app_localizations.dart';
+import 'package:keqdroid/models/app_info.dart';
 import 'package:keqdroid/models/app_settings.dart';
 import 'package:keqdroid/models/server_item.dart';
 import 'package:keqdroid/models/subscription.dart';
@@ -12,6 +13,7 @@ import 'package:keqdroid/screens/settings_tab.dart';
 import 'package:keqdroid/services/rule_list_service.dart';
 import 'package:keqdroid/services/storage_service.dart';
 import 'package:keqdroid/services/vpn_engine.dart';
+import 'package:keqdroid/tunnel/vpn_backend.dart';
 
 import '../helpers/fake_tunnel_backend.dart';
 import '../helpers/test_storage.dart';
@@ -66,6 +68,10 @@ Future<ProviderContainer> _pump(
   List<ServerItem> servers = const [],
   bool hint = false,
   Map<String, RuleListStatus> ruleLists = const {},
+  RouteCapabilities? caps,
+  List<AppInfo> apps = const [],
+  List<String> splitExclude = const [],
+  List<String> splitInclude = const [],
 }) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 2.625;
@@ -75,6 +81,8 @@ Future<ProviderContainer> _pump(
     initialValues: {if (hint) 'keqdis_routes_hint': true},
   );
   if (routes != null) await _storage.saveRoutes(routes);
+  if (splitExclude.isNotEmpty) await _storage.setExcludePackages(splitExclude);
+  if (splitInclude.isNotEmpty) await _storage.setIncludePackages(splitInclude);
   if (servers.isNotEmpty) {
     await _storage.saveServers(servers);
     await _storage.setActiveServerId(servers.first.id);
@@ -90,6 +98,8 @@ Future<ProviderContainer> _pump(
       vpnEngineProvider.overrideWithValue(
         VpnEngine.withBackend(FakeTunnelBackend()),
       ),
+      if (caps != null) routeCapabilitiesProvider.overrideWithValue(caps),
+      installedAppsProvider(false).overrideWith((ref) async => apps),
     ],
   );
   addTearDown(container.dispose);
@@ -483,5 +493,164 @@ void main() {
     expect(ru.settingsRoutingItemCount(25), '25 записей');
     expect(ru.settingsRoutingRouteCount(21), '21 маршрут');
     expect(ru.settingsRoutingRouteCount(5), '5 маршрутов');
+  });
+  // Отдельные приложения: mihomo на ПК. Выбор — как в сплите, пометки на
+  // карточке — почему маршрут не сработает.
+  group('отдельные приложения', () {
+    const caps = RouteCapabilities(
+      apps: true,
+      servers: true,
+      core: VpnBackend.mihomo,
+    );
+    const chrome = AppInfo(
+      packageName: 'chrome.exe',
+      appName: 'chrome.exe',
+      installPath: r'C:\Program Files\Google\Chrome\chrome.exe',
+    );
+    const firefox = AppInfo(
+      packageName: 'firefox.exe',
+      appName: 'firefox.exe',
+      installPath: r'C:\Program Files\Mozilla Firefox\firefox.exe',
+    );
+    const discord = AppInfo(packageName: 'Discord.exe', appName: 'Discord.exe');
+
+    testWidgets('приложения выбираются отметками и «Готово»', (tester) async {
+      await _pump(
+        tester,
+        routes: const [TrafficRoute(id: 'r', sites: 'youtube.com')],
+        caps: caps,
+        apps: const [chrome, discord, firefox],
+      );
+      await tester.tap(find.text('youtube.com'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Кто'));
+      await tester.pumpAndSettle();
+      expect(find.text('Отдельные приложения'), findsOneWidget);
+      final done = find.widgetWithText(FilledButton, 'Готово · 0');
+      expect(tester.widget<FilledButton>(done).onPressed, isNull,
+          reason: 'без единого приложения выбирать нечего');
+
+      await tester.tap(find.text('chrome.exe'));
+      await tester.pump();
+      await tester.tap(find.text('firefox.exe'));
+      await tester.pump();
+      await tester.tap(find.text('Готово · 2'));
+      await tester.pumpAndSettle();
+
+      final saved = (await _storage.getRoutes()).single;
+      expect(saved.apps, ['chrome.exe', 'firefox.exe']);
+      expect(find.text('chrome, firefox'), findsOneWidget);
+    });
+
+    testWidgets('«Все приложения» снимает выбор, «весь трафик» уходит',
+        (tester) async {
+      await _pump(
+        tester,
+        routes: const [
+          TrafficRoute(
+            id: 'r',
+            apps: ['chrome.exe'],
+            content: RouteContent.allTraffic,
+            target: RouteTarget.direct,
+          ),
+        ],
+        caps: caps,
+        apps: const [chrome],
+      );
+      await tester.tap(find.text('chrome'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Кто'));
+      await tester.pumpAndSettle();
+      // Выбранное раньше — сверху и с отметкой.
+      expect(find.text('Готово · 1'), findsOneWidget);
+      await tester.tap(find.text('Все приложения').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await _storage.getRoutes()).single;
+      expect(saved.apps, isEmpty);
+      expect(saved.content, RouteContent.sites,
+          reason: '«все приложения + весь трафик» — это «Всё остальное»');
+    });
+
+    testWidgets('не запущенное приложение маршрута — своей строкой',
+        (tester) async {
+      await _pump(
+        tester,
+        routes: const [
+          TrafficRoute(id: 'r', apps: ['Telegram.exe'], sites: 't.me'),
+        ],
+        caps: caps,
+        apps: const [chrome],
+      );
+      await tester.tap(find.text('Telegram'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Кто'));
+      await tester.pumpAndSettle();
+      // Имя и подпись у такой строки одни и те же, как в сплите.
+      expect(find.text('Telegram.exe'), findsWidgets);
+      expect(find.text('Готово · 1'), findsOneWidget);
+    });
+
+    testWidgets('в режиме прокси — «только в режиме TUN»', (tester) async {
+      await _pump(
+        tester,
+        routes: const [
+          TrafficRoute(id: 'r', apps: ['chrome.exe'], sites: 'youtube.com'),
+        ],
+        caps: const RouteCapabilities(
+          appsNeedTun: true,
+          servers: true,
+          core: VpnBackend.mihomo,
+        ),
+      );
+      expect(
+        _texts(tester).any((t) => t.contains('только в режиме TUN')),
+        isTrue,
+      );
+      // Выбор приложений при этом не прячется: до рабочего маршрута один
+      // переключатель.
+      await tester.tap(find.text('Новый маршрут'));
+      await tester.pumpAndSettle();
+      expect(find.text('Кто'), findsOneWidget);
+    });
+
+    testWidgets('приложение, которое сплит ведёт мимо VPN, — с причиной',
+        (tester) async {
+      await _pump(
+        tester,
+        routes: const [
+          TrafficRoute(
+            id: 'r',
+            apps: ['Discord.exe', 'chrome.exe'],
+            sites: 'discord.com',
+          ),
+        ],
+        caps: caps,
+        splitExclude: const ['discord.exe'],
+      );
+      expect(
+        _texts(tester).any(
+          (t) => t.contains('раздельное туннелирование ведёт мимо VPN: Discord'),
+        ),
+        isTrue,
+      );
+    });
+
+    testWidgets('при «только выбранных» — невыбранные', (tester) async {
+      await _pump(
+        tester,
+        routes: const [
+          TrafficRoute(id: 'r', apps: ['chrome.exe'], sites: 'youtube.com'),
+        ],
+        caps: caps,
+        splitInclude: const ['firefox.exe'],
+      );
+      expect(
+        _texts(tester).any(
+          (t) => t.contains('раздельное туннелирование ведёт мимо VPN: chrome'),
+        ),
+        isTrue,
+      );
+    });
   });
 }

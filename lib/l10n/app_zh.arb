@@ -210,8 +210,14 @@
   "@routeAppsUnsupported": {},
   "routeAppsNeedTun": "仅在 TUN 模式下生效",
   "@routeAppsNeedTun": {},
-  "routeSplitExcluded": "这些应用已被分应用代理排除",
-  "@routeSplitExcluded": {},
+  "routeSplitExcluded": "分应用代理让 {apps} 绕过 VPN",
+  "@routeSplitExcluded": {
+    "placeholders": {
+      "apps": {
+        "type": "String"
+      }
+    }
+  },
   "routeRefilterUnmatched": "“其他所有”现在走直连",
   "@routeRefilterUnmatched": {},
   "settingsRoutingLinkDomains": "{count, plural, other{来自链接的 {formatted} 个域名}}",

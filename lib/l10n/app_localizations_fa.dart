@@ -346,7 +346,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get routeAppsNeedTun => 'فقط در حالت TUN کار می‌کند';
 
   @override
-  String get routeSplitExcluded => 'این برنامه‌ها در پروکسی به تفکیک برنامه مستثنا شده‌اند';
+  String routeSplitExcluded(String apps) {
+    return '$apps با پروکسی به تفکیک برنامه از VPN عبور نمی‌کند';
+  }
 
   @override
   String get routeRefilterUnmatched => '«بقیهٔ ترافیک» اکنون مستقیم می‌رود';
