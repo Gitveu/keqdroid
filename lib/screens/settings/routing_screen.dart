@@ -246,6 +246,8 @@ class _RoutingScreen extends ConsumerWidget {
               child: Text(l10n.settingsRoutingReconnect),
             ),
           ),
+        if (tunnelActive && hint)
+          const SizedBox(height: ExpressiveSpacing.medium),
         if (hint)
           ExpressiveNotice(
             color: Theme.of(context).colorScheme.primary,

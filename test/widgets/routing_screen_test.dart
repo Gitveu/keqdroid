@@ -13,6 +13,8 @@ import 'package:keqdroid/screens/settings_tab.dart';
 import 'package:keqdroid/services/rule_list_service.dart';
 import 'package:keqdroid/services/storage_service.dart';
 import 'package:keqdroid/services/vpn_engine.dart';
+import 'package:keqdroid/shared/ui/expressive.dart';
+import 'package:keqdroid/shared/ui/expressive_elements.dart';
 import 'package:keqdroid/tunnel/vpn_backend.dart';
 
 import '../helpers/fake_tunnel_backend.dart';
@@ -212,6 +214,20 @@ void main() {
       await tester.tap(find.text('Переподключить'));
       await tester.pumpAndSettle();
       expect(_vpn.reconnects, 1);
+    });
+
+    testWidgets('напоминание и подсказка не слипаются', (tester) async {
+      await _pump(
+        tester,
+        routes: const [_direct],
+        status: VpnStatus.connected,
+        hint: true,
+      );
+      final notices = find.byType(ExpressiveNotice);
+      expect(notices, findsNWidgets(2));
+      final gap = tester.getTopLeft(notices.at(1)).dy -
+          tester.getBottomLeft(notices.at(0)).dy;
+      expect(gap, greaterThanOrEqualTo(ExpressiveSpacing.medium));
     });
 
     testWidgets('без туннеля напоминания нет', (tester) async {
