@@ -242,6 +242,7 @@ class KeqdisVpnService : VpnService() {
     @Volatile private var coreStartedAt:      Long                  = 0L
     @Volatile private var quickCoreDeaths:    Int                   = 0
     @Volatile private var tunInterface:       ParcelFileDescriptor? = null
+    @Volatile private var ownerServer:        ConnectionOwnerServer? = null
     @Volatile private var cleanupDone:       Boolean              = false
     @Volatile private var activeSocksPort:   Int                  = 2080
 
@@ -848,6 +849,8 @@ class KeqdisVpnService : VpnService() {
             }
             xrayPid = -1
         }
+        ownerServer?.close()
+        ownerServer = null
 
         // socksUsername/socksPassword здесь НЕ сбрасываем: они живут до
         // следующего ACTION_START (с его новыми credentials) — так корректно
@@ -1566,9 +1569,17 @@ class KeqdisVpnService : VpnService() {
         // объясняют, зачем он понадобился.
         if (freshLog) runCatching { File(filesDir, CORE_LOG_FILE).writeText("") }
         tunReadyFrom = NativeHelper.tunReadyCount()
+        val owner = if (coreKind == CORE_KIND_MIHOMO && tunFd >= 0) {
+            ownerServer ?: runCatching { ConnectionOwnerServer(this) }
+                .onFailure { NativeLog.w("KEQDIS", "owner socket not started: ${it.message}") }
+                .getOrNull()
+                ?.also { ownerServer = it }
+        } else {
+            null
+        }
         val pid = NativeHelper.startCore(
             binary, sessionConfigFor(config, coreKind), filesDir.absolutePath,
-            CORE_LOG_FILE, coreKind, tunFd,
+            CORE_LOG_FILE, coreKind, tunFd, owner?.name ?: "",
         )
         when {
             pid == -1 -> throw IllegalStateException("Xray binary not found: $binary")

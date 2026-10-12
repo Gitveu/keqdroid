@@ -1,0 +1,112 @@
+Ask the app who owns a connection on Android.
+
+Routes for specific apps are PROCESS-NAME rules, and on Android the process
+name is the package that opened the connection. mihomo finds it from the
+socket tables: netlink INET_DIAG, then /proc/net. Neither works for us. The
+core runs as an ordinary app process (untrusted_app), and since Android 10
+SELinux shows such a process neither of them for sockets of other UIDs, so
+every lookup fails and no app rule ever matches.
+
+The system does answer one caller: the app that owns the VPN, through
+ConnectivityManager.getConnectionOwnerUid. So the app listens on an abstract
+unix socket and passes its name in KEQDROID_OWNER_SOCKET (see forkexec.c and
+ConnectionOwnerServer.kt). With the variable set, the package resolver asks
+there: one line "network srcip srcport dstip dstport", one line back with the
+package name. The app answers only its own UID, so nothing else on the phone
+can use the socket to see who connects where.
+
+tunnel.go goes straight to the package resolver on Android, the way the cmfa
+build does, instead of failing in netlink first.
+
+The destination is taken from RawDstAddr: with fake-ip the tunnel clears
+DstIP before the rules run (preHandleMetadata), and the system knows the
+connection by the fake address the app dialled.
+
+Applies after mihomo-android-package-manager.patch, which touches the same
+file.
+
+diff --git a/listener/sing_tun/owner_android.go b/listener/sing_tun/owner_android.go
+new file mode 100644
+index 0000000..05ab1f1
+--- /dev/null
++++ b/listener/sing_tun/owner_android.go
+@@ -0,0 +1,52 @@
++//go:build android && !cmfa
++
++package sing_tun
++
++import (
++	"bufio"
++	"errors"
++	"fmt"
++	"net"
++	"os"
++	"strings"
++	"time"
++
++	"github.com/metacubex/mihomo/constant"
++)
++
++// keqdroid: the app that owns the VPN answers on this abstract socket, see
++// the patch header.
++var ownerSocket = os.Getenv("KEQDROID_OWNER_SOCKET")
++
++func askOwner(metadata *constant.Metadata) (string, error) {
++	src := metadata.SourceAddrPort()
++	dst := metadata.AddrPort()
++	// fake-ip clears DstIP before the rules run; the system knows the
++	// connection by the address the app dialled, which stays here.
++	switch raw := metadata.RawDstAddr.(type) {
++	case *net.TCPAddr:
++		dst = raw.AddrPort()
++	case *net.UDPAddr:
++		dst = raw.AddrPort()
++	}
++	conn, err := net.DialTimeout("unix", "@"+ownerSocket, time.Second)
++	if err != nil {
++		return "", err
++	}
++	defer conn.Close()
++	_ = conn.SetDeadline(time.Now().Add(time.Second))
++	_, err = fmt.Fprintf(conn, "%s %s %d %s %d\n", metadata.NetWork,
++		src.Addr().Unmap(), src.Port(), dst.Addr().Unmap(), dst.Port())
++	if err != nil {
++		return "", err
++	}
++	line, err := bufio.NewReader(conn).ReadString('\n')
++	if err != nil {
++		return "", err
++	}
++	pkg := strings.TrimSpace(line)
++	if pkg == "" {
++		return "", errors.New("connection owner not found")
++	}
++	return pkg, nil
++}
+diff --git a/listener/sing_tun/server_android.go b/listener/sing_tun/server_android.go
+index 85be0b4..3a7ca64 100644
+--- a/listener/sing_tun/server_android.go
++++ b/listener/sing_tun/server_android.go
+@@ -68,6 +68,9 @@ func (l *Listener) buildAndroidRules(tunOptions *tun.Options) error {
+ }
+ 
+ func findPackageName(metadata *constant.Metadata) (string, error) {
++	if ownerSocket != "" {
++		return askOwner(metadata)
++	}
+ 	packageManager, err := getPackageManager()
+ 	if err != nil {
+ 		return "", err
+diff --git a/tunnel/tunnel.go b/tunnel/tunnel.go
+index 86dbc14..2074e3c 100644
+--- a/tunnel/tunnel.go
++++ b/tunnel/tunnel.go
+@@ -351,7 +351,7 @@ func resolveMetadata(metadata *C.Metadata) (proxy C.Proxy, rule C.Rule, err erro
+ 		FindProcess: func() {
+ 			if attemptProcessLookup {
+ 				attemptProcessLookup = false
+-				if !features.CMFA {
++				if !features.CMFA && runtime.GOOS != "android" {
+ 					// normal check for process
+ 					uid, path, err := process.FindProcessName(metadata.NetWork.String(), metadata.SrcIP, int(metadata.SrcPort))
+ 					if err != nil {

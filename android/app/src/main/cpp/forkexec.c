@@ -171,7 +171,7 @@ JNIEXPORT jint JNICALL
 Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
         JNIEnv *env, jclass clazz,
         jstring jBinPath, jstring jConfigPath, jstring jAssetDir, jstring jLogName,
-        jstring jCoreKind, jint jTunFd) {
+        jstring jCoreKind, jint jTunFd, jstring jOwnerSocket) {
 
     const char *binPath    = (*env)->GetStringUTFChars(env, jBinPath,    NULL);
     const char *configPath = (*env)->GetStringUTFChars(env, jConfigPath, NULL);
@@ -191,6 +191,16 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
         }
     }
     const int isMihomo = (strcmp(coreKind, "mihomo") == 0);
+
+    char ownerSocket[128];
+    ownerSocket[0] = '\0';
+    if (jOwnerSocket) {
+        const char *os = (*env)->GetStringUTFChars(env, jOwnerSocket, NULL);
+        if (os) {
+            snprintf(ownerSocket, sizeof(ownerSocket), "%s", os);
+            (*env)->ReleaseStringUTFChars(env, jOwnerSocket, os);
+        }
+    }
 
     /* Путь к файлу логов ядра: <assetDir>/<logName>. Пустое имя → файл выключен
      * (ping/спидтест им пользоваться не должны, чтобы не засорять лог соединения). */
@@ -302,6 +312,8 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
              * в своём рабочем каталоге (`-d`). Каталог один и тот же (filesDir),
              * различается только способ его назвать. */
             if (isMihomo) {
+                /* владельца соединения mihomo спрашивает у нас, см. mihomo-android-uid-owner.patch */
+                if (ownerSocket[0]) setenv("KEQDROID_OWNER_SOCKET", ownerSocket, 1);
                 char *argv[] = {
                     (char *)binPath, "-d", (char *)assetDir, "-f", (char *)configPath, NULL
                 };

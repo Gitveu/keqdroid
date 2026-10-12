@@ -56,6 +56,7 @@ object NativeHelper {
         logName: String,
         coreKind: String,
         tunFd: Int,
+        ownerSocket: String,
     ): Int
 
     // Запуск ядра прокси. logName: имя файла логов ядра внутри assetDir
@@ -76,8 +77,9 @@ object NativeHelper {
         logName: String,
         coreKind: String,
         tunFd: Int = -1,
+        ownerSocket: String = "",
     ): Int = remember(
-        nativeStartCore(binPath, configPath, assetDir, logName, coreKind, tunFd),
+        nativeStartCore(binPath, configPath, assetDir, logName, coreKind, tunFd, ownerSocket),
     )
 
     private fun remember(pid: Int): Int {

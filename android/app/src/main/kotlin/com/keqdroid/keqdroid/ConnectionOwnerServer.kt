@@ -1,0 +1,112 @@
+package com.keqdroid.keqdroid
+
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.InetAddresses
+import android.net.LocalServerSocket
+import android.net.LocalSocket
+import android.net.LocalSocketAddress
+import android.os.Build
+import android.os.Process
+import android.os.SystemClock
+import android.system.OsConstants
+import java.net.InetSocketAddress
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+
+// Кто открыл соединение: mihomo на Android сам этого не узнает (SELinux), а
+// getConnectionOwnerUid отвечает только владельцу VPN. Протокол и причина в
+// tool/patches/mihomo-android-uid-owner.patch
+class ConnectionOwnerServer(private val context: Context) {
+
+    val name = "${context.packageName}.owner.${Process.myPid()}.${SystemClock.elapsedRealtimeNanos()}"
+
+    private val server = LocalServerSocket(name)
+    private val pool = Executors.newFixedThreadPool(4)
+    private val packages = ConcurrentHashMap<Int, String>()
+    private val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+    @Volatile private var closed = false
+
+    // время ответа в микросекундах, для замера цены поиска на телефоне
+    private val timings = ArrayList<Long>()
+    private var answered = 0L
+
+    init {
+        Thread({ acceptLoop() }, "keqdis-owner").apply { isDaemon = true }.start()
+    }
+
+    fun close() {
+        if (closed) return
+        closed = true
+        // accept() не просыпается от close() сервера, будим подключением
+        runCatching { LocalSocket().use { it.connect(LocalSocketAddress(name)) } }
+        runCatching { server.close() }
+        pool.shutdownNow()
+        logTimings()
+    }
+
+    private fun acceptLoop() {
+        while (!closed) {
+            val socket = runCatching { server.accept() }.getOrNull() ?: break
+            if (closed) {
+                runCatching { socket.close() }
+                break
+            }
+            pool.execute { runCatching { serve(socket) } }
+        }
+    }
+
+    private fun serve(socket: LocalSocket) {
+        socket.use {
+            if (it.peerCredentials.uid != Process.myUid()) return
+            it.soTimeout = 1000
+            val line = it.inputStream.bufferedReader().readLine() ?: return
+            val started = SystemClock.elapsedRealtimeNanos()
+            val pkg = runCatching { ownerOf(line) }.getOrDefault("")
+            it.outputStream.write("$pkg\n".toByteArray())
+            it.outputStream.flush()
+            record((SystemClock.elapsedRealtimeNanos() - started) / 1000)
+        }
+    }
+
+    private fun ownerOf(request: String): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return ""
+        val (network, srcIp, srcPort, dstIp, dstPort) = request.trim().split(' ')
+        val proto = if (network == "udp") OsConstants.IPPROTO_UDP else OsConstants.IPPROTO_TCP
+        val uid = cm.getConnectionOwnerUid(
+            proto,
+            InetSocketAddress(InetAddresses.parseNumericAddress(srcIp), srcPort.toInt()),
+            InetSocketAddress(InetAddresses.parseNumericAddress(dstIp), dstPort.toInt()),
+        )
+        if (uid == Process.INVALID_UID) return ""
+        return packages.getOrPut(uid) {
+            context.packageManager.getPackagesForUid(uid)?.firstOrNull() ?: ""
+        }
+    }
+
+    private fun record(micros: Long) {
+        val report = synchronized(timings) {
+            timings.add(micros)
+            answered++
+            answered % 500 == 0L
+        }
+        if (report) logTimings()
+    }
+
+    private fun logTimings() {
+        val (sorted, total) = synchronized(timings) {
+            val copy = timings.sorted()
+            timings.clear()
+            copy to answered
+        }
+        if (sorted.isEmpty()) return
+        NativeLog.i(
+            "KEQDIS",
+            "owner lookups: $total total, last ${sorted.size}: " +
+                "median ${sorted[sorted.size / 2]} us, " +
+                "p95 ${sorted[(sorted.size * 95 / 100).coerceAtMost(sorted.size - 1)]} us, " +
+                "max ${sorted.last()} us",
+        )
+    }
+}
