@@ -11,6 +11,7 @@ import 'fake_ip.dart';
 import 'hysteria_uri.dart';
 import 'mieru_uri.dart';
 import 'process_name_utils.dart';
+import 'route_servers.dart';
 import 'routing_entry.dart';
 import 'rule_lists.dart';
 import 'socks5_credentials.dart';
@@ -115,6 +116,7 @@ class MihomoConfigGen {
     String appProcessName = '',
     bool? windows,
     RuleListDomains ruleLists = RuleListDomains.none,
+    List<RouteServerOutbound> routeServers = const [],
   }) =>
       const JsonEncoder.withIndent('  ').convert(
         build(
@@ -132,6 +134,7 @@ class MihomoConfigGen {
           appProcessName: appProcessName,
           windows: windows,
           ruleLists: ruleLists,
+          routeServers: routeServers,
         ),
       );
 
@@ -149,6 +152,7 @@ class MihomoConfigGen {
   /// там, где ядро способно узнать процесс (десктоп).
   ///
   /// [ruleLists] — домены из списков по ссылкам, см. [buildRuleListProviders].
+  /// [routeServers] — «другие серверы» маршрутов, у каждого свой выход.
   static Map<String, dynamic> build(
     String input,
     AppSettings settings, {
@@ -164,6 +168,7 @@ class MihomoConfigGen {
     String appProcessName = '',
     bool? windows,
     RuleListDomains ruleLists = RuleListDomains.none,
+    List<RouteServerOutbound> routeServers = const [],
   }) {
     // Правила по процессам умеет только та сторона, где ядро способно найти
     // владельца соединения: десктопный TUN. На Android их роль исполняет сам
@@ -215,6 +220,7 @@ class MihomoConfigGen {
         fakeIp: fakeIp,
         windows: windows,
         ruleLists: ruleLists,
+        routeServers: routeServers,
       );
     }
 
@@ -253,9 +259,12 @@ class MihomoConfigGen {
         'listeners': buildLanListeners(settings),
         'sub-rules': {lanRuleSet: buildLanRules()},
       },
-      'proxies': [proxy],
-      if (!ruleLists.isEmpty)
-        'rule-providers': buildRuleListProviders(ruleLists),
+      'proxies': [proxy, ...buildRouteServerProxies(routeServers)],
+      if (!ruleLists.isEmpty || routeServers.isNotEmpty)
+        'rule-providers': {
+          ...buildRuleListProviders(ruleLists),
+          ...buildRouteServerProviders(routeServers),
+        },
       'rules': buildRules(
         settings,
         serverAddress: proxy['server']?.toString() ?? '',
@@ -266,6 +275,7 @@ class MihomoConfigGen {
         tunOwned: tun != null,
         windows: windows,
         ruleLists: ruleLists,
+        routeServers: routeServers,
       ),
     };
   }
@@ -318,6 +328,7 @@ class MihomoConfigGen {
     bool fakeIp = false,
     bool? windows,
     RuleListDomains ruleLists = RuleListDomains.none,
+    List<RouteServerOutbound> routeServers = const [],
   }) {
     final authorProviders = clash.map['rule-providers'];
     return clash.buildSessionConfig(
@@ -351,18 +362,23 @@ class MihomoConfigGen {
           serverAddress: clash.address,
           resolvedServerIp: resolvedServerIp,
         ),
+        for (final server in routeServers)
+          ...buildServerDirectRules(serverAddress: server.address),
         if (tun != null) 'IP-CIDR,$tunInterfaceRange,DIRECT,no-resolve',
       ],
       appendRules: buildUserRules(
         settings,
         proxyTarget: clash.primaryTarget,
         ruleLists: ruleLists,
+        routeServers: routeServers,
       ),
+      extraProxies: buildRouteServerProxies(routeServers),
       extra: {
-        if (!ruleLists.isEmpty)
+        if (!ruleLists.isEmpty || routeServers.isNotEmpty)
           'rule-providers': {
             if (authorProviders is Map) ...authorProviders,
             ...buildRuleListProviders(ruleLists),
+            ...buildRouteServerProviders(routeServers),
           },
         // Свои адреса для доменов — только когда автор конфига своих не
         // написал: его карта важнее нашей настройки, как и dns-блок.
@@ -2080,6 +2096,35 @@ class MihomoConfigGen {
   static String exitIpProbeRule(String proxyTarget) =>
       'AND,((NOT,((IN-TYPE,TUN))),(DOMAIN,$kExitIpProbeHost)),$proxyTarget';
 
+  /// Выходы «других серверов» маршрутов: тот же разбор ссылки, что у
+  /// активного сервера, только под своим именем. Какие серверы сюда вообще
+  /// попадают, решает `routeServerSupported` ещё до генерации.
+  static List<Map<String, dynamic>> buildRouteServerProxies(
+    List<RouteServerOutbound> servers,
+  ) =>
+      [
+        for (final server in servers)
+          {...buildProxy(server.config.trim()), 'name': server.tag},
+      ];
+
+  static String _routeServerListSet(RouteServerOutbound server) =>
+      'keq-list-${server.tag}';
+
+  /// Скачанные списки маршрутов на другие серверы — своим набором у каждого
+  /// сервера, по той же причине, что и у полей (см. [buildRuleListProviders]).
+  static Map<String, dynamic> buildRouteServerProviders(
+    List<RouteServerOutbound> servers,
+  ) =>
+      {
+        for (final server in servers)
+          if (server.listDomains.isNotEmpty)
+            _routeServerListSet(server): {
+              'type': 'inline',
+              'behavior': 'domain',
+              'payload': [for (final d in server.listDomains) '+.$d'],
+            },
+      };
+
   /// Имена наборов со скачанными доменами — по одному на поле.
   static const blockListSet = 'keq-list-block';
   static const directListSet = 'keq-list-direct';
@@ -2131,6 +2176,7 @@ class MihomoConfigGen {
     bool tunOwned = false,
     bool? windows,
     RuleListDomains ruleLists = RuleListDomains.none,
+    List<RouteServerOutbound> routeServers = const [],
   }) {
     final rules = <String>[
       exitIpProbeRule(proxyTarget),
@@ -2145,6 +2191,8 @@ class MihomoConfigGen {
         serverAddress: serverAddress,
         resolvedServerIp: resolvedServerIp,
       ),
+      for (final server in routeServers)
+        ...buildServerDirectRules(serverAddress: server.address),
       // Адрес собственного tun-интерфейса. Ядро считает его из
       // `dns.fake-ip-range` (см. [buildTun]), и без явного правила обращение к
       // нему ушло бы в туннель — то есть само в себя.
@@ -2155,6 +2203,7 @@ class MihomoConfigGen {
         blockedOnly: false,
         skipBlocked: true,
         ruleLists: ruleLists,
+        routeServers: routeServers,
       ),
     ];
 
@@ -2341,9 +2390,10 @@ class MihomoConfigGen {
     bool blockedOnly = false,
     bool skipBlocked = false,
     RuleListDomains ruleLists = RuleListDomains.none,
+    List<RouteServerOutbound> routeServers = const [],
   }) {
     final rules = <String>[];
-    final strategy = _ipRuleStrategy(settings);
+    final strategy = _ipRuleStrategy(settings, routeServers);
     final inPlace = strategy == 'IPOnDemand' ? '' : ',no-resolve';
 
     List<String> ipRules(String raw, String target, String suffix) {
@@ -2372,13 +2422,26 @@ class MihomoConfigGen {
     for (final range in _privateRanges) {
       rules.add('IP-CIDR,$range,DIRECT,no-resolve');
     }
+    // Другие серверы — между обходом и «через VPN»: так в разделе всех
+    // приложений стоят их маршруты (см. routesIn).
+    for (final server in routeServers) {
+      addGroup(
+        server.entries,
+        server.tag,
+        _routeServerListSet(server),
+        server.listDomains,
+      );
+    }
     addGroup(settings.proxyRules, proxyTarget, proxyListSet, ruleLists.proxy);
 
     if (strategy == 'IPIfNonMatch') {
       rules
         ..addAll(ipRules(settings.blockedRules, 'REJECT', ''))
-        ..addAll(ipRules(settings.directRules, 'DIRECT', ''))
-        ..addAll(ipRules(settings.proxyRules, proxyTarget, ''));
+        ..addAll(ipRules(settings.directRules, 'DIRECT', ''));
+      for (final server in routeServers) {
+        rules.addAll(ipRules(server.entries, server.tag, ''));
+      }
+      rules.addAll(ipRules(settings.proxyRules, proxyTarget, ''));
     }
     return rules;
   }
@@ -2387,7 +2450,10 @@ class MihomoConfigGen {
   /// выбор пользователя, но `AsIs` при своих адресах в списках поднимается до
   /// `IPIfNonMatch`. Без подъёма корпоративный CIDR в обходе не срабатывал бы
   /// для соединений по домену (браузер через прокси шлёт `CONNECT host`).
-  static String _ipRuleStrategy(AppSettings settings) {
+  static String _ipRuleStrategy(
+    AppSettings settings, [
+    List<RouteServerOutbound> routeServers = const [],
+  ]) {
     final chosen = settings.xrayCore.routingDomainStrategy;
     if (chosen != 'AsIs') return chosen;
     List<String> ips(String raw) =>
@@ -2395,6 +2461,7 @@ class MihomoConfigGen {
     // Приватные сети в обходе своими не считаются: их туда клал прежний пресет.
     final hasUserIps = ips(settings.blockedRules).isNotEmpty ||
         ips(settings.proxyRules).isNotEmpty ||
+        routeServers.any((s) => ips(s.entries).isNotEmpty) ||
         ips(settings.directRules)
             .any((ip) => !kBasePrivateRanges.contains(ip.trim()));
     return hasUserIps ? 'IPIfNonMatch' : 'AsIs';

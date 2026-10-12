@@ -9,6 +9,7 @@ import '../utils/fake_ip.dart';
 import '../utils/geo_asset_index.dart';
 import '../utils/hysteria_uri.dart';
 import '../utils/proxy_chain.dart';
+import '../utils/route_servers.dart';
 import '../utils/routing_entry.dart';
 import '../utils/rule_lists.dart';
 import '../utils/socks5_credentials.dart';
@@ -32,6 +33,8 @@ class ConfigGeneratorV2 {
     /// правила приходят от провайдера, а неизвестный `geosite:`-код роняет
     /// разбор всего конфига. Для ссылок списки чистит GeoAssetService заранее.
     GeoAssetIndex? geoIndex,
+    /// «Другие серверы» маршрутов, у каждого свой аутбаунд.
+    List<RouteServerOutbound> routeServers = const [],
   }) {
     return const JsonEncoder.withIndent('  ').convert(
       _buildXrayConfig(
@@ -41,6 +44,7 @@ class ConfigGeneratorV2 {
         localInboundsNoAuth: localInboundsNoAuth,
         nativeTunInbound: nativeTunInbound,
         geoIndex: geoIndex,
+        routeServers: routeServers,
       ),
     );
   }
@@ -233,6 +237,7 @@ class ConfigGeneratorV2 {
     /// дескриптор ему передаёт нативная часть через переменную окружения.
     bool nativeTunInbound = false,
     GeoAssetIndex? geoIndex,
+    List<RouteServerOutbound> routeServers = const [],
   }) {
     final trimmed = input.trim();
 
@@ -247,6 +252,7 @@ class ConfigGeneratorV2 {
         pingHttpInbound: pingHttpInbound,
         localInboundsNoAuth: localInboundsNoAuth,
         nativeTunInbound: nativeTunInbound,
+        routeServers: routeServers,
       );
     }
 
@@ -263,6 +269,7 @@ class ConfigGeneratorV2 {
         localInboundsNoAuth: localInboundsNoAuth,
         nativeTunInbound: nativeTunInbound,
         geoIndex: geoIndex,
+        routeServers: routeServers,
       );
     }
 
@@ -279,6 +286,7 @@ class ConfigGeneratorV2 {
       pingHttpInbound: pingHttpInbound,
       localInboundsNoAuth: localInboundsNoAuth,
       nativeTunInbound: nativeTunInbound,
+      routeServers: routeServers,
     );
   }
 
@@ -462,6 +470,7 @@ class ConfigGeneratorV2 {
     /// Туннель держит само ядро: в конфиг добавляется tun-инбаунд, а
     /// дескриптор ему передаёт нативная часть через переменную окружения.
     bool nativeTunInbound = false,
+    List<RouteServerOutbound> routeServers = const [],
   }) {
     if (chain.hops.isEmpty) {
       throw ArgumentError('Proxy chain has no nodes');
@@ -507,6 +516,7 @@ class ConfigGeneratorV2 {
       pingHttpInbound: pingHttpInbound,
       localInboundsNoAuth: localInboundsNoAuth,
       nativeTunInbound: nativeTunInbound,
+      routeServers: routeServers,
     );
   }
 
@@ -553,10 +563,11 @@ class ConfigGeneratorV2 {
   /// Включает фрагментацию и возвращает аутбаунд, который её исполняет
   /// (`null` — выключена или применять её не к чему).
   ///
-  /// Подцепляется к самому внешнему аутбаунду — тому, который реально
-  /// открывает сокет наружу. В цепочке это входной узел: у остальных уже стоит
-  /// свой `dialerProxy` на предыдущее звено, и вторая подмена просто разорвала
-  /// бы цепочку. Резать имеет смысл только внешний сокет: пакеты внутренних
+  /// Подцепляется к каждому внешнему аутбаунду — тому, который реально
+  /// открывает сокет наружу: к серверу сессии и к «другим серверам»
+  /// маршрутов. В цепочке внешний — входной узел: у остальных уже стоит свой
+  /// `dialerProxy` на предыдущее звено, и вторая подмена просто разорвала бы
+  /// цепочку. Резать имеет смысл только внешний сокет: пакеты внутренних
   /// звеньев уже едут внутри чужого шифрованного потока, и DPI провайдера их
   /// всё равно не разбирает.
   static Map<String, dynamic>? _applyFragment(
@@ -566,6 +577,7 @@ class ConfigGeneratorV2 {
     final fragment = core.buildFragmentMap();
     if (fragment == null) return null;
 
+    Map<String, dynamic>? fragmentOutbound;
     for (final outbound in proxyOutbounds) {
       final stream = outbound['streamSettings'] as Map<String, dynamic>?;
       final sockopt = stream?['sockopt'] as Map<String, dynamic>?;
@@ -574,7 +586,7 @@ class ConfigGeneratorV2 {
       if (dialer.isNotEmpty) continue;
       // UDP-транспорт резать нечем: фрагментатор режет ClientHello в потоке
       // TCP, а у hysteria и mKCP такого потока нет вовсе.
-      if (_isDatagramOutbound(outbound)) return null;
+      if (_isDatagramOutbound(outbound)) continue;
 
       final newStream = Map<String, dynamic>.from(
         stream ?? const <String, dynamic>{},
@@ -592,7 +604,8 @@ class ConfigGeneratorV2 {
       newStream['sockopt'] = newSockopt;
       outbound['streamSettings'] = newStream;
 
-      final fragmentOutbound = <String, dynamic>{
+      if (fragmentOutbound != null) continue;
+      fragmentOutbound = <String, dynamic>{
         'protocol': 'freedom',
         'tag': _fragmentTag,
         'settings': {'fragment': fragment},
@@ -609,10 +622,92 @@ class ConfigGeneratorV2 {
       // `dialerProxy`), поэтому гонка адресов нужна здесь — иначе с
       // фрагментацией она не работала бы вовсе.
       _applyHappyEyeballs(fragmentOutbound, core);
-      return fragmentOutbound;
     }
-    return null;
+    return fragmentOutbound;
   }
+
+  /// Аутбаунды «других серверов» маршрутов: тот же разбор ссылки, что у
+  /// активного сервера, под своим тегом и со своим мультиплексором. Какие
+  /// серверы сюда попадают, решает `routeServerSupported` до генерации.
+  static List<Map<String, dynamic>> _buildRouteServerOutbounds(
+    List<RouteServerOutbound> servers,
+    AppSettings settings,
+  ) {
+    final out = <Map<String, dynamic>>[];
+    for (final server in servers) {
+      final outbound = _buildLinkOutbound(server.config.trim(), settings).outbound;
+      outbound['tag'] = server.tag;
+      _applyMux(outbound, settings.xrayCore);
+      out.add(outbound);
+    }
+    return out;
+  }
+
+  /// Что забирает «другой сервер»: свои записи маршрутов и скачанные списки.
+  static ({List<String> domains, List<String> geoip, List<String> ips})
+      _routeServerMatch(RouteServerOutbound server) {
+    final split = splitDomainsAndIps(_parseRuleList(server.entries));
+    final geo = splitGeoipTokens(split.ips);
+    return (
+      domains: [
+        ..._normalizeDomains(split.domains),
+        for (final d in server.listDomains) 'domain:$d',
+      ],
+      geoip: geo.geoipCodes,
+      ips: geo.plainIps
+          .where((e) => !e.trim().toLowerCase().startsWith('geoip:'))
+          .toList(),
+    );
+  }
+
+  /// Правила маршрутов на другие серверы — те же три вида, что у списков.
+  static List<Map<String, dynamic>> _routeServerRules(
+    List<RouteServerOutbound> servers,
+    Map<String, dynamic> Function(String tag, Map<String, dynamic> fields) rule,
+  ) =>
+      [
+        for (final server in servers)
+          ...() {
+            final match = _routeServerMatch(server);
+            return [
+              if (match.domains.isNotEmpty)
+                rule('${server.tag}-domains', {
+                  'domain': match.domains,
+                  'outboundTag': server.tag,
+                }),
+              if (match.geoip.isNotEmpty)
+                rule('${server.tag}-geoip', {
+                  'ip': [for (final c in match.geoip) 'geoip:$c'],
+                  'outboundTag': server.tag,
+                }),
+              if (match.ips.isNotEmpty)
+                rule('${server.tag}-ips', {
+                  'ip': match.ips,
+                  'outboundTag': server.tag,
+                }),
+            ];
+          }(),
+      ];
+
+  /// Обращения к самим серверам маршрутов — мимо туннеля, как к активному.
+  static List<Map<String, dynamic>> _routeServerDirectRules(
+    List<RouteServerOutbound> servers,
+    String directTag,
+    Map<String, dynamic> Function(String tag, Map<String, dynamic> fields) rule,
+  ) =>
+      [
+        for (var i = 0; i < servers.length; i++)
+          if (servers[i].address.trim().isNotEmpty)
+            rule(
+              'route-server-$i',
+              _isIpLiteral(servers[i].address.trim())
+                  ? {'ip': [servers[i].address.trim()], 'outboundTag': directTag}
+                  : {
+                      'domain': ['full:${servers[i].address.trim()}'],
+                      'outboundTag': directTag,
+                    },
+            ),
+      ];
 
   /// Семейство адресов для резолва внутри freedom — из queryStrategy DNS,
   /// как и в [_applyServerDomainStrategy].
@@ -835,6 +930,7 @@ class ConfigGeneratorV2 {
     /// дескриптор ему передаёт нативная часть через переменную окружения.
     bool nativeTunInbound = false,
     GeoAssetIndex? geoIndex,
+    List<RouteServerOutbound> routeServers = const [],
   }) {
     final inbounds = _buildInbounds(
       settings,
@@ -909,6 +1005,7 @@ class ConfigGeneratorV2 {
       directTag: directTag,
       proxyTag: custom.primaryOutboundTag,
       blockTag: blockTag ?? _customBlockTag,
+      routeServers: routeServers,
     );
 
     // DNS устройства отвечает ядро, а не сервер на том конце туннеля, — и в
@@ -1055,6 +1152,7 @@ class ConfigGeneratorV2 {
     final usedTags = <String>{
       for (final rule in appendRules) rule['outboundTag'] as String,
       if (settings.lanSharing) blockTag ?? _customBlockTag,
+      if (routeServers.any((r) => r.address.trim().isNotEmpty)) directTag,
     };
 
     final config = custom.buildSessionConfig(
@@ -1078,6 +1176,11 @@ class ConfigGeneratorV2 {
           'ruleTag': 'exit-ip-probe',
           ..._exitIpProbeFields(custom.primaryOutboundTag),
         },
+        ..._routeServerDirectRules(
+          routeServers,
+          directTag,
+          (tag, fields) => {'type': 'field', 'ruleTag': tag, ...fields},
+        ),
       ],
       appendRules: appendRules,
       geoIndex: geoIndex,
@@ -1102,6 +1205,7 @@ class ConfigGeneratorV2 {
     // Дописываем только те аутбаунды, на которые реально кто-то ссылается:
     // правило с несуществующим тегом роняет разбор всего конфига.
     final extraOutbounds = <Map<String, dynamic>>[
+      ..._buildRouteServerOutbounds(routeServers, settings),
       if (usedTags.contains(_customBlockTag))
         {'protocol': 'blackhole', 'tag': _customBlockTag},
       if (usedTags.contains(_customDirectTag))
@@ -1177,6 +1281,7 @@ class ConfigGeneratorV2 {
     required String directTag,
     required String proxyTag,
     required String blockTag,
+    List<RouteServerOutbound> routeServers = const [],
   }) {
     final rules = <Map<String, dynamic>>[];
 
@@ -1216,6 +1321,10 @@ class ConfigGeneratorV2 {
 
     addGroup(settings.blockedRules, blockTag, 'user-block');
     addGroup(settings.directRules, directTag, 'user-direct');
+    rules.addAll(_routeServerRules(
+      routeServers,
+      (tag, fields) => {'type': 'field', 'ruleTag': tag, ...fields},
+    ));
     addGroup(settings.proxyRules, proxyTag, 'user-proxy');
     return rules;
   }
@@ -1975,10 +2084,13 @@ class ConfigGeneratorV2 {
   // нужно правило «мимо туннеля».
   static Map<String, dynamic> _wrapConfig(
       List<Map<String, dynamic>> proxyOutbounds, AppSettings settings, String serverAddress, int serverPort,
-      {String? originalServerAddress, List<String> extraServerAddresses = const [], int? pingSocksPort, bool pingHttpInbound = false, bool localInboundsNoAuth = false, bool nativeTunInbound = false}) {
+      {String? originalServerAddress, List<String> extraServerAddresses = const [], int? pingSocksPort, bool pingHttpInbound = false, bool localInboundsNoAuth = false, bool nativeTunInbound = false, List<RouteServerOutbound> routeServers = const []}) {
 
     originalServerAddress ??= serverAddress;
     final isPingMode = pingSocksPort != null;
+    // Другие серверы маршрутов — только у боевого конфига: пинг меряет один.
+    final routes = isPingMode ? const <RouteServerOutbound>[] : routeServers;
+    final routeOutbounds = _buildRouteServerOutbounds(routes, settings);
 
     // each list is mixed (domains + ip/cidr + geoip:); split per kind.
     final directSplit  = splitDomainsAndIps(_parseRuleList(settings.directRules));
@@ -2021,8 +2133,10 @@ class ConfigGeneratorV2 {
     // доменными правилами домен и проверяет IP-правила — корп-CIDR начинает
     // работать. Без пользовательских IP-правил остаёмся на `AsIs` (не резолвим
     // проксируемые домены — приватнее и быстрее). Явный выбор ≠ AsIs уважаем.
-    final hasUserIpRules =
-        extraDirectIps.isNotEmpty || proxyIps.isNotEmpty || blockedIps.isNotEmpty;
+    final hasUserIpRules = extraDirectIps.isNotEmpty ||
+        proxyIps.isNotEmpty ||
+        blockedIps.isNotEmpty ||
+        routes.any((r) => _routeServerMatch(r).ips.isNotEmpty);
     final effectiveDomainStrategy =
         (!isPingMode && hasUserIpRules && core.routingDomainStrategy == 'AsIs')
             ? 'IPIfNonMatch'
@@ -2030,7 +2144,11 @@ class ConfigGeneratorV2 {
     // Адреса самих серверов — в bootstrap-список DNS (см. buildDnsBlock).
     // IP-литералы туда не нужны: резолвить нечего.
     final bootstrapDomains = <String>[
-      for (final addr in [originalServerAddress, ...extraServerAddresses])
+      for (final addr in [
+        originalServerAddress,
+        ...extraServerAddresses,
+        for (final r in routes) r.address,
+      ])
         if (addr.trim().isNotEmpty && !_isIpLiteral(addr)) 'full:${addr.trim()}',
     ];
 
@@ -2185,6 +2303,7 @@ class ConfigGeneratorV2 {
           {'ip': [originalServerAddress], 'outboundTag': 'direct'}));
     }
     addChainHopDirectRules();
+    rules.addAll(_routeServerDirectRules(routes, 'direct', rule));
     if (directDomains.isNotEmpty) {
       rules.add(rule('direct-domains',
           {'domain': directDomains, 'outboundTag': 'direct'}));
@@ -2202,6 +2321,9 @@ class ConfigGeneratorV2 {
       ],
       'outboundTag': 'direct',
     }));
+    // Другие серверы маршрутов — между обходом и «через VPN»: так в разделе
+    // всех приложений стоят их маршруты (см. routesIn).
+    rules.addAll(_routeServerRules(routes, rule));
     // QUIC в vision-аутбаунд не пролезает — и узнаёт об этом ядро слишком поздно.
     //
     // При `flow=xtls-rprx-vision` xray отвергает UDP/443 (`XTLS rejected UDP/443
@@ -2260,11 +2382,12 @@ class ConfigGeneratorV2 {
     // ходит к нему через dialerProxy. В ping-режиме включаем на тех же
     // условиях: проба обязана дозваниваться ровно так же, как потом боевое
     // соединение, иначе зелёный пинг ничего не обещает.
-    final fragmentOutbound = _applyFragment(proxyOutbounds, core);
+    final fragmentOutbound =
+        _applyFragment([...proxyOutbounds, ...routeOutbounds], core);
 
     // Шум перед UDP — для тех же аутбаундов, для которых фрагментация не
     // работает, и по тому же правилу «только внешний, не звено цепочки».
-    _applyUdpNoise(proxyOutbounds, core);
+    _applyUdpNoise([...proxyOutbounds, ...routeOutbounds], core);
 
     final inbounds = _buildInbounds(
       settings,
@@ -2286,6 +2409,7 @@ class ConfigGeneratorV2 {
       'inbounds': inbounds,
       'outbounds': [
         ...proxyOutbounds,
+        ...routeOutbounds,
         {
           'protocol': 'freedom',
           'tag': 'direct',

@@ -296,6 +296,7 @@ class CustomClashConfig {
     Map<String, dynamic>? dns,
     List<String> prependRules = const [],
     List<String> appendRules = const [],
+    List<Map<String, dynamic>> extraProxies = const [],
     Map<String, dynamic> extra = const {},
   }) {
     final out = Map<String, dynamic>.from(map);
@@ -328,6 +329,16 @@ class CustomClashConfig {
       prepend: prependRules,
       append: appendRules,
     );
+
+    // Выходы «других серверов» маршрутов — после авторских: имена у них свои
+    // (`keq-srv-…`), а первым у автора остаётся его собственный узел.
+    if (extraProxies.isNotEmpty) {
+      final authorProxies = out['proxies'];
+      out['proxies'] = [
+        if (authorProxies is List) ...authorProxies,
+        ...extraProxies,
+      ];
+    }
 
     out.addAll(extra);
     return out;
