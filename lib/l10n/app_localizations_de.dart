@@ -218,6 +218,9 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get routePickEmpty => 'Keine Server, die der aktuelle Kern als eigenen Ausgang nutzen kann. Fertige Konfigurationen und Ketten passen hier nicht.';
+
+  @override
   String settingsRoutingRouteCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

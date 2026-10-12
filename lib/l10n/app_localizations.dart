@@ -473,6 +473,12 @@ abstract class AppLocalizations {
   /// **'{count, plural, =0{empty} =1{1 entry} other{{count} entries}}'**
   String settingsRoutingItemCount(int count);
 
+  /// No description provided for @routePickEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No servers the current core can run as a separate outbound. Ready-made configs and chains do not fit here.'**
+  String get routePickEmpty;
+
   /// No description provided for @settingsRoutingRouteCount.
   ///
   /// In en, this message translates to:

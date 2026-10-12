@@ -218,6 +218,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get routePickEmpty => '没有当前内核可作为独立出站使用的服务器。现成配置和链式代理不适用。';
+
+  @override
   String settingsRoutingRouteCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

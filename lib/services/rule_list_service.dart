@@ -242,6 +242,16 @@ class RuleListService {
     );
   }
 
+  /// Домены скачанных списков из ссылок в произвольных записях — для
+  /// маршрутов на другие серверы, у которых своих полей нет.
+  Future<List<String>> domainsForEntries(String entries) async {
+    final urls = ruleListUrls(entries);
+    if (urls.isEmpty) return const [];
+    final dir = (await _dir()).path;
+    final paths = [for (final url in urls) p.join(dir, '${fileId(url)}.txt')];
+    return Isolate.run(() => _readMerged(paths));
+  }
+
   /// Убирает с диска списки, ссылок на которые в настройках больше нет.
   Future<void> prune(Set<String> keepUrls) async {
     final keep = {for (final url in keepUrls) fileId(url)};

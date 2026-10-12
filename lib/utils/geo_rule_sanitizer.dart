@@ -20,38 +20,39 @@ GeoSanitizeResult stripUnknownGeoTokens(
   AppSettings settings,
   GeoAssetIndex index,
 ) {
-  if (index.isEmpty) return (settings: settings, dropped: const []);
-
-  final dropped = <String>[];
-
-  String clean(String raw) {
-    final kept = <String>[];
-    for (final token in raw.split(RegExp(r'[\r\n,]+'))) {
-      final trimmed = token.trim();
-      if (trimmed.isEmpty) continue;
-      if (isKnownGeoToken(trimmed, index)) {
-        kept.add(trimmed);
-      } else {
-        dropped.add(trimmed);
-      }
-    }
-    return kept.join(', ');
-  }
-
-  final direct = clean(settings.directRules);
-  final proxy = clean(settings.proxyRules);
-  final blocked = clean(settings.blockedRules);
+  final direct = stripUnknownGeoTokensText(settings.directRules, index);
+  final proxy = stripUnknownGeoTokensText(settings.proxyRules, index);
+  final blocked = stripUnknownGeoTokensText(settings.blockedRules, index);
+  final dropped = [...direct.dropped, ...proxy.dropped, ...blocked.dropped];
 
   if (dropped.isEmpty) return (settings: settings, dropped: const []);
 
   return (
     settings: settings.copyWith(
-      directRules: direct,
-      proxyRules: proxy,
-      blockedRules: blocked,
+      directRules: direct.text,
+      proxyRules: proxy.text,
+      blockedRules: blocked.text,
     ),
     dropped: dropped,
   );
+}
+
+/// То же, что [stripUnknownGeoTokens], для одного текста записей — у маршрутов
+/// на другие серверы списки свои, не в полях настроек.
+({String text, List<String> dropped}) stripUnknownGeoTokensText(
+  String raw,
+  GeoAssetIndex index,
+) {
+  if (index.isEmpty) return (text: raw, dropped: const []);
+  final kept = <String>[];
+  final dropped = <String>[];
+  for (final token in raw.split(RegExp(r'[\r\n,]+'))) {
+    final trimmed = token.trim();
+    if (trimmed.isEmpty) continue;
+    (isKnownGeoToken(trimmed, index) ? kept : dropped).add(trimmed);
+  }
+  if (dropped.isEmpty) return (text: raw, dropped: const []);
+  return (text: kept.join(', '), dropped: dropped);
 }
 
 /// geo-токены из текстового списка правил, которых нет в поставляемых базах.

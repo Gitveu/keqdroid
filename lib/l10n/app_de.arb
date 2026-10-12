@@ -110,6 +110,8 @@
       }
     }
   },
+  "routePickEmpty": "Keine Server, die der aktuelle Kern als eigenen Ausgang nutzen kann. Fertige Konfigurationen und Ketten passen hier nicht.",
+  "@routePickEmpty": {},
   "settingsRoutingRouteCount": "{count, plural, =0{keine Routen} =1{1 Route} other{{count} Routen}}",
   "@settingsRoutingRouteCount": {
     "placeholders": {

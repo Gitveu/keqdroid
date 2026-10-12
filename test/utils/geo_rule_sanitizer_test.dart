@@ -20,6 +20,24 @@ void main() {
         blockedRules: blocked,
       );
 
+  // Маршрут на другой сервер несёт свой список, не в полях настроек, и
+  // неизвестный код в нём уронил бы xray так же, как в полях.
+  group('stripUnknownGeoTokensText', () {
+    test('выбрасывает неизвестные коды, остальное оставляет', () {
+      final r = stripUnknownGeoTokensText(
+        'youtube.com, geosite:youtube, geosite:sberbank\ngeoip:telegram',
+        index,
+      );
+      expect(r.dropped, ['geosite:sberbank', 'geoip:telegram']);
+      expect(r.text, 'youtube.com, geosite:youtube');
+    });
+
+    test('без неизвестных кодов текст тот же самый', () {
+      const raw = 'youtube.com\ngeoip:ru';
+      expect(stripUnknownGeoTokensText(raw, index).text, same(raw));
+    });
+  });
+
   group('unknownGeoTokens', () {
     test('lists only geo tokens absent from the databases, in order', () {
       expect(

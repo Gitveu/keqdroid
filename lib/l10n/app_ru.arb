@@ -110,6 +110,8 @@
       }
     }
   },
+  "routePickEmpty": "Нет серверов, которые текущее ядро возьмёт отдельным выходом. Готовые конфиги и цепочки сюда не подходят.",
+  "@routePickEmpty": {},
   "settingsRoutingRouteCount": "{count, plural, =0{нет маршрутов} one{{count} маршрут} few{{count} маршрута} many{{count} маршрутов} other{{count} маршрута}}",
   "@settingsRoutingRouteCount": {
     "placeholders": {

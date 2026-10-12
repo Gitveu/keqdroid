@@ -368,13 +368,47 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
   }
 
   Future<void> _pickWhere(AppLocalizations l10n) async {
+    final caps = ref.read(routeCapabilitiesProvider);
+    final servers = ref.read(serversProvider).servers;
+    final current = _routeServer(_route, servers);
     final target = await _showTargetSheet(
       context,
       title: l10n.routeWhere,
       current: _route.target,
+      serverTile: caps.servers
+          ? (ctx) => ExpressiveActionTile(
+                icon: _targetIcon(RouteTarget.server),
+                title: current?.displayName ?? l10n.chainPickNode,
+                selected: current != null,
+                onTap: () => Navigator.pop(ctx, RouteTarget.server),
+              )
+          : null,
     );
     if (target == null || !mounted) return;
-    _change(_route.copyWith(target: target, serverId: ''));
+    if (target != RouteTarget.server) {
+      _change(_route.copyWith(target: target, serverId: ''));
+      return;
+    }
+    // Только то, что ядро активного сервера возьмёт отдельным выходом:
+    // остальное в маршруте всё равно ушло бы «через VPN».
+    final candidates = [
+      for (final s in servers)
+        if (routeServerSupported(s.config, caps.core)) s,
+    ];
+    final picked = await showModalBottomSheet<ServerItem>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => ServerPickerSheet(
+        title: l10n.routeWhereServers,
+        searchHint: l10n.chainPickSearch,
+        emptyText: l10n.routePickEmpty,
+        candidates: candidates,
+        selectedId: current?.id,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    _change(_route.copyWith(target: RouteTarget.server, serverId: picked.id));
   }
 
   // ── Поле сайтов ────────────────────────────────────────────────────────

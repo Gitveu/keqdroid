@@ -366,6 +366,57 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     await ref.read(settingsNotifierProvider.notifier).save(change(saved));
   }
 
+  /// Серверы маршрутов перед генерацией: неизвестные geo-коды выброшены, как и
+  /// у списков (xray на таком коде роняет весь конфиг), а ссылки на списки
+  /// развёрнуты в скачанные домены. Нечитаемый кэш списков подключению не
+  /// мешает — маршрут едет со своими записями.
+  Future<List<RouteServerOutbound>> _prepareRouteServers(
+    List<RouteServerOutbound> servers,
+  ) async {
+    if (servers.isEmpty) return servers;
+    final index = await GeoAssetService.index();
+    final lists = ref.read(ruleListServiceProvider);
+    return [
+      for (final server in servers)
+        await () async {
+          final clean = stripUnknownGeoTokensText(server.entries, index);
+          if (clean.dropped.isNotEmpty) {
+            AppLogger.instance.warn(
+              'Route to another server: geo code(s) not in the bundled bases '
+              'dropped: ${clean.dropped.join(', ')}',
+            );
+          }
+          var listed = const <String>[];
+          try {
+            listed = await lists.domainsForEntries(server.entries);
+          } catch (e) {
+            AppLogger.instance.warn('Rule lists for a route unreadable: $e');
+          }
+          return server.copyWith(entries: clean.text, listDomains: listed);
+        }(),
+    ];
+  }
+
+  /// Настройки для sing-box в десктопном TUN: сайты маршрутов на другие
+  /// серверы он обязан отдать встроенному xray (выход `proxy`), а тот уже
+  /// разведёт их по серверам. Без этого при «Всё остальное → напрямую»
+  /// sing-box отправил бы их мимо туннеля, не спросив xray.
+  static AppSettings _withRouteServersViaProxy(
+    AppSettings settings,
+    List<RouteServerOutbound> routeServers,
+  ) {
+    if (routeServers.isEmpty) return settings;
+    return settings.copyWith(
+      proxyRules: [
+        settings.proxyRules,
+        for (final server in routeServers) ...[
+          server.entries,
+          ...server.listDomains,
+        ],
+      ].where((e) => e.trim().isNotEmpty).join('\n'),
+    );
+  }
+
   Future<void> connect({bool autostartTunFallback = false}) async {
     if (_connectInFlight) {
       AppLogger.instance.debug('VPN connect() ignored: connect already in progress');
@@ -411,15 +462,40 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       } else {
         state = const AsyncData(VpnState(status: VpnStatus.connecting));
       }
+      final stored = await ref.read(storageProvider).getSettings();
+      final routes = await ref.read(storageProvider).getRoutes();
+
+      // Ядро выбирает формат сервера, а настройка — только там, где формат
+      // берут оба (обычная ссылка). Готовый конфиг исполняет то ядро, на языке
+      // которого он написан: xray-json — xray, clash-yaml — mihomo. Выбирается
+      // до свёртки маршрутов: от ядра зависит, какие «другие серверы» встанут
+      // в конфиг, а сам выбор от маршрутов не зависит.
+      final choice = resolveVpnBackend(
+        config: server.config,
+        preference: stored.vpnCore,
+        mihomoAvailable: mihomoShipsHere,
+      );
+      final routeServers = await _prepareRouteServers(
+        routeServerOutbounds(
+          routes: routes,
+          servers: ref.read(serversProvider).servers,
+          activeServerId: server.id,
+          core: choice.backend,
+        ),
+      );
+
       // Маршруты «все приложения» складываем в три текстовых списка настроек —
-      // так они попадают во все генераторы конфига без правок в них. Затем
-      // выкидываем geoip:/geosite:-коды, которых нет в поставляемых базах:
-      // xray на неизвестном коде не игнорирует правило, а падает на разборе
-      // всего конфига, и подключение умирает с «SOCKS port not ready».
+      // так они попадают во все генераторы конфига без правок в них. Маршрут
+      // на сервер без своего выхода (пропал, совпал с активным, не встаёт в
+      // это ядро) уходит «через VPN». Затем выкидываем geoip:/geosite:-коды,
+      // которых нет в поставляемых базах: xray на неизвестном коде не
+      // игнорирует правило, а падает на разборе всего конфига, и подключение
+      // умирает с «SOCKS port not ready».
       var settings = await GeoAssetService.sanitizeRules(
         foldRoutes(
-          await ref.read(storageProvider).getSettings(),
-          await ref.read(storageProvider).getRoutes(),
+          stored,
+          routes,
+          serverUsable: (r) => routeServers.any((o) => o.serverId == r.serverId),
         ),
       );
       // Свои DNS-адреса, которых ядро не исполнит, генератор выбрасывает молча
@@ -570,16 +646,9 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       final proxyModeNoAuth = connectionMode == ConnectionMode.proxy &&
           (!Platform.isAndroid || !settings.proxyModeAuth);
 
-      // Ядро выбирает формат сервера, а настройка — только там, где формат
-      // берут оба (обычная ссылка). Готовый конфиг исполняет то ядро, на языке
-      // которого он написан: xray-json — xray, clash-yaml — mihomo. Несовпадение
-      // с выбором пользователя больше не молчит: раньше это выглядело как
-      // «настройка не работает» (в списке ядер mihomo, в сессии libxray).
-      final choice = resolveVpnBackend(
-        config: server.config,
-        preference: settings.vpnCore,
-        mihomoAvailable: mihomoShipsHere,
-      );
+      // Несовпадение ядра с выбором пользователя не молчит: раньше это
+      // выглядело как «настройка не работает» (в списке ядер mihomo, в сессии
+      // libxray).
       if (choice.skip != null) {
         AppLogger.instance.warn(
           'Core preference "${settings.vpnCore}" is not used for this server: '
@@ -657,6 +726,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
                   ? ''
                   : p.basename(Platform.resolvedExecutable),
               ruleLists: ruleLists,
+              routeServers: routeServers,
             )
           : null;
 
@@ -734,6 +804,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
               localInboundsNoAuth: proxyModeNoAuth,
               geoIndex: customGeoIndex,
               nativeTunInbound: nativeTun,
+              routeServers: routeServers,
             );
 
       // Забирать ли IPv6 в туннель. Спрашиваем машину, а не только настройку:
@@ -780,7 +851,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       }
 
       final session = TunnelSessionBuilder.build(
-        settings: listedSettings,
+        settings: _withRouteServersViaProxy(listedSettings, routeServers),
         xrayConfig: xrayConfig,
         vpnBackend: vpnBackend,
         mihomoConfig: mihomoConfig,

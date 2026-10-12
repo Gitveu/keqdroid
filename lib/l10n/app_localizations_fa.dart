@@ -218,6 +218,9 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get routePickEmpty => 'سروری نیست که هستهٔ فعلی بتواند جداگانه از آن استفاده کند. کانفیگ‌های آماده و زنجیره‌ها اینجا مناسب نیستند.';
+
+  @override
   String settingsRoutingRouteCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

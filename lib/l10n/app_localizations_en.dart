@@ -218,6 +218,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get routePickEmpty => 'No servers the current core can run as a separate outbound. Ready-made configs and chains do not fit here.';
+
+  @override
   String settingsRoutingRouteCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

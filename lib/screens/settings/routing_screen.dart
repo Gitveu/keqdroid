@@ -74,13 +74,19 @@ String? _routeIssue(
 ) {
   if (!route.allApps && !caps.apps) return l10n.routeAppsUnsupported;
   if (route.target == RouteTarget.server) {
-    if (!servers.any((s) => s.id == route.serverId)) {
-      return l10n.routeServerMissing;
+    final server = servers.where((s) => s.id == route.serverId).firstOrNull;
+    if (server == null) return l10n.routeServerMissing;
+    if (!caps.servers || !routeServerSupported(server.config, caps.core)) {
+      return l10n.routeServerUnsupported;
     }
-    if (!caps.servers) return l10n.routeServerUnsupported;
   }
   return null;
 }
+
+ServerItem? _routeServer(TrafficRoute route, List<ServerItem> servers) =>
+    route.target == RouteTarget.server
+        ? servers.where((s) => s.id == route.serverId).firstOrNull
+        : null;
 
 /// «Куда» строкой: у другого сервера — его имя.
 String _targetLabel(
@@ -370,6 +376,20 @@ class _RouteTile extends StatelessWidget {
           TextSpan(
             children: [
               const TextSpan(text: '→ '),
+              // Флаг сервера — тем же значком, что в списке серверов: имя
+              // «Германия» у трёх провайдеров одинаковое, а вид флага тот же.
+              if (_routeServer(route, servers) case final server?)
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 4),
+                    child: ServerAvatar(
+                      flag: server.flag,
+                      protocol: server.protocol,
+                      size: 18,
+                    ),
+                  ),
+                ),
               TextSpan(
                 text: _targetLabel(l10n, route, servers),
                 style: TextStyle(color: color),
@@ -469,12 +489,13 @@ Future<T?> _showChoiceSheet<T>(
   );
 }
 
-/// «Куда»: через VPN, напрямую, блокировать. Другой сервер добавляет сам
-/// редактор маршрута, у «Всего остального» его нет.
+/// «Куда»: через VPN, напрямую, блокировать и — у маршрута, не у «Всего
+/// остального» — раздел «Другой сервер» с пунктом [serverTile].
 Future<RouteTarget?> _showTargetSheet(
   BuildContext context, {
   required String title,
   required RouteTarget current,
+  Widget Function(BuildContext sheetContext)? serverTile,
 }) {
   final l10n = AppLocalizations.of(context)!;
   return _showChoiceSheet<RouteTarget>(
@@ -500,6 +521,10 @@ Future<RouteTarget?> _showTargetSheet(
             ),
         ],
       ),
+      if (serverTile != null) ...[
+        ExpressiveSectionHeader(l10n.routeWhereServers),
+        ExpressiveGroup(children: [serverTile(ctx)]),
+      ],
     ],
   );
 }

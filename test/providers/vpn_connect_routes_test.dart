@@ -94,4 +94,57 @@ void main() {
     expect(xray, isNot(contains('legacy-')));
     expect(xray, isNot(contains('route-off.example')));
   });
+
+  // «Другой сервер»: свой аутбаунд для сервера из маршрута. Сервер, которого
+  // больше нет, — её решение: такой маршрут идёт через текущий сервер.
+  test('маршрут на другой сервер едет своим выходом, на пропавший — через VPN',
+      () async {
+    final backend = _Backend();
+    final storage = await buildStorageService();
+    final de = ServerItem(
+      id: 'srv-de',
+      type: ServerItemType.manual,
+      config: 'trojan://pw@de.example:443?security=tls&sni=de.example#DE',
+    );
+    await storage.saveServers([_server, de]);
+    await storage.setActiveServerId(_server.id);
+    await storage.saveRoutes(const [
+      TrafficRoute(
+        id: 'to-de',
+        sites: 'youtube.com',
+        target: RouteTarget.server,
+        serverId: 'srv-de',
+      ),
+      TrafficRoute(
+        id: 'to-gone',
+        sites: 'twitch.tv',
+        target: RouteTarget.server,
+        serverId: 'srv-gone',
+      ),
+    ]);
+
+    final container = ProviderContainer(
+      overrides: [
+        storageProvider.overrideWithValue(storage),
+        vpnEngineProvider.overrideWithValue(VpnEngine.withBackend(backend)),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(serversProvider);
+    await container.read(vpnStateProvider.future);
+
+    await container.read(vpnStateProvider.notifier).connect();
+
+    final config = jsonDecode(backend.session!.xrayConfig) as Map;
+    final outbounds = [
+      for (final o in config['outbounds'] as List) (o as Map)['tag'],
+    ];
+    expect(outbounds, contains('keq-srv-0'));
+    final rules = _rules(backend.session!.xrayConfig);
+    final toDe = rules.firstWhere((r) => r['ruleTag'] == 'keq-srv-0-domains');
+    expect(toDe['domain'], ['domain:youtube.com']);
+    expect(toDe['outboundTag'], 'keq-srv-0');
+    final viaVpn = rules.firstWhere((r) => r['ruleTag'] == 'proxy-domains');
+    expect(viaVpn['domain'], ['domain:twitch.tv']);
+  });
 }

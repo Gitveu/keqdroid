@@ -48,14 +48,25 @@ final routesProvider =
 /// не умеет, того в шторках нет, а уже заведённый маршрут с таким пунктом
 /// показывает на карточке, почему не работает.
 class RouteCapabilities {
-  const RouteCapabilities({this.apps = false, this.servers = false});
+  const RouteCapabilities({
+    this.apps = false,
+    this.servers = false,
+    this.core = VpnBackend.xray,
+  });
 
   final bool apps;
   final bool servers;
+
+  /// Ядро активного сервера: от него зависит, какой сервер встанет в маршрут
+  /// отдельным выходом (`routeServerSupported`).
+  final VpnBackend core;
 }
 
 final routeCapabilitiesProvider = Provider<RouteCapabilities>(
-  (ref) => const RouteCapabilities(),
+  (ref) => RouteCapabilities(
+    servers: true,
+    core: ref.watch(activeVpnBackendProvider),
+  ),
 );
 
 /// Разовая подсказка «списки стали маршрутами» после обновления.

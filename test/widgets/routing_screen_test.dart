@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/app/app.dart';
 import 'package:keqdroid/l10n/app_localizations.dart';
 import 'package:keqdroid/models/app_settings.dart';
+import 'package:keqdroid/models/server_item.dart';
+import 'package:keqdroid/models/subscription.dart';
 import 'package:keqdroid/models/traffic_route.dart';
 import 'package:keqdroid/providers/providers.dart';
 import 'package:keqdroid/screens/settings_tab.dart';
@@ -46,6 +48,13 @@ class _FakeRuleLists extends RuleListsNotifier {
   Map<String, RuleListStatus> build() => _statuses;
 }
 
+/// Подписки без таймера синхронизации: шторка серверов читает их ради
+/// заголовков групп.
+class _FakeSubs extends SubscriptionsNotifier {
+  @override
+  Future<List<Subscription>> build() async => const [];
+}
+
 late _FakeVpn _vpn;
 late StorageService _storage;
 
@@ -54,6 +63,7 @@ Future<ProviderContainer> _pump(
   VpnStatus status = VpnStatus.disconnected,
   AppSettings settings = const AppSettings(),
   List<TrafficRoute>? routes,
+  List<ServerItem> servers = const [],
   bool hint = false,
   Map<String, RuleListStatus> ruleLists = const {},
 }) async {
@@ -65,6 +75,10 @@ Future<ProviderContainer> _pump(
     initialValues: {if (hint) 'keqdis_routes_hint': true},
   );
   if (routes != null) await _storage.saveRoutes(routes);
+  if (servers.isNotEmpty) {
+    await _storage.saveServers(servers);
+    await _storage.setActiveServerId(servers.first.id);
+  }
   _vpn = _FakeVpn(status);
   final container = ProviderContainer(
     overrides: [
@@ -72,6 +86,7 @@ Future<ProviderContainer> _pump(
       settingsNotifierProvider.overrideWith(() => _FakeSettings(settings)),
       vpnStateProvider.overrideWith(() => _vpn),
       ruleListsProvider.overrideWith(() => _FakeRuleLists(ruleLists)),
+      subscriptionsProvider.overrideWith(_FakeSubs.new),
       vpnEngineProvider.overrideWithValue(
         VpnEngine.withBackend(FakeTunnelBackend()),
       ),
@@ -306,6 +321,74 @@ void main() {
       expect(_texts(tester), contains('chrome'));
       expect(
         _texts(tester).any((t) => t.contains('не различает приложения')),
+        isTrue,
+      );
+    });
+  });
+
+  group('другой сервер', () {
+    final active = ServerItem(
+      id: 'nl',
+      type: ServerItemType.manual,
+      config: 'vless://00000000-0000-4000-8000-000000000000@nl.example:443'
+          '?type=tcp&security=tls&sni=nl.example#Netherlands',
+    );
+    final de = ServerItem(
+      id: 'de',
+      type: ServerItemType.manual,
+      config: 'trojan://pw@de.example:443?security=tls&sni=de.example#Germany',
+    );
+    // Готовый конфиг отдельным выходом не встаёт — в списке его нет.
+    final custom = ServerItem(
+      id: 'custom',
+      type: ServerItemType.manual,
+      config: '{"remarks":"Ready JSON","outbounds":[{"protocol":"vless",'
+          '"tag":"proxy","settings":{"vnext":[{"address":"x.example",'
+          '"port":443,"users":[{"id":"00000000-0000-4000-8000-000000000000",'
+          '"encryption":"none"}]}]}}]}',
+    );
+
+    testWidgets('выбирается из списка серверов, которые возьмёт ядро',
+        (tester) async {
+      await _pump(
+        tester,
+        routes: const [TrafficRoute(id: 'r', sites: 'youtube.com')],
+        servers: [active, de, custom],
+      );
+      await tester.tap(find.text('youtube.com'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Куда'));
+      await tester.pumpAndSettle();
+      expect(find.text('Другой сервер'), findsOneWidget);
+      await tester.tap(find.text('Выберите сервер'));
+      await tester.pumpAndSettle();
+      expect(find.text('Germany'), findsOneWidget);
+      expect(find.text('Ready JSON'), findsNothing);
+      await tester.tap(find.text('Germany'));
+      await tester.pumpAndSettle();
+
+      final saved = (await _storage.getRoutes()).single;
+      expect(saved.target, RouteTarget.server);
+      expect(saved.serverId, 'de');
+      expect(find.text('Germany'), findsOneWidget,
+          reason: '«Куда» в редакторе называет выбранный сервер');
+    });
+
+    testWidgets('пропавший сервер — причина на карточке', (tester) async {
+      await _pump(
+        tester,
+        routes: const [
+          TrafficRoute(
+            id: 'r',
+            sites: 'youtube.com',
+            target: RouteTarget.server,
+            serverId: 'gone',
+          ),
+        ],
+        servers: [active],
+      );
+      expect(
+        _texts(tester).any((t) => t.contains('сервера больше нет')),
         isTrue,
       );
     });

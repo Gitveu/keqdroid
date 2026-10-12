@@ -220,6 +220,9 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get routePickEmpty => 'Нет серверов, которые текущее ядро возьмёт отдельным выходом. Готовые конфиги и цепочки сюда не подходят.';
+
+  @override
   String settingsRoutingRouteCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
