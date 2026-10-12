@@ -366,35 +366,55 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     await ref.read(settingsNotifierProvider.notifier).save(change(saved));
   }
 
-  /// Серверы маршрутов перед генерацией: неизвестные geo-коды выброшены, как и
+  /// Сайты маршрута перед генерацией: неизвестные geo-коды выброшены, как и
   /// у списков (xray на таком коде роняет весь конфиг), а ссылки на списки
   /// развёрнуты в скачанные домены. Нечитаемый кэш списков подключению не
   /// мешает — маршрут едет со своими записями.
+  Future<({String entries, List<String> listDomains})> _prepareRouteEntries(
+    String entries,
+    GeoAssetIndex index,
+  ) async {
+    final clean = stripUnknownGeoTokensText(entries, index);
+    if (clean.dropped.isNotEmpty) {
+      AppLogger.instance.warn(
+        'Route: geo code(s) not in the bundled bases dropped: '
+        '${clean.dropped.join(', ')}',
+      );
+    }
+    var listed = const <String>[];
+    try {
+      listed =
+          await ref.read(ruleListServiceProvider).domainsForEntries(entries);
+    } catch (e) {
+      AppLogger.instance.warn('Rule lists for a route unreadable: $e');
+    }
+    return (entries: clean.text, listDomains: listed);
+  }
+
   Future<List<RouteServerOutbound>> _prepareRouteServers(
     List<RouteServerOutbound> servers,
   ) async {
     if (servers.isEmpty) return servers;
     final index = await GeoAssetService.index();
-    final lists = ref.read(ruleListServiceProvider);
-    return [
-      for (final server in servers)
-        await () async {
-          final clean = stripUnknownGeoTokensText(server.entries, index);
-          if (clean.dropped.isNotEmpty) {
-            AppLogger.instance.warn(
-              'Route to another server: geo code(s) not in the bundled bases '
-              'dropped: ${clean.dropped.join(', ')}',
-            );
-          }
-          var listed = const <String>[];
-          try {
-            listed = await lists.domainsForEntries(server.entries);
-          } catch (e) {
-            AppLogger.instance.warn('Rule lists for a route unreadable: $e');
-          }
-          return server.copyWith(entries: clean.text, listDomains: listed);
-        }(),
-    ];
+    final out = <RouteServerOutbound>[];
+    for (final server in servers) {
+      final p = await _prepareRouteEntries(server.entries, index);
+      out.add(server.copyWith(entries: p.entries, listDomains: p.listDomains));
+    }
+    return out;
+  }
+
+  Future<List<RouteAppRules>> _prepareAppRoutes(
+    List<RouteAppRules> routes,
+  ) async {
+    if (routes.isEmpty) return routes;
+    final index = await GeoAssetService.index();
+    final out = <RouteAppRules>[];
+    for (final route in routes) {
+      final p = await _prepareRouteEntries(route.entries, index);
+      out.add(route.copyWith(entries: p.entries, listDomains: p.listDomains));
+    }
+    return out;
   }
 
   /// Настройки для sing-box в десктопном TUN: сайты маршрутов на другие
@@ -475,14 +495,28 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         preference: stored.vpnCore,
         mihomoAvailable: mihomoShipsHere,
       );
+      // Маршруты приложений — там же, где их обещает экран (appRoutesRun).
+      // Режим — сохранённый: если автозапуск ниже откатится в прокси,
+      // генератор без туннеля правил по процессам и так не напишет.
+      final appsRun = appRoutesRun(
+        core: choice.backend,
+        desktop: Platform.isWindows || Platform.isLinux,
+        mode: TunnelSessionBuilder.resolveMode(stored),
+      );
       final routeServers = await _prepareRouteServers(
         routeServerOutbounds(
           routes: routes,
           servers: ref.read(serversProvider).servers,
           activeServerId: server.id,
           core: choice.backend,
+          withApps: appsRun,
         ),
       );
+      final appRoutes = appsRun
+          ? await _prepareAppRoutes(
+              routeAppRules(routes: routes, outbounds: routeServers),
+            )
+          : const <RouteAppRules>[];
 
       // Маршруты «все приложения» складываем в три текстовых списка настроек —
       // так они попадают во все генераторы конфига без правок в них. Маршрут
@@ -727,6 +761,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
                   : p.basename(Platform.resolvedExecutable),
               ruleLists: ruleLists,
               routeServers: routeServers,
+              appRoutes: appRoutes,
             )
           : null;
 

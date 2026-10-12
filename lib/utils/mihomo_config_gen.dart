@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/app_settings.dart';
+import '../models/traffic_route.dart';
 import '../models/xray_core_settings.dart';
 import '../tunnel/app_routing_mode.dart';
+import 'app_routes.dart';
 import 'awg_profile.dart';
 import 'custom_clash_config.dart';
 import 'exit_ip_probe.dart';
@@ -117,6 +119,7 @@ class MihomoConfigGen {
     bool? windows,
     RuleListDomains ruleLists = RuleListDomains.none,
     List<RouteServerOutbound> routeServers = const [],
+    List<RouteAppRules> appRoutes = const [],
   }) =>
       const JsonEncoder.withIndent('  ').convert(
         build(
@@ -135,6 +138,7 @@ class MihomoConfigGen {
           windows: windows,
           ruleLists: ruleLists,
           routeServers: routeServers,
+          appRoutes: appRoutes,
         ),
       );
 
@@ -153,6 +157,8 @@ class MihomoConfigGen {
   ///
   /// [ruleLists] — домены из списков по ссылкам, см. [buildRuleListProviders].
   /// [routeServers] — «другие серверы» маршрутов, у каждого свой выход.
+  /// [appRoutes] — маршруты отдельных приложений; исполняются там же, где
+  /// правила по процессам, в остальных сессиях их нет.
   static Map<String, dynamic> build(
     String input,
     AppSettings settings, {
@@ -169,6 +175,7 @@ class MihomoConfigGen {
     bool? windows,
     RuleListDomains ruleLists = RuleListDomains.none,
     List<RouteServerOutbound> routeServers = const [],
+    List<RouteAppRules> appRoutes = const [],
   }) {
     // Правила по процессам умеет только та сторона, где ядро способно найти
     // владельца соединения: десктопный TUN. На Android их роль исполняет сам
@@ -176,6 +183,7 @@ class MihomoConfigGen {
     // непривилегированного процесса упирается в SELinux — netlink INET_DIAG и
     // `/proc/net/*` чужих uid untrusted_app не отдаются.
     final processRules = tun != null && !tun.fromFileDescriptor;
+    final appRules = processRules ? appRoutes : const <RouteAppRules>[];
 
     // Режим сплита без правил по процессам — это не «сплит не сработал», а
     // «весь трафик ушёл мимо прокси»: «только выбранные» без имён процессов
@@ -221,6 +229,7 @@ class MihomoConfigGen {
         windows: windows,
         ruleLists: ruleLists,
         routeServers: routeServers,
+        appRoutes: appRules,
       );
     }
 
@@ -255,15 +264,25 @@ class MihomoConfigGen {
         'hosts': buildHosts(settings.xrayCore),
       'dns': buildDns(settings, fakeIp: fakeIp),
       if (tun != null) 'tun': buildTun(tun),
-      if (settings.lanSharing) ...{
-        'listeners': buildLanListeners(settings),
-        'sub-rules': {lanRuleSet: buildLanRules()},
-      },
+      if (settings.lanSharing) 'listeners': buildLanListeners(settings),
+      if (settings.lanSharing || appRules.isNotEmpty)
+        'sub-rules': {
+          if (settings.lanSharing) lanRuleSet: buildLanRules(),
+          ...buildAppRouteSubRules(
+            settings,
+            appRules,
+            proxyTarget: proxyName,
+            routeServers: routeServers,
+          ),
+        },
       'proxies': [proxy, ...buildRouteServerProxies(routeServers)],
-      if (!ruleLists.isEmpty || routeServers.isNotEmpty)
+      if (!ruleLists.isEmpty ||
+          routeServers.isNotEmpty ||
+          appRules.isNotEmpty)
         'rule-providers': {
           ...buildRuleListProviders(ruleLists),
           ...buildRouteServerProviders(routeServers),
+          ...buildAppRouteProviders(appRules),
         },
       'rules': buildRules(
         settings,
@@ -276,6 +295,7 @@ class MihomoConfigGen {
         windows: windows,
         ruleLists: ruleLists,
         routeServers: routeServers,
+        appRoutes: appRules,
       ),
     };
   }
@@ -329,8 +349,10 @@ class MihomoConfigGen {
     bool? windows,
     RuleListDomains ruleLists = RuleListDomains.none,
     List<RouteServerOutbound> routeServers = const [],
+    List<RouteAppRules> appRoutes = const [],
   }) {
     final authorProviders = clash.map['rule-providers'];
+    final authorSubRules = clash.map['sub-rules'];
     return clash.buildSessionConfig(
       inbound: _inbound(
         settings,
@@ -371,14 +393,18 @@ class MihomoConfigGen {
         proxyTarget: clash.primaryTarget,
         ruleLists: ruleLists,
         routeServers: routeServers,
+        appRoutes: appRoutes,
       ),
       extraProxies: buildRouteServerProxies(routeServers),
       extra: {
-        if (!ruleLists.isEmpty || routeServers.isNotEmpty)
+        if (!ruleLists.isEmpty ||
+            routeServers.isNotEmpty ||
+            appRoutes.isNotEmpty)
           'rule-providers': {
             if (authorProviders is Map) ...authorProviders,
             ...buildRuleListProviders(ruleLists),
             ...buildRouteServerProviders(routeServers),
+            ...buildAppRouteProviders(appRoutes),
           },
         // Свои адреса для доменов — только когда автор конфига своих не
         // написал: его карта важнее нашей настройки, как и dns-блок.
@@ -387,10 +413,21 @@ class MihomoConfigGen {
           'hosts': buildHosts(settings.xrayCore),
         if (processRules) 'find-process-mode': 'strict',
         if (tun != null) 'tun': buildTun(tun),
-        if (settings.lanSharing) ...{
-          'listeners': buildLanListeners(settings),
-          'sub-rules': {lanRuleSet: buildLanRules(target: clash.primaryTarget)},
-        },
+        if (settings.lanSharing) 'listeners': buildLanListeners(settings),
+        // Наборы автора остаются: его правила на них ссылаются, и без них
+        // ядро не разобрало бы конфиг.
+        if (settings.lanSharing || appRoutes.isNotEmpty)
+          'sub-rules': {
+            if (authorSubRules is Map) ...authorSubRules,
+            if (settings.lanSharing)
+              lanRuleSet: buildLanRules(target: clash.primaryTarget),
+            ...buildAppRouteSubRules(
+              settings,
+              appRoutes,
+              proxyTarget: clash.primaryTarget,
+              routeServers: routeServers,
+            ),
+          },
       },
     );
   }
@@ -2176,6 +2213,7 @@ class MihomoConfigGen {
     bool? windows,
     RuleListDomains ruleLists = RuleListDomains.none,
     List<RouteServerOutbound> routeServers = const [],
+    List<RouteAppRules> appRoutes = const [],
   }) {
     final rules = <String>[
       exitIpProbeRule(proxyTarget),
@@ -2185,7 +2223,14 @@ class MihomoConfigGen {
         appProcessName: appProcessName,
         windows: windows,
       ),
-      ...buildUserRules(settings, blockedOnly: true, ruleLists: ruleLists),
+      ...buildUserRules(
+        settings,
+        proxyTarget: proxyTarget,
+        blockedOnly: true,
+        ruleLists: ruleLists,
+        routeServers: routeServers,
+        appRoutes: appRoutes,
+      ),
       ...buildServerDirectRules(
         serverAddress: serverAddress,
         resolvedServerIp: resolvedServerIp,
@@ -2203,6 +2248,7 @@ class MihomoConfigGen {
         skipBlocked: true,
         ruleLists: ruleLists,
         routeServers: routeServers,
+        appRoutes: appRoutes,
       ),
     ];
 
@@ -2327,15 +2373,8 @@ class MihomoConfigGen {
     final pathAlts = paths.map(processPathPattern).join('|');
     switch (routingMode) {
       case AppRoutingMode.onlySelected:
-        if (paths.isEmpty) {
-          rules.add(fromTun('PROCESS-NAME-REGEX,^(?!(?:$nameAlts)\$)'));
-        } else {
-          final anyOf = [
-            pathAlts,
-            if (names.isNotEmpty) '.*[\\x5c/](?:$nameAlts)',
-          ].join('|');
-          rules.add(fromTun('PROCESS-PATH-REGEX,^(?!(?:$anyOf)\$)'));
-        }
+        final any = _processAlternatives([...names, ...paths]);
+        rules.add(fromTun('${any.type},^(?!(?:${any.alts})\$)'));
       case AppRoutingMode.allExceptSelected:
         if (names.isNotEmpty) {
           rules.add(fromTun('PROCESS-NAME-REGEX,^(?:$nameAlts)\$'));
@@ -2348,6 +2387,126 @@ class MihomoConfigGen {
     }
     return rules;
   }
+
+  /// Записи процессов одним выражением: имена — по имени, а если есть пути,
+  /// то всё по пути, где имя — его хвост. «Любая из записей» из двух правил
+  /// собралась бы только логическим ИЛИ, и вложенность росла бы на ровном
+  /// месте.
+  static ({String type, String alts}) _processAlternatives(
+    List<String> entries,
+  ) {
+    final names = <String>[];
+    final paths = <String>[];
+    for (final entry in entries) {
+      (isProcessPathEntry(entry) ? paths : names).add(entry);
+    }
+    final nameAlts = names.map(processRegexLiteral).join('|');
+    if (paths.isEmpty) return (type: 'PROCESS-NAME-REGEX', alts: nameAlts);
+    return (
+      type: 'PROCESS-PATH-REGEX',
+      alts: [
+        paths.map(processPathPattern).join('|'),
+        if (names.isNotEmpty) '.*[\\x5c/](?:$nameAlts)',
+      ].join('|'),
+    );
+  }
+
+  /// Условие маршрута отдельных приложений: соединение из туннеля, и его
+  /// процесс — одно из приложений маршрута. Тип входа проверяется первым, и
+  /// у остальных процесс не ищется вовсе.
+  static String _appRouteCondition(RouteAppRules route) {
+    final any = _processAlternatives(route.apps);
+    return 'AND,((IN-TYPE,TUN),(${any.type},^(?:${any.alts})\$))';
+  }
+
+  static String _appRouteTarget(RouteAppRules route, String proxyTarget) =>
+      switch (route.target) {
+        RouteTarget.block => 'REJECT',
+        RouteTarget.direct => 'DIRECT',
+        RouteTarget.vpn => proxyTarget,
+        RouteTarget.server =>
+          route.serverTag.isEmpty ? proxyTarget : route.serverTag,
+      };
+
+  static String _appRouteListSet(RouteAppRules route) =>
+      'keq-list-${route.tag}';
+
+  static String _appRouteIpSet(RouteAppRules route) => '${route.tag}-ip';
+
+  /// Сайты маршрута одним набором `sub-rules` за одним условием: условие с
+  /// процессом на каждый домен проверялось бы заново на каждом домене.
+  static List<String> _appRouteBody(
+    RouteAppRules route,
+    String target,
+    String ipSuffix,
+  ) =>
+      [
+        for (final d in splitDomainsAndIps(_parseRuleList(route.entries)).domains)
+          '${_domainRule(d)},$target',
+        if (route.listDomains.isNotEmpty)
+          'RULE-SET,${_appRouteListSet(route)},$target',
+        ..._ipRules(route.entries, target, ipSuffix),
+      ];
+
+  /// Правила маршрутов отдельных приложений: «весь трафик» — одним правилом,
+  /// сайты — переходом в свой набор. Ничего в наборе не совпало — проверка
+  /// идёт дальше по общему списку (`matchSubRules` в ядре), поэтому сайты
+  /// маршрута не отнимают у приложения остальных правил.
+  static List<String> _appRouteRules(
+    List<RouteAppRules> routes,
+    String proxyTarget,
+    String suffix,
+  ) =>
+      [
+        for (final route in routes)
+          if (route.allTraffic)
+            '${_appRouteCondition(route)},${_appRouteTarget(route, proxyTarget)}'
+          else if (_appRouteBody(
+            route,
+            _appRouteTarget(route, proxyTarget),
+            suffix,
+          ).isNotEmpty)
+            'SUB-RULE,(${_appRouteCondition(route)}),${route.tag}',
+      ];
+
+  /// Наборы правил маршрутов приложений для `sub-rules`. Маршруты — все
+  /// сразу: от них зависит стратегия резолва, и она обязана совпасть с той,
+  /// что у [buildUserRules].
+  static Map<String, List<String>> buildAppRouteSubRules(
+    AppSettings settings,
+    List<RouteAppRules> routes, {
+    required String proxyTarget,
+    List<RouteServerOutbound> routeServers = const [],
+  }) {
+    final strategy = _ipRuleStrategy(settings, routeServers, routes);
+    final suffix = _ipSuffix(strategy);
+    final sets = <String, List<String>>{};
+    for (final route in routes) {
+      if (route.allTraffic) continue;
+      final target = _appRouteTarget(route, proxyTarget);
+      final body = _appRouteBody(route, target, suffix);
+      if (body.isNotEmpty) sets[route.tag] = body;
+      final tail = _ipRules(route.entries, target, '');
+      if (strategy == 'IPIfNonMatch' && tail.isNotEmpty) {
+        sets[_appRouteIpSet(route)] = tail;
+      }
+    }
+    return sets;
+  }
+
+  /// Скачанные списки маршрутов приложений — своим набором у каждого.
+  static Map<String, dynamic> buildAppRouteProviders(
+    List<RouteAppRules> routes,
+  ) =>
+      {
+        for (final route in routes)
+          if (!route.allTraffic && route.listDomains.isNotEmpty)
+            _appRouteListSet(route): {
+              'type': 'inline',
+              'behavior': 'domain',
+              'payload': [for (final d in route.listDomains) '+.$d'],
+            },
+      };
 
   /// Сам сервер — мимо туннеля, иначе обращение к его адресу закольцуется.
   ///
@@ -2396,37 +2555,50 @@ class MihomoConfigGen {
     bool skipBlocked = false,
     RuleListDomains ruleLists = RuleListDomains.none,
     List<RouteServerOutbound> routeServers = const [],
+    List<RouteAppRules> appRoutes = const [],
   }) {
     final rules = <String>[];
-    final strategy = _ipRuleStrategy(settings, routeServers);
-    final inPlace = strategy == 'IPOnDemand' ? '' : ',no-resolve';
-
-    List<String> ipRules(String raw, String target, String suffix) {
-      final geo = splitGeoipTokens(splitDomainsAndIps(_parseRuleList(raw)).ips);
-      return [
-        for (final code in geo.geoipCodes) 'GEOIP,$code,$target$suffix',
-        for (final ip in geo.plainIps) 'IP-CIDR,${_cidr(ip)},$target$suffix',
-      ];
-    }
+    final strategy = _ipRuleStrategy(settings, routeServers, appRoutes);
+    final inPlace = _ipSuffix(strategy);
+    final appBlock = [
+      for (final r in appRoutes)
+        if (r.target == RouteTarget.block) r,
+    ];
+    final appOther = [
+      for (final r in appRoutes)
+        if (r.target != RouteTarget.block) r,
+    ];
+    List<String> appRules(List<RouteAppRules> routes) =>
+        _appRouteRules(routes, proxyTarget, inPlace);
 
     void addGroup(String raw, String target, String listSet, List<String> listed) {
       for (final d in splitDomainsAndIps(_parseRuleList(raw)).domains) {
         rules.add('${_domainRule(d)},$target');
       }
       if (listed.isNotEmpty) rules.add('RULE-SET,$listSet,$target');
-      rules.addAll(ipRules(raw, target, inPlace));
+      rules.addAll(_ipRules(raw, target, inPlace));
     }
 
+    // Блокировка действует во всех приложениях, и в тех, у кого свой маршрут.
     if (!skipBlocked) {
       addGroup(settings.blockedRules, 'REJECT', blockListSet, ruleLists.blocked);
+      rules.addAll(appRules(appBlock));
     }
     if (blockedOnly) return rules;
 
-    addGroup(settings.directRules, 'DIRECT', directListSet, ruleLists.direct);
     // Приватные сети резолва не получают ни при какой стратегии, как и раньше.
-    for (final range in _privateRanges) {
-      rules.add('IP-CIDR,$range,DIRECT,no-resolve');
+    // При маршрутах приложений — до них: «весь трафик на сервер» не должен
+    // увозить туда и роутер с принтером.
+    final privateRanges = [
+      for (final range in _privateRanges) 'IP-CIDR,$range,DIRECT,no-resolve',
+    ];
+    if (appOther.isNotEmpty) {
+      rules
+        ..addAll(privateRanges)
+        ..addAll(appRules(appOther));
     }
+    addGroup(settings.directRules, 'DIRECT', directListSet, ruleLists.direct);
+    if (appOther.isEmpty) rules.addAll(privateRanges);
     // Другие серверы — между обходом и «через VPN»: так в разделе всех
     // приложений стоят их маршруты (см. routesIn).
     for (final server in routeServers) {
@@ -2440,13 +2612,22 @@ class MihomoConfigGen {
     addGroup(settings.proxyRules, proxyTarget, proxyListSet, ruleLists.proxy);
 
     if (strategy == 'IPIfNonMatch') {
-      rules
-        ..addAll(ipRules(settings.blockedRules, 'REJECT', ''))
-        ..addAll(ipRules(settings.directRules, 'DIRECT', ''));
-      for (final server in routeServers) {
-        rules.addAll(ipRules(server.entries, server.tag, ''));
+      rules.addAll(_ipRules(settings.blockedRules, 'REJECT', ''));
+      // Хвост с резолвом у маршрутов приложений — своими наборами, за тем же
+      // условием, что и их сайты.
+      for (final route in [...appBlock, ...appOther]) {
+        if (route.allTraffic) continue;
+        final target = _appRouteTarget(route, proxyTarget);
+        if (_ipRules(route.entries, target, '').isEmpty) continue;
+        rules.add(
+          'SUB-RULE,(${_appRouteCondition(route)}),${_appRouteIpSet(route)}',
+        );
       }
-      rules.addAll(ipRules(settings.proxyRules, proxyTarget, ''));
+      rules.addAll(_ipRules(settings.directRules, 'DIRECT', ''));
+      for (final server in routeServers) {
+        rules.addAll(_ipRules(server.entries, server.tag, ''));
+      }
+      rules.addAll(_ipRules(settings.proxyRules, proxyTarget, ''));
     }
     return rules;
   }
@@ -2458,6 +2639,7 @@ class MihomoConfigGen {
   static String _ipRuleStrategy(
     AppSettings settings, [
     List<RouteServerOutbound> routeServers = const [],
+    List<RouteAppRules> appRoutes = const [],
   ]) {
     final chosen = settings.xrayCore.routingDomainStrategy;
     if (chosen != 'AsIs') return chosen;
@@ -2467,9 +2649,22 @@ class MihomoConfigGen {
     final hasUserIps = ips(settings.blockedRules).isNotEmpty ||
         ips(settings.proxyRules).isNotEmpty ||
         routeServers.any((s) => ips(s.entries).isNotEmpty) ||
+        appRoutes.any((r) => ips(r.entries).isNotEmpty) ||
         ips(settings.directRules)
             .any((ip) => !kBasePrivateRanges.contains(ip.trim()));
     return hasUserIps ? 'IPIfNonMatch' : 'AsIs';
+  }
+
+  /// Хвост IP-правила на своём месте: резолв — только у `IPOnDemand`.
+  static String _ipSuffix(String strategy) =>
+      strategy == 'IPOnDemand' ? '' : ',no-resolve';
+
+  static List<String> _ipRules(String raw, String target, String suffix) {
+    final geo = splitGeoipTokens(splitDomainsAndIps(_parseRuleList(raw)).ips);
+    return [
+      for (final code in geo.geoipCodes) 'GEOIP,$code,$target$suffix',
+      for (final ip in geo.plainIps) 'IP-CIDR,${_cidr(ip)},$target$suffix',
+    ];
   }
 
   static String _finalTarget(String finalOutbound, String proxyTarget) =>

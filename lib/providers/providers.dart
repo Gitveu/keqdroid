@@ -41,6 +41,7 @@ import '../tunnel/app_routing_mode.dart';
 import '../tunnel/local_port_plan.dart';
 import '../tunnel/vpn_backend.dart';
 import '../utils/app_locale.dart';
+import '../utils/app_routes.dart';
 import '../utils/awg_profile.dart';
 import '../utils/awg_uri.dart';
 import '../utils/config_gen.dart';

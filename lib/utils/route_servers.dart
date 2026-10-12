@@ -56,28 +56,38 @@ class RouteServerOutbound {
       );
 }
 
-/// Выходы для маршрутов «все приложения» на другие серверы.
+/// Выходы для маршрутов на другие серверы.
 ///
 /// Маршрут остаётся без выхода, если его сервер пропал, совпадает с
 /// активным (это и так «через VPN») или не встаёт в ядро сессии. При
 /// сворачивании такие маршруты уходят «через VPN» (см. [foldRoutes]).
+///
+/// Маршруты отдельных приложений получают выход только при [withApps] —
+/// там, где ядро их исполнит (см. `appRoutesRun`). Их сайты в [entries]
+/// выхода не попадают: у них свои правила, только для своих приложений.
 List<RouteServerOutbound> routeServerOutbounds({
   required List<TrafficRoute> routes,
   required List<ServerItem> servers,
   required String? activeServerId,
   required VpnBackend core,
+  bool withApps = false,
 }) {
   final byId = {for (final s in servers) s.id: s};
   final entries = <String, List<String>>{};
   for (final route in orderedRoutes(routes)) {
-    if (!route.enabled || !route.allApps) continue;
+    if (!route.enabled || (!route.allApps && !withApps)) continue;
     if (route.target != RouteTarget.server) continue;
     final server = byId[route.serverId];
     if (server == null || server.id == activeServerId) continue;
     if (!routeServerSupported(server.config, core)) continue;
-    final text = routeEntriesText(route).trim();
-    if (text.isEmpty) continue;
-    entries.putIfAbsent(server.id, () => []).add(text);
+    if (route.allApps) {
+      final text = routeEntriesText(route).trim();
+      if (text.isEmpty) continue;
+      entries.putIfAbsent(server.id, () => []).add(text);
+    } else if (!routeIsEmpty(route) &&
+        route.apps.any((app) => app.trim().isNotEmpty)) {
+      entries.putIfAbsent(server.id, () => []);
+    }
   }
   var index = 0;
   return [

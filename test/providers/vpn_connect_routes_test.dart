@@ -147,4 +147,70 @@ void main() {
     final viaVpn = rules.firstWhere((r) => r['ruleTag'] == 'proxy-domains');
     expect(viaVpn['domain'], ['domain:twitch.tv']);
   });
+
+  // Отдельные приложения: только mihomo в своём туннеле на ПК, как обещает
+  // экран. В режиме прокси ядро не узнает процесс, и правил нет вовсе.
+  group('маршрут приложения', () {
+    Future<_Backend> connectWith(String connectionMode) async {
+      final backend = _Backend();
+      final storage = await buildStorageService();
+      final de = ServerItem(
+        id: 'srv-de',
+        type: ServerItemType.manual,
+        config: 'trojan://pw@de.example:443?security=tls&sni=de.example#DE',
+      );
+      await storage.saveServers([_server, de]);
+      await storage.setActiveServerId(_server.id);
+      await storage.saveSettings(AppSettings(
+        vpnCore: AppSettings.vpnCoreMihomo,
+        connectionMode: connectionMode,
+      ));
+      await storage.saveRoutes(const [
+        TrafficRoute(
+          id: 'chrome',
+          apps: ['chrome.exe'],
+          sites: 'youtube.com, geosite:no-such-code',
+          target: RouteTarget.server,
+          serverId: 'srv-de',
+        ),
+      ]);
+      final container = ProviderContainer(
+        overrides: [
+          storageProvider.overrideWithValue(storage),
+          vpnEngineProvider.overrideWithValue(VpnEngine.withBackend(backend)),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(serversProvider);
+      await container.read(vpnStateProvider.future);
+      await container.read(vpnStateProvider.notifier).connect();
+      return backend;
+    }
+
+    test('в TUN — правило по процессу на свой сервер', () async {
+      final backend = await connectWith('tun');
+      final config =
+          jsonDecode(backend.session!.mihomoConfig!) as Map<String, dynamic>;
+      final rules = (config['rules'] as List).cast<String>();
+      expect(
+        rules.where((r) => r.startsWith('SUB-RULE,') && r.contains('chrome')),
+        hasLength(1),
+      );
+      // Неизвестный geo-код выброшен: mihomo на нём не поднялся бы.
+      expect((config['sub-rules'] as Map)['keq-app-0'], [
+        'DOMAIN-SUFFIX,youtube.com,keq-srv-0',
+      ]);
+      expect(
+        (config['proxies'] as List).map((p) => (p as Map)['name']),
+        contains('keq-srv-0'),
+      );
+    });
+
+    test('в режиме прокси правил по процессу нет', () async {
+      final backend = await connectWith('proxy');
+      final config = backend.session!.mihomoConfig!;
+      expect(config, isNot(contains('chrome')));
+      expect(config, isNot(contains('keq-srv-0')));
+    });
+  });
 }

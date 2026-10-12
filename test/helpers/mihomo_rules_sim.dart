@@ -59,6 +59,47 @@ String simulateMihomo(
   return 'DIRECT';
 }
 
+/// Цели всех правил, которых ядро не найдёт: та же проверка, что в
+/// `config.parseRules` — у `SUB-RULE` цель — набор, у остальных — выход.
+/// Пустой список — конфиг по этой части разберётся.
+List<String> unknownMihomoTargets(Map<String, dynamic> config) {
+  final outbounds = <String>{
+    'DIRECT',
+    'REJECT',
+    'REJECT-DROP',
+    'PASS',
+    for (final p in (config['proxies'] as List?) ?? const []) '${p['name']}',
+    for (final g in (config['proxy-groups'] as List?) ?? const [])
+      '${g['name']}',
+  };
+  final sets = <String>{
+    for (final k in ((config['sub-rules'] as Map?) ?? const {}).keys) '$k',
+  };
+  final providers = <String>{
+    for (final k in ((config['rule-providers'] as Map?) ?? const {}).keys) '$k',
+  };
+  final problems = <String>[];
+  void check(String raw) {
+    final p = _parse(raw, needTarget: true);
+    final known = outbounds.contains(p.target) ||
+        (p.type == 'SUB-RULE' && sets.contains(p.target));
+    if (!known) problems.add('$raw: нет цели ${p.target}');
+    if (p.type == 'RULE-SET' && !providers.contains(p.payload)) {
+      problems.add('$raw: нет набора ${p.payload}');
+    }
+  }
+
+  for (final r in (config['rules'] as List?) ?? const []) {
+    check('$r');
+  }
+  for (final list in ((config['sub-rules'] as Map?) ?? const {}).values) {
+    for (final r in list as List) {
+      check('$r');
+    }
+  }
+  return problems;
+}
+
 /// Верхние подправила логического правила, как `Logic.parsePayload`.
 List<String> mihomoLogicParts(String payload) {
   if (!payload.startsWith('(') || !payload.endsWith(')')) {
@@ -206,6 +247,8 @@ class _Sim {
           .any((t) =>
               t == conn.inType ||
               (t == 'SOCKS' && conn.inType.startsWith('SOCKS'))),
+      // Соединения симулятора — TCP.
+      'NETWORK' => p.payload.toUpperCase() == 'TCP',
       'PROCESS-NAME' => conn.process.toLowerCase() == p.payload.toLowerCase(),
       'PROCESS-NAME-REGEX' =>
         RegExp(p.payload, caseSensitive: false).hasMatch(conn.process),
