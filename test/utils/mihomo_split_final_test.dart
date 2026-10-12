@@ -64,7 +64,8 @@ void main() {
     expect(
       rules,
       contains(
-        r'PROCESS-NAME-REGEX,^(?!(?:firefox\x2eexe|Discord\x2eexe)$),DIRECT',
+        r'AND,((IN-TYPE,TUN),'
+        r'(PROCESS-NAME-REGEX,^(?!(?:firefox\x2eexe|Discord\x2eexe)$))),DIRECT',
       ),
       reason: 'не выбранные приложения обязаны идти напрямую',
     );

@@ -1511,7 +1511,10 @@ void main() {
       expect(rules.any((r) => r.contains('tailscaled')), isFalse);
       expect(
         rules,
-        contains(r'PROCESS-NAME-REGEX,^(?:Telegram\x2eexe)$,DIRECT'),
+        contains(
+          r'AND,((IN-TYPE,TUN),(PROCESS-NAME-REGEX,^(?:Telegram\x2eexe)$)),'
+          'DIRECT',
+        ),
       );
       // Остальные приложения идут по спискам и «Всё остальное» (здесь прокси).
       expect(rules.last, 'MATCH,proxy');
@@ -1525,7 +1528,10 @@ void main() {
       );
       expect(
         rules,
-        contains(r'PROCESS-NAME-REGEX,^(?!(?:chrome\x2eexe)$),DIRECT'),
+        contains(
+          r'AND,((IN-TYPE,TUN),(PROCESS-NAME-REGEX,^(?!(?:chrome\x2eexe)$))),'
+          'DIRECT',
+        ),
       );
       expect(rules.any((r) => r.startsWith('PROCESS-NAME,chrome')), isFalse);
       expect(rules.last, 'MATCH,proxy');

@@ -2088,8 +2088,7 @@ class MihomoConfigGen {
       _parseList(s).where((e) => !isRuleListUrl(e)).toList();
 
   /// Проверка выхода для флага в статусе — через сервер сессии, раньше
-  /// правил пользователя, автора готового конфига и сплита (его «невыбранные
-  /// — напрямую» иначе поймал бы и процесс приложения на HTTP-входе); см.
+  /// правил пользователя и автора готового конфига; см.
   /// [kExitIpProbeHost]. Трафик туннеля к тому же хосту идёт по общим
   /// правилам: адрес сервера за CDN бывает ровно этим хостом, и правило
   /// раньше защиты от петли не должно его перехватить.
@@ -2310,6 +2309,12 @@ class MihomoConfigGen {
     // Запись с путём сверяется с путём процесса, имя — с именем. У «только
     // выбранных» оба вида в одном правиле по пути (имя — его хвост): «ни одна
     // запись не совпала» из двух правил собралось бы только логическим И.
+    //
+    // И только для соединений из туннеля, как правило самого приложения выше:
+    // на HTTP-вход оно шлёт подписки и апдейтер, и «невыбранное — мимо»
+    // уводило их напрямую. Парные скобки регулярки логическому правилу не
+    // мешают: ядро делит его по верхним скобкам, вложенные остаются в теле.
+    String fromTun(String rule) => 'AND,((IN-TYPE,TUN),($rule)),DIRECT';
     final names = <String>[];
     final paths = <String>[];
     for (final process in managedProcessNames) {
@@ -2323,20 +2328,20 @@ class MihomoConfigGen {
     switch (routingMode) {
       case AppRoutingMode.onlySelected:
         if (paths.isEmpty) {
-          rules.add('PROCESS-NAME-REGEX,^(?!(?:$nameAlts)\$),DIRECT');
+          rules.add(fromTun('PROCESS-NAME-REGEX,^(?!(?:$nameAlts)\$)'));
         } else {
           final anyOf = [
             pathAlts,
             if (names.isNotEmpty) '.*[\\x5c/](?:$nameAlts)',
           ].join('|');
-          rules.add('PROCESS-PATH-REGEX,^(?!(?:$anyOf)\$),DIRECT');
+          rules.add(fromTun('PROCESS-PATH-REGEX,^(?!(?:$anyOf)\$)'));
         }
       case AppRoutingMode.allExceptSelected:
         if (names.isNotEmpty) {
-          rules.add('PROCESS-NAME-REGEX,^(?:$nameAlts)\$,DIRECT');
+          rules.add(fromTun('PROCESS-NAME-REGEX,^(?:$nameAlts)\$'));
         }
         if (paths.isNotEmpty) {
-          rules.add('PROCESS-PATH-REGEX,^(?:$pathAlts)\$,DIRECT');
+          rules.add(fromTun('PROCESS-PATH-REGEX,^(?:$pathAlts)\$'));
         }
       case AppRoutingMode.allProxy:
         break;
