@@ -57,7 +57,9 @@ IconData _contentIcon(TrafficRoute route) => switch (route.content) {
 
 /// Имя приложения из записи сплита: путь режется до файла, `.exe` у имени
 /// процесса на экране лишний.
-String _appLabel(String entry) {
+String _appLabel(String entry, [List<AppInfo> installed = const []]) {
+  final app = _installedApp(entry, installed);
+  if (app != null && app.appName.isNotEmpty) return app.appName;
   var name = normalizeProcessName(entry);
   if (name.toLowerCase().endsWith('.exe')) {
     name = name.substring(0, name.length - 4);
@@ -65,11 +67,26 @@ String _appLabel(String entry) {
   return name;
 }
 
+AppInfo? _installedApp(String entry, List<AppInfo> installed) =>
+    installed.where((app) => splitEntryMatches(entry, app)).firstOrNull;
+
+// на Android запись маршрута это имя пакета, название и иконку даёт само
+// приложение; на ПК подпись и есть имя программы
+List<AppInfo> _installedForLabels(WidgetRef ref, List<TrafficRoute> routes) {
+  if (!Platform.isAndroid || routes.every((r) => r.allApps)) return const [];
+  return ref.watch(installedAppsProvider(true)).value ?? const [];
+}
+
 /// Значок маршрута приложений — первого из них: у записи с путём это иконка
 /// самой программы, у имени — его буква, как в шторке «Кто».
-Widget _appsBadge(List<String> apps, AppIconCache cache) => AppIconView(
-      iconBase64: null,
-      appName: _appLabel(apps.first),
+Widget _appsBadge(
+  List<String> apps,
+  AppIconCache cache, [
+  List<AppInfo> installed = const [],
+]) =>
+    AppIconView(
+      iconBase64: _installedApp(apps.first, installed)?.iconBase64,
+      appName: _appLabel(apps.first, installed),
       iconPath: isProcessPathEntry(apps.first) ? apps.first : null,
       cache: cache,
     );
@@ -81,6 +98,7 @@ String? _routeIssue(
   RouteCapabilities caps,
   List<ServerItem> servers,
   SplitTunnelingState split,
+  List<AppInfo> installed,
 ) {
   if (!route.allApps) {
     if (!caps.apps) {
@@ -94,7 +112,7 @@ String? _routeIssue(
     );
     if (outside.isNotEmpty) {
       return l10n.routeSplitExcluded(
-        ltrIsolate(outside.map(_appLabel).join(', ')),
+        ltrIsolate(outside.map((a) => _appLabel(a, installed)).join(', ')),
       );
     }
   }
@@ -123,9 +141,11 @@ String _targetLabel(
       RouteTarget.vpn => l10n.routeToVpn,
       RouteTarget.direct => l10n.routeToDirect,
       RouteTarget.block => l10n.routeToBlock,
-      RouteTarget.server =>
-        servers.where((s) => s.id == route.serverId).firstOrNull?.displayName ??
-            l10n.routeToVpn,
+      // флаг рисуется значком рядом, а в имени он часто стоит эмодзи
+      RouteTarget.server => switch (_routeServer(route, servers)) {
+          final server? => ServerNameUtils.cleanDisplayName(server.displayName),
+          null => l10n.routeToVpn,
+        },
     };
 
 /// «Что» строкой: список сайтов, имя готового списка или «весь трафик».
@@ -173,6 +193,7 @@ class _RoutingScreen extends ConsumerWidget {
     final servers = ref.watch(serversProvider.select((s) => s.servers));
     final split = ref.watch(splitTunnelingProvider);
     final iconCache = ref.read(appIconCacheProvider);
+    final installed = _installedForLabels(ref, routes);
     final finalTarget = _finalTarget(
       ref.watch(
         settingsNotifierProvider.select(
@@ -185,7 +206,8 @@ class _RoutingScreen extends ConsumerWidget {
           route: route,
           servers: servers,
           iconCache: iconCache,
-          issue: _routeIssue(l10n, route, caps, servers, split),
+          installed: installed,
+          issue: _routeIssue(l10n, route, caps, servers, split, installed),
           onTap: () => _openRouteEditor(context, route),
         );
 
@@ -389,6 +411,7 @@ class _RouteTile extends StatelessWidget {
     required this.route,
     required this.servers,
     required this.iconCache,
+    required this.installed,
     required this.issue,
     required this.onTap,
   });
@@ -396,6 +419,7 @@ class _RouteTile extends StatelessWidget {
   final TrafficRoute route;
   final List<ServerItem> servers;
   final AppIconCache iconCache;
+  final List<AppInfo> installed;
   final String? issue;
   final VoidCallback onTap;
 
@@ -405,7 +429,7 @@ class _RouteTile extends StatelessWidget {
     final color = _targetColor(context, route.target);
     final title = route.allApps
         ? _contentLabel(l10n, route)
-        : route.apps.map(_appLabel).join(', ');
+        : route.apps.map((a) => _appLabel(a, installed)).join(', ');
     final details = [
       if (!route.allApps) _contentLabel(l10n, route),
       if (!route.enabled) l10n.routeDisabledShort,
@@ -416,7 +440,7 @@ class _RouteTile extends StatelessWidget {
         dimmed: !route.enabled,
         badge: route.allApps
             ? ExpressiveIconBadge(icon: _contentIcon(route))
-            : _appsBadge(route.apps, iconCache),
+            : _appsBadge(route.apps, iconCache, installed),
         title: Text(title),
         note: issue == null ? null : Text(issue!),
         subtitle: Text.rich(

@@ -70,6 +70,7 @@ Future<ProviderContainer> _pump(
   Map<String, RuleListStatus> ruleLists = const {},
   RouteCapabilities? caps,
   List<AppInfo> apps = const [],
+  List<AppInfo> systemApps = const [],
   List<String> splitExclude = const [],
   List<String> splitInclude = const [],
 }) async {
@@ -100,6 +101,8 @@ Future<ProviderContainer> _pump(
       ),
       if (caps != null) routeCapabilitiesProvider.overrideWithValue(caps),
       installedAppsProvider(false).overrideWith((ref) async => apps),
+      installedAppsProvider(true)
+          .overrideWith((ref) async => [...apps, ...systemApps]),
     ],
   );
   addTearDown(container.dispose);
@@ -384,6 +387,36 @@ void main() {
           reason: '«Куда» в редакторе называет выбранный сервер');
     });
 
+    testWidgets('флаг сервера один: значком, а не ещё и эмодзи в имени',
+        (tester) async {
+      final flagged = ServerItem(
+        id: 'de',
+        type: ServerItemType.manual,
+        config: 'trojan://pw@de.example:443?security=tls&sni=de.example'
+            '#${Uri.encodeComponent('🇩🇪 Germany')}',
+      );
+      await _pump(
+        tester,
+        routes: const [
+          TrafficRoute(
+            id: 'r',
+            sites: 'youtube.com',
+            target: RouteTarget.server,
+            serverId: 'de',
+          ),
+        ],
+        servers: [active, flagged],
+      );
+      expect(_texts(tester).any((t) => t.contains('Germany')), isTrue);
+      expect(_texts(tester).any((t) => t.contains('🇩🇪')), isFalse);
+
+      await tester.tap(find.text('youtube.com'));
+      await tester.pumpAndSettle();
+      expect(_texts(tester).any((t) => t.contains('Germany')), isTrue);
+      expect(_texts(tester).any((t) => t.contains('🇩🇪')), isFalse,
+          reason: 'в редакторе флаг тоже значком');
+    });
+
     testWidgets('пропавший сервер — причина на карточке', (tester) async {
       await _pump(
         tester,
@@ -540,6 +573,33 @@ void main() {
       final saved = (await _storage.getRoutes()).single;
       expect(saved.apps, ['chrome.exe', 'firefox.exe']);
       expect(find.text('chrome, firefox'), findsOneWidget);
+    });
+
+    testWidgets('системные приложения — по кнопке, как в сплите',
+        (tester) async {
+      const system = AppInfo(
+        packageName: 'svchost.exe',
+        appName: 'svchost.exe',
+        isSystem: true,
+      );
+      await _pump(
+        tester,
+        routes: const [TrafficRoute(id: 'r', sites: 'youtube.com')],
+        caps: caps,
+        apps: const [chrome],
+        systemApps: const [system],
+      );
+      await tester.tap(find.text('youtube.com'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Кто'));
+      await tester.pumpAndSettle();
+      expect(find.text('svchost.exe'), findsNothing);
+
+      await tester.tap(find.byTooltip('Показать системные'));
+      await tester.pumpAndSettle();
+      expect(find.text('svchost.exe'), findsWidgets);
+      expect(find.text('chrome.exe'), findsWidgets);
+      expect(find.byTooltip('Скрыть системные'), findsOneWidget);
     });
 
     testWidgets('«Все приложения» снимает выбор, «весь трафик» уходит',

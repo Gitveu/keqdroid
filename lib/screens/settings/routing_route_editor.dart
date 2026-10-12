@@ -105,7 +105,14 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     final caps = ref.watch(routeCapabilitiesProvider);
     final servers = ref.watch(serversProvider.select((s) => s.servers));
     final split = ref.watch(splitTunnelingProvider);
-    final issue = _routeIssue(l10n, _route, caps, servers, split);
+    final issue = _routeIssue(
+      l10n,
+      _route,
+      caps,
+      servers,
+      split,
+      _installedForLabels(ref, [_route]),
+    );
     return PopScope(
       // Набор в поле сохраняется на паузе; уход с экрана раньше паузы её не
       // теряет. Здесь, а не в dispose: там ref уже нельзя трогать.
@@ -180,17 +187,22 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
   // ── Кто ────────────────────────────────────────────────────────────────
 
   Widget _whoTile(AppLocalizations l10n) {
+    final installed = _installedForLabels(ref, [_route]);
     return ExpressiveGroupTile(
       onTap: () => unawaited(_pickWho()),
       child: _RouteRowContent(
         badge: _route.allApps
             ? const ExpressiveIconBadge(icon: Icons.apps_rounded)
-            : _appsBadge(_route.apps, ref.read(appIconCacheProvider)),
+            : _appsBadge(
+                _route.apps,
+                ref.read(appIconCacheProvider),
+                installed,
+              ),
         title: Text(l10n.routeWho),
         subtitle: Text(
           _route.allApps
               ? l10n.routesSectionAllApps
-              : _route.apps.map(_appLabel).join(', '),
+              : _route.apps.map((a) => _appLabel(a, installed)).join(', '),
         ),
       ),
     );
@@ -342,14 +354,19 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
 
   Widget _whereTile(AppLocalizations l10n, List<ServerItem> servers) {
     final color = _targetColor(context, _route.target);
+    final server = _route.target == RouteTarget.server
+        ? _routeServer(_route, servers)
+        : null;
     return ExpressiveGroupTile(
       onTap: () => unawaited(_pickWhere(l10n)),
       child: _RouteRowContent(
-        badge: ExpressiveIconBadge(
-          icon: _targetIcon(_route.target),
-          background: color.withValues(alpha: 0.16),
-          foreground: color,
-        ),
+        badge: server != null
+            ? ServerAvatar(flag: server.flag, protocol: server.protocol)
+            : ExpressiveIconBadge(
+                icon: _targetIcon(_route.target),
+                background: color.withValues(alpha: 0.16),
+                foreground: color,
+              ),
         title: Text(l10n.routeWhere),
         subtitle: Text(switch (_route.target) {
           RouteTarget.vpn => l10n.settingsRoutingProxyTitle,
@@ -372,7 +389,9 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
       serverTile: caps.servers
           ? (ctx) => ExpressiveActionTile(
                 icon: _targetIcon(RouteTarget.server),
-                title: current?.displayName ?? l10n.chainPickNode,
+                title: current == null
+                    ? l10n.chainPickNode
+                    : ServerNameUtils.cleanDisplayName(current.displayName),
                 selected: current != null,
                 onTap: () => Navigator.pop(ctx, RouteTarget.server),
               )

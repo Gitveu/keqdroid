@@ -18,6 +18,7 @@ class _WhoPickerSheet extends ConsumerStatefulWidget {
 class _WhoPickerSheetState extends ConsumerState<_WhoPickerSheet> {
   late Set<String> _selected = {...widget.initial};
   final _query = TextEditingController();
+  bool _showSystem = false;
 
   /// Строки в порядке первой загрузки: отмеченные сверху. Пересортировка на
   /// каждое нажатие уводила бы строку из-под пальца.
@@ -83,7 +84,7 @@ class _WhoPickerSheetState extends ConsumerState<_WhoPickerSheet> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
-    final appsAsync = ref.watch(installedAppsProvider(false));
+    final appsAsync = ref.watch(installedAppsProvider(_showSystem));
     if (_rows == null && appsAsync.hasValue) {
       _rows = _arrange(appsAsync.value!);
     }
@@ -130,13 +131,33 @@ class _WhoPickerSheetState extends ConsumerState<_WhoPickerSheet> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: ExpressiveSectionHeader(
                   l10n.routeWhoApps,
-                  trailing: PlatformBootstrap.isDesktop
-                      ? TextButton.icon(
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: _showSystem
+                            ? l10n.splitHideSystemApps
+                            : l10n.splitShowSystemApps,
+                        isSelected: _showSystem,
+                        icon: Icon(PlatformBootstrap.isDesktop
+                            ? Icons.computer_outlined
+                            : Icons.android_outlined),
+                        selectedIcon: Icon(PlatformBootstrap.isDesktop
+                            ? Icons.computer_rounded
+                            : Icons.android_rounded),
+                        onPressed: () => setState(() {
+                          _showSystem = !_showSystem;
+                          _rows = null;
+                        }),
+                      ),
+                      if (PlatformBootstrap.isDesktop)
+                        TextButton.icon(
                           onPressed: () => unawaited(_addByHand()),
                           icon: const Icon(Icons.add_rounded, size: 18),
                           label: Text(l10n.splitAddApp),
-                        )
-                      : null,
+                        ),
+                    ],
+                  ),
                 ),
               ),
               Padding(
