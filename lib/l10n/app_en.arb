@@ -209,6 +209,7 @@
   "routeAppsUnsupported": "the current core can't tell apps apart, the route does nothing",
   "@routeAppsUnsupported": {},
   "routeAppsNeedTun": "works only in TUN mode",
+  "routeAppsNeedVpn": "works only in VPN mode",
   "@routeAppsNeedTun": {},
   "routeSplitExcluded": "split tunneling sends {apps} around the VPN",
   "@routeSplitExcluded": {

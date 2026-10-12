@@ -35,37 +35,17 @@ TrafficRoute _app(
 
 void main() {
   group('appRoutesRun', () {
-    test('только mihomo, только ПК, только TUN', () {
+    test('только mihomo и только со своим туннелем', () {
       expect(
-        appRoutesRun(
-          core: VpnBackend.mihomo,
-          desktop: true,
-          mode: ConnectionMode.tun,
-        ),
+        appRoutesRun(core: VpnBackend.mihomo, mode: ConnectionMode.tun),
         isTrue,
       );
       expect(
-        appRoutesRun(
-          core: VpnBackend.mihomo,
-          desktop: true,
-          mode: ConnectionMode.proxy,
-        ),
+        appRoutesRun(core: VpnBackend.mihomo, mode: ConnectionMode.proxy),
         isFalse,
       );
       expect(
-        appRoutesRun(
-          core: VpnBackend.xray,
-          desktop: true,
-          mode: ConnectionMode.tun,
-        ),
-        isFalse,
-      );
-      expect(
-        appRoutesRun(
-          core: VpnBackend.mihomo,
-          desktop: false,
-          mode: ConnectionMode.tun,
-        ),
+        appRoutesRun(core: VpnBackend.xray, mode: ConnectionMode.tun),
         isFalse,
       );
     });

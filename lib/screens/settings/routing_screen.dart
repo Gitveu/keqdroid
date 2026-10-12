@@ -84,9 +84,8 @@ String? _routeIssue(
 ) {
   if (!route.allApps) {
     if (!caps.apps) {
-      return caps.appsNeedTun
-          ? l10n.routeAppsNeedTun
-          : l10n.routeAppsUnsupported;
+      if (!caps.appsNeedTun) return l10n.routeAppsUnsupported;
+      return Platform.isAndroid ? l10n.routeAppsNeedVpn : l10n.routeAppsNeedTun;
     }
     final outside = appsOutsideSplit(
       route.apps,

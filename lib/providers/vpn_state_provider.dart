@@ -500,7 +500,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       // генератор без туннеля правил по процессам и так не напишет.
       final appsRun = appRoutesRun(
         core: choice.backend,
-        desktop: Platform.isWindows || Platform.isLinux,
         mode: TunnelSessionBuilder.resolveMode(stored),
       );
       final routeServers = await _prepareRouteServers(

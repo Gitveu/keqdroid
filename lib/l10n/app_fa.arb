@@ -100,6 +100,7 @@
   "routeServerUnsupported": "هستهٔ فعلی این سرور را نمی‌پذیرد، از پروکسی می‌رود",
   "routeAppsUnsupported": "هستهٔ فعلی برنامه‌ها را تشخیص نمی‌دهد، مسیر کار نمی‌کند",
   "routeAppsNeedTun": "فقط در حالت TUN کار می‌کند",
+  "routeAppsNeedVpn": "فقط در حالت VPN کار می‌کند",
   "routeSplitExcluded": "{apps} با پروکسی به تفکیک برنامه از VPN عبور نمی‌کند",
   "routeRefilterUnmatched": "«بقیهٔ ترافیک» اکنون مستقیم می‌رود",
   "settingsRoutingLinkDomains": "{count, plural, other{{formatted} دامنه از لینک‌ها}}",

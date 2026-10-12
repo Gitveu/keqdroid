@@ -346,6 +346,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get routeAppsNeedTun => '仅在 TUN 模式下生效';
 
   @override
+  String get routeAppsNeedVpn => '仅在 VPN 模式下生效';
+
+  @override
   String routeSplitExcluded(String apps) {
     return '分应用代理让 $apps 绕过 VPN';
   }

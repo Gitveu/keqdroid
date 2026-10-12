@@ -78,9 +78,7 @@ final routeCapabilitiesProvider = Provider<RouteCapabilities>((ref) {
       (a) => TunnelSessionBuilder.resolveMode(a.value ?? const AppSettings()),
     ),
   );
-  final desktop = Platform.isWindows || Platform.isLinux;
-  bool runIn(ConnectionMode m) =>
-      appRoutesRun(core: core, desktop: desktop, mode: m);
+  bool runIn(ConnectionMode m) => appRoutesRun(core: core, mode: m);
   return RouteCapabilities(
     apps: runIn(mode),
     appsNeedTun: !runIn(mode) && runIn(ConnectionMode.tun),

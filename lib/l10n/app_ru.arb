@@ -209,6 +209,7 @@
   "routeAppsUnsupported": "текущее ядро не различает приложения, маршрут не работает",
   "@routeAppsUnsupported": {},
   "routeAppsNeedTun": "работает только в режиме TUN",
+  "routeAppsNeedVpn": "работает только в режиме VPN",
   "@routeAppsNeedTun": {},
   "routeSplitExcluded": "раздельное туннелирование ведёт мимо VPN: {apps}",
   "@routeSplitExcluded": {

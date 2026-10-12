@@ -351,6 +351,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get routeAppsNeedTun => 'работает только в режиме TUN';
 
   @override
+  String get routeAppsNeedVpn => 'работает только в режиме VPN';
+
+  @override
   String routeSplitExcluded(String apps) {
     return 'раздельное туннелирование ведёт мимо VPN: $apps';
   }

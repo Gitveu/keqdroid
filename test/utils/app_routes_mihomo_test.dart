@@ -3,6 +3,7 @@ import 'package:keqdroid/models/app_settings.dart';
 import 'package:keqdroid/models/server_item.dart';
 import 'package:keqdroid/models/traffic_route.dart';
 import 'package:keqdroid/models/xray_core_settings.dart';
+import 'package:keqdroid/tunnel/app_routing_mode.dart';
 import 'package:keqdroid/tunnel/vpn_backend.dart';
 import 'package:keqdroid/utils/app_routes.dart';
 import 'package:keqdroid/utils/mihomo_config_gen.dart';
@@ -353,19 +354,84 @@ void main() {
   });
 
   test('без туннеля маршрутов приложений нет', () {
-    for (final tun in [
-      null,
-      const MihomoTunOptions(
-        fromFileDescriptor: true,
-        stack: 'gvisor',
-        autoRoute: false,
-      ),
-    ]) {
-      final c = _config(routes, tun: tun);
-      expect(c.containsKey('sub-rules'), isFalse);
-      expect(_rules(c).any((r) => r.contains('PROCESS-')), isFalse);
-      expect(unknownMihomoTargets(c), isEmpty);
+    final c = _config(routes, tun: null);
+    expect(c.containsKey('sub-rules'), isFalse);
+    expect(_rules(c).any((r) => r.contains('PROCESS-')), isFalse);
+    expect(c['find-process-mode'], 'off');
+    expect(unknownMihomoTargets(c), isEmpty);
+  });
+
+  group('Android: туннель из VpnService', () {
+    const fdTun = MihomoTunOptions(
+      fromFileDescriptor: true,
+      stack: 'gvisor',
+      autoRoute: false,
+    );
+    final telegramAll = _route(
+      'tg',
+      apps: const ['org.telegram.messenger'],
+      content: RouteContent.allTraffic,
+      target: RouteTarget.server,
+      serverId: 'de',
+    );
+    final chromeYoutube = _route(
+      'chrome-yt',
+      apps: const ['com.android.chrome'],
+      sites: 'youtube.com',
+      target: RouteTarget.direct,
+    );
+
+    Map<String, dynamic> android(List<TrafficRoute> routes) {
+      final outbounds = routeServerOutbounds(
+        routes: routes,
+        servers: _servers,
+        activeServerId: 'nl',
+        core: VpnBackend.mihomo,
+        withApps: true,
+      );
+      return MihomoConfigGen.build(
+        _active,
+        _settings,
+        socksPort: 2080,
+        httpPort: 2081,
+        tun: fdTun,
+        routingMode: AppRoutingMode.onlySelected,
+        managedProcessNames: const ['org.telegram.messenger'],
+        windows: false,
+        routeServers: outbounds,
+        appRoutes: routeAppRules(
+          routes: routes,
+          outbounds: outbounds,
+          windows: false,
+        ),
+      );
     }
+
+    test('маршруты по имени пакета, поиск владельца включён', () {
+      final c = android([telegramAll, chromeYoutube]);
+      expect(unknownMihomoTargets(c), isEmpty);
+      expect(c['find-process-mode'], 'strict');
+      expect(_go(c, 'org.telegram.messenger', host: 'telegram.org'),
+          'keq-srv-0');
+      expect(_go(c, 'com.android.chrome', host: 'youtube.com'), 'DIRECT');
+      expect(_go(c, 'com.android.chrome', host: 'example.com'), 'proxy');
+      expect(_go(c, 'org.telegram.messenger.web', host: 'telegram.org'),
+          'proxy');
+      expect(_go(c, 'org.telegram.messenger', host: 'doubleclick.net'),
+          'REJECT');
+    });
+
+    test('сплит исполняет VpnService, его правил в ядре нет', () {
+      final c = android([telegramAll]);
+      expect(_rules(c).any((r) => r.contains('(?!')), isFalse);
+      expect(_go(c, 'com.other.app', host: 'example.com'), 'proxy');
+    });
+
+    test('без маршрутов приложений владельца не ищет', () {
+      final c = android(const []);
+      expect(c['find-process-mode'], 'off');
+      expect(_rules(c).any((r) => r.contains('PROCESS-')), isFalse);
+    });
   });
 
   group('готовый Clash-конфиг', () {

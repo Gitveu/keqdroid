@@ -157,8 +157,8 @@ class MihomoConfigGen {
   ///
   /// [ruleLists] — домены из списков по ссылкам, см. [buildRuleListProviders].
   /// [routeServers] — «другие серверы» маршрутов, у каждого свой выход.
-  /// [appRoutes] — маршруты отдельных приложений; исполняются там же, где
-  /// правила по процессам, в остальных сессиях их нет.
+  /// [appRoutes] — маршруты отдельных приложений; исполняются на любом своём
+  /// туннеле ядра, без туннеля их нет.
   static Map<String, dynamic> build(
     String input,
     AppSettings settings, {
@@ -177,13 +177,13 @@ class MihomoConfigGen {
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
   }) {
-    // Правила по процессам умеет только та сторона, где ядро способно найти
-    // владельца соединения: десктопный TUN. На Android их роль исполняет сам
-    // VpnService (addAllowed/DisallowedApplication), а поиск владельца из
-    // непривилегированного процесса упирается в SELinux — netlink INET_DIAG и
-    // `/proc/net/*` чужих uid untrusted_app не отдаются.
+    // Сплит правилами по процессам только на десктопном TUN: на Android его
+    // исполняет сам VpnService (addAllowed/DisallowedApplication).
     final processRules = tun != null && !tun.fromFileDescriptor;
-    final appRules = processRules ? appRoutes : const <RouteAppRules>[];
+    // Маршруты приложений на любом своём туннеле. На Android владельца ядро
+    // спрашивает у приложения (mihomo-android-uid-owner.patch).
+    final appRules = tun != null ? appRoutes : const <RouteAppRules>[];
+    final findProcess = processRules || appRules.isNotEmpty;
 
     // Режим сплита без правил по процессам — это не «сплит не сработал», а
     // «весь трафик ушёл мимо прокси»: «только выбранные» без имён процессов
@@ -192,8 +192,8 @@ class MihomoConfigGen {
     // при живом «подключено».
     //
     // Так ломался десктопный proxy-режим (туннеля у ядра нет, процесс искать
-    // негде) — и ровно так же ломался бы Android, где владельца по соединению
-    // не отдаёт система, а по приложениям маршрутизирует VpnService. В обоих
+    // негде) — и ровно так же ломался бы Android, где по приложениям
+    // маршрутизирует VpnService. В обоих
     // случаях верный режим один — «весь трафик», а сплит исполняет тот, кто
     // умеет: VpnService на Android, никто в proxy-режиме (там он и не обещан).
     final effectiveRoutingMode = processRules
@@ -258,7 +258,7 @@ class MihomoConfigGen {
       // Поиск процесса-владельца соединения стоит денег на каждой сессии
       // (лезет в /proc или в таблицы ОС), поэтому включаем его ровно там, где
       // без него не работают наши же правила.
-      'find-process-mode': processRules ? 'strict' : 'off',
+      'find-process-mode': findProcess ? 'strict' : 'off',
       'sniffer': buildSniffer(settings.xrayCore),
       if (buildHosts(settings.xrayCore).isNotEmpty)
         'hosts': buildHosts(settings.xrayCore),
@@ -411,7 +411,7 @@ class MihomoConfigGen {
         if (!clash.map.containsKey('hosts') &&
             buildHosts(settings.xrayCore).isNotEmpty)
           'hosts': buildHosts(settings.xrayCore),
-        if (processRules) 'find-process-mode': 'strict',
+        if (processRules || appRoutes.isNotEmpty) 'find-process-mode': 'strict',
         if (tun != null) 'tun': buildTun(tun),
         if (settings.lanSharing) 'listeners': buildLanListeners(settings),
         // Наборы автора остаются: его правила на них ссылаются, и без них

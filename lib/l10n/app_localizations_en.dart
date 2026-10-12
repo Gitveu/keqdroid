@@ -347,6 +347,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routeAppsNeedTun => 'works only in TUN mode';
 
   @override
+  String get routeAppsNeedVpn => 'works only in VPN mode';
+
+  @override
   String routeSplitExcluded(String apps) {
     return 'split tunneling sends $apps around the VPN';
   }

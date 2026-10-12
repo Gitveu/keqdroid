@@ -209,6 +209,7 @@
   "routeAppsUnsupported": "当前内核无法区分应用，此路由不生效",
   "@routeAppsUnsupported": {},
   "routeAppsNeedTun": "仅在 TUN 模式下生效",
+  "routeAppsNeedVpn": "仅在 VPN 模式下生效",
   "@routeAppsNeedTun": {},
   "routeSplitExcluded": "分应用代理让 {apps} 绕过 VPN",
   "@routeSplitExcluded": {

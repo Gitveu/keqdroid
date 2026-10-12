@@ -346,6 +346,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get routeAppsNeedTun => 'فقط در حالت TUN کار می‌کند';
 
   @override
+  String get routeAppsNeedVpn => 'فقط در حالت VPN کار می‌کند';
+
+  @override
   String routeSplitExcluded(String apps) {
     return '$apps با پروکسی به تفکیک برنامه از VPN عبور نمی‌کند';
   }

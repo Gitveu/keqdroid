@@ -701,6 +701,12 @@ abstract class AppLocalizations {
   /// **'works only in TUN mode'**
   String get routeAppsNeedTun;
 
+  /// No description provided for @routeAppsNeedVpn.
+  ///
+  /// In en, this message translates to:
+  /// **'works only in VPN mode'**
+  String get routeAppsNeedVpn;
+
   /// No description provided for @routeSplitExcluded.
   ///
   /// In en, this message translates to:
