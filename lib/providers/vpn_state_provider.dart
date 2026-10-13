@@ -501,6 +501,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       final appsRun = appRoutesRun(
         core: choice.backend,
         mode: TunnelSessionBuilder.resolveMode(stored),
+        android: Platform.isAndroid,
       );
       final routeServers = await _prepareRouteServers(
         routeServerOutbounds(
@@ -839,6 +840,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
               geoIndex: customGeoIndex,
               nativeTunInbound: nativeTun,
               routeServers: routeServers,
+              appRoutes: appRoutes,
             );
 
       // Забирать ли IPv6 в туннель. Спрашиваем машину, а не только настройку:

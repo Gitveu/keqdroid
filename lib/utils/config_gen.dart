@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' show InternetAddress;
 
 import '../models/app_settings.dart';
+import '../models/traffic_route.dart';
 import '../models/xray_core_settings.dart';
 import '../utils/custom_xray_config.dart';
 import '../utils/exit_ip_probe.dart';
@@ -9,6 +10,7 @@ import '../utils/fake_ip.dart';
 import '../utils/geo_asset_index.dart';
 import '../utils/hysteria_uri.dart';
 import '../utils/proxy_chain.dart';
+import '../utils/app_routes.dart';
 import '../utils/route_servers.dart';
 import '../utils/routing_entry.dart';
 import '../utils/rule_lists.dart';
@@ -35,6 +37,7 @@ class ConfigGeneratorV2 {
     GeoAssetIndex? geoIndex,
     /// «Другие серверы» маршрутов, у каждого свой аутбаунд.
     List<RouteServerOutbound> routeServers = const [],
+    List<RouteAppRules> appRoutes = const [],
   }) {
     return const JsonEncoder.withIndent('  ').convert(
       _buildXrayConfig(
@@ -45,6 +48,7 @@ class ConfigGeneratorV2 {
         nativeTunInbound: nativeTunInbound,
         geoIndex: geoIndex,
         routeServers: routeServers,
+        appRoutes: appRoutes,
       ),
     );
   }
@@ -238,6 +242,7 @@ class ConfigGeneratorV2 {
     bool nativeTunInbound = false,
     GeoAssetIndex? geoIndex,
     List<RouteServerOutbound> routeServers = const [],
+    List<RouteAppRules> appRoutes = const [],
   }) {
     final trimmed = input.trim();
 
@@ -253,6 +258,7 @@ class ConfigGeneratorV2 {
         localInboundsNoAuth: localInboundsNoAuth,
         nativeTunInbound: nativeTunInbound,
         routeServers: routeServers,
+        appRoutes: appRoutes,
       );
     }
 
@@ -270,6 +276,7 @@ class ConfigGeneratorV2 {
         nativeTunInbound: nativeTunInbound,
         geoIndex: geoIndex,
         routeServers: routeServers,
+        appRoutes: appRoutes,
       );
     }
 
@@ -287,6 +294,7 @@ class ConfigGeneratorV2 {
       localInboundsNoAuth: localInboundsNoAuth,
       nativeTunInbound: nativeTunInbound,
       routeServers: routeServers,
+      appRoutes: appRoutes,
     );
   }
 
@@ -471,6 +479,7 @@ class ConfigGeneratorV2 {
     /// дескриптор ему передаёт нативная часть через переменную окружения.
     bool nativeTunInbound = false,
     List<RouteServerOutbound> routeServers = const [],
+    List<RouteAppRules> appRoutes = const [],
   }) {
     if (chain.hops.isEmpty) {
       throw ArgumentError('Proxy chain has no nodes');
@@ -517,6 +526,7 @@ class ConfigGeneratorV2 {
       localInboundsNoAuth: localInboundsNoAuth,
       nativeTunInbound: nativeTunInbound,
       routeServers: routeServers,
+      appRoutes: appRoutes,
     );
   }
 
@@ -645,13 +655,17 @@ class ConfigGeneratorV2 {
 
   /// Что забирает «другой сервер»: свои записи маршрутов и скачанные списки.
   static ({List<String> domains, List<String> geoip, List<String> ips})
-      _routeServerMatch(RouteServerOutbound server) {
-    final split = splitDomainsAndIps(_parseRuleList(server.entries));
+      _routeServerMatch(RouteServerOutbound server) =>
+          _entriesMatch(server.entries, server.listDomains);
+
+  static ({List<String> domains, List<String> geoip, List<String> ips})
+      _entriesMatch(String entries, List<String> listDomains) {
+    final split = splitDomainsAndIps(_parseRuleList(entries));
     final geo = splitGeoipTokens(split.ips);
     return (
       domains: [
         ..._normalizeDomains(split.domains),
-        for (final d in server.listDomains) 'domain:$d',
+        for (final d in listDomains) 'domain:$d',
       ],
       geoip: geo.geoipCodes,
       ips: geo.plainIps
@@ -688,6 +702,50 @@ class ConfigGeneratorV2 {
             ];
           }(),
       ];
+
+  // процесс в правиле xray проверяет последним и только у совпавших по сайту,
+  // поэтому владельца спрашивают не у каждого соединения
+  static List<Map<String, dynamic>> _appRouteRules(
+    List<RouteAppRules> routes,
+    String Function(RouteAppRules route) target,
+    Map<String, dynamic> Function(String tag, Map<String, dynamic> fields) rule,
+  ) =>
+      [
+        for (final route in routes)
+          ...() {
+            Map<String, dynamic> fields([Map<String, dynamic> what = const {}]) => {
+                  'inboundTag': [_tunInboundTag],
+                  ...what,
+                  'process': route.apps,
+                  'outboundTag': target(route),
+                };
+            if (route.allTraffic) return [rule(route.tag, fields())];
+            final match = _entriesMatch(route.entries, route.listDomains);
+            return [
+              if (match.domains.isNotEmpty)
+                rule('${route.tag}-domains', fields({'domain': match.domains})),
+              if (match.geoip.isNotEmpty)
+                rule('${route.tag}-geoip', fields({
+                  'ip': [for (final c in match.geoip) 'geoip:$c'],
+                })),
+              if (match.ips.isNotEmpty)
+                rule('${route.tag}-ips', fields({'ip': match.ips})),
+            ];
+          }(),
+      ];
+
+  static String Function(RouteAppRules route) _appRouteTarget({
+    required String proxyTag,
+    required String directTag,
+    required String blockTag,
+  }) =>
+      (route) => switch (route.target) {
+            RouteTarget.block => blockTag,
+            RouteTarget.direct => directTag,
+            RouteTarget.vpn => proxyTag,
+            RouteTarget.server =>
+              route.serverTag.isEmpty ? proxyTag : route.serverTag,
+          };
 
   /// Обращения к самим серверам маршрутов — мимо туннеля, как к активному.
   static List<Map<String, dynamic>> _routeServerDirectRules(
@@ -931,6 +989,7 @@ class ConfigGeneratorV2 {
     bool nativeTunInbound = false,
     GeoAssetIndex? geoIndex,
     List<RouteServerOutbound> routeServers = const [],
+    List<RouteAppRules> appRoutes = const [],
   }) {
     final inbounds = _buildInbounds(
       settings,
@@ -1006,6 +1065,7 @@ class ConfigGeneratorV2 {
       proxyTag: custom.primaryOutboundTag,
       blockTag: blockTag ?? _customBlockTag,
       routeServers: routeServers,
+      appRoutes: nativeTunInbound ? appRoutes : const [],
     );
 
     // DNS устройства отвечает ядро, а не сервер на том конце туннеля, — и в
@@ -1282,8 +1342,24 @@ class ConfigGeneratorV2 {
     required String proxyTag,
     required String blockTag,
     List<RouteServerOutbound> routeServers = const [],
+    List<RouteAppRules> appRoutes = const [],
   }) {
     final rules = <Map<String, dynamic>>[];
+    Map<String, dynamic> rule(String tag, Map<String, dynamic> fields) =>
+        {'type': 'field', 'ruleTag': tag, ...fields};
+    final appTarget = _appRouteTarget(
+      proxyTag: proxyTag,
+      directTag: directTag,
+      blockTag: blockTag,
+    );
+    final appBlock = [
+      for (final r in appRoutes)
+        if (r.target == RouteTarget.block) r,
+    ];
+    final appOther = [
+      for (final r in appRoutes)
+        if (r.target != RouteTarget.block) r,
+    ];
 
     void addGroup(String source, String outboundTag, String tagPrefix) {
       final split = splitDomainsAndIps(_parseRuleList(source));
@@ -1320,11 +1396,16 @@ class ConfigGeneratorV2 {
     }
 
     addGroup(settings.blockedRules, blockTag, 'user-block');
+    rules.addAll(_appRouteRules(appBlock, appTarget, rule));
+    if (appOther.isNotEmpty) {
+      rules.add(rule('app-private', {
+        'ip': [...kBasePrivateRanges],
+        'outboundTag': directTag,
+      }));
+      rules.addAll(_appRouteRules(appOther, appTarget, rule));
+    }
     addGroup(settings.directRules, directTag, 'user-direct');
-    rules.addAll(_routeServerRules(
-      routeServers,
-      (tag, fields) => {'type': 'field', 'ruleTag': tag, ...fields},
-    ));
+    rules.addAll(_routeServerRules(routeServers, rule));
     addGroup(settings.proxyRules, proxyTag, 'user-proxy');
     return rules;
   }
@@ -2084,12 +2165,28 @@ class ConfigGeneratorV2 {
   // нужно правило «мимо туннеля».
   static Map<String, dynamic> _wrapConfig(
       List<Map<String, dynamic>> proxyOutbounds, AppSettings settings, String serverAddress, int serverPort,
-      {String? originalServerAddress, List<String> extraServerAddresses = const [], int? pingSocksPort, bool pingHttpInbound = false, bool localInboundsNoAuth = false, bool nativeTunInbound = false, List<RouteServerOutbound> routeServers = const []}) {
+      {String? originalServerAddress, List<String> extraServerAddresses = const [], int? pingSocksPort, bool pingHttpInbound = false, bool localInboundsNoAuth = false, bool nativeTunInbound = false, List<RouteServerOutbound> routeServers = const [], List<RouteAppRules> appRoutes = const []}) {
 
     originalServerAddress ??= serverAddress;
     final isPingMode = pingSocksPort != null;
     // Другие серверы маршрутов — только у боевого конфига: пинг меряет один.
     final routes = isPingMode ? const <RouteServerOutbound>[] : routeServers;
+    final apps = isPingMode || !nativeTunInbound
+        ? const <RouteAppRules>[]
+        : appRoutes;
+    final appBlock = [
+      for (final r in apps)
+        if (r.target == RouteTarget.block) r,
+    ];
+    final appOther = [
+      for (final r in apps)
+        if (r.target != RouteTarget.block) r,
+    ];
+    final appTarget = _appRouteTarget(
+      proxyTag: 'proxy',
+      directTag: 'direct',
+      blockTag: 'block',
+    );
     final routeOutbounds = _buildRouteServerOutbounds(routes, settings);
 
     // each list is mixed (domains + ip/cidr + geoip:); split per kind.
@@ -2136,7 +2233,8 @@ class ConfigGeneratorV2 {
     final hasUserIpRules = extraDirectIps.isNotEmpty ||
         proxyIps.isNotEmpty ||
         blockedIps.isNotEmpty ||
-        routes.any((r) => _routeServerMatch(r).ips.isNotEmpty);
+        routes.any((r) => _routeServerMatch(r).ips.isNotEmpty) ||
+        apps.any((r) => _entriesMatch(r.entries, const []).ips.isNotEmpty);
     final effectiveDomainStrategy =
         (!isPingMode && hasUserIpRules && core.routingDomainStrategy == 'AsIs')
             ? 'IPIfNonMatch'
@@ -2288,6 +2386,7 @@ class ConfigGeneratorV2 {
     if (blockedIps.isNotEmpty) {
       rules.add(rule('block-ips', {'ip': blockedIps, 'outboundTag': 'block'}));
     }
+    rules.addAll(_appRouteRules(appBlock, appTarget, rule));
     final isServerIp = _isIpLiteral(serverAddress);
     if (isServerIp) {
       rules.add(rule('server-ip',
@@ -2304,6 +2403,14 @@ class ConfigGeneratorV2 {
     }
     addChainHopDirectRules();
     rules.addAll(_routeServerDirectRules(routes, 'direct', rule));
+    // «весь трафик на сервер» не должен увозить туда роутер и принтер
+    if (appOther.isNotEmpty) {
+      rules.add(rule('app-private', {
+        'ip': [...kBasePrivateRanges],
+        'outboundTag': 'direct',
+      }));
+      rules.addAll(_appRouteRules(appOther, appTarget, rule));
+    }
     if (directDomains.isNotEmpty) {
       rules.add(rule('direct-domains',
           {'domain': directDomains, 'outboundTag': 'direct'}));
@@ -2464,6 +2571,8 @@ class ConfigGeneratorV2 {
   /// перечисляет теги, которые вообще бывают наши, а не те, что есть в этом
   /// конкретном конфиге. Лишний тег даёт разве что не показанное
   /// предупреждение, недостающий — предупреждение о живом правиле.
+  static const _tunInboundTag = 'tun-in';
+
   static const appInboundTags = [
     'socks-in',
     'http-in',

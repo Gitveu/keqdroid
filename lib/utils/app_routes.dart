@@ -9,14 +9,15 @@ import 'traffic_routes.dart';
 /// Работают ли маршруты отдельных приложений в такой сессии. Одно правило на
 /// экран и на подключение: что экран обещает, то ядро и получает.
 ///
-/// Владельца соединения mihomo узнаёт только у своего туннеля: на ПК сам, на
-/// Android спрашивает у VpnService. xray на ПК внутри keqrnel видит один выход
-/// на всех, а на Android его искатель процессов пока не подключён.
+/// Владельца соединения ядро узнаёт только у своего туннеля: mihomo на ПК сам,
+/// на Android оба ядра спрашивают у VpnService. xray на ПК внутри keqrnel
+/// видит один выход на всех.
 bool appRoutesRun({
   required VpnBackend core,
   required ConnectionMode mode,
+  required bool android,
 }) =>
-    core == VpnBackend.mihomo && mode == ConnectionMode.tun;
+    mode == ConnectionMode.tun && (core == VpnBackend.mihomo || android);
 
 /// Маршрут отдельных приложений в виде, готовом для генератора.
 class RouteAppRules {
