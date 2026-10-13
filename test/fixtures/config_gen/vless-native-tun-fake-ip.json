@@ -247,8 +247,11 @@
       },
       {
         "type": "field",
+        "ip": [
+          "0.0.0.0/0",
+          "::/0"
+        ],
         "outboundTag": "proxy",
-        "network": "tcp,udp",
         "ruleTag": "final"
       }
     ]

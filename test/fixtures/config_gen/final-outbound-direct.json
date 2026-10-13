@@ -75,6 +75,10 @@
   ],
   "outbounds": [
     {
+      "protocol": "freedom",
+      "tag": "direct"
+    },
+    {
       "tag": "proxy",
       "protocol": "vless",
       "settings": {
@@ -88,10 +92,6 @@
         "network": "tcp",
         "security": "none"
       }
-    },
-    {
-      "protocol": "freedom",
-      "tag": "direct"
     },
     {
       "protocol": "blackhole",
@@ -200,8 +200,11 @@
       },
       {
         "type": "field",
+        "ip": [
+          "0.0.0.0/0",
+          "::/0"
+        ],
         "outboundTag": "direct",
-        "network": "tcp,udp",
         "ruleTag": "final"
       }
     ]

@@ -26,8 +26,10 @@ class XrayConn {
   final String network;
 }
 
-/// Тег выхода первого совпавшего правила; null — ни одно не совпало.
+/// Тег выхода первого совпавшего правила; ни одно не совпало — первый выход,
+/// как default route у ядра.
 String? simulateXray(Map<String, dynamic> config, XrayConn conn) {
+  final fallback = ((config['outbounds'] as List).first as Map)['tag'] as String?;
   final routing = config['routing'] as Map;
   final rules = [
     for (final r in routing['rules'] as List) (r as Map).cast<String, dynamic>(),
@@ -36,11 +38,11 @@ String? simulateXray(Map<String, dynamic> config, XrayConn conn) {
     if (_matches(rule, conn, conn.ip)) return rule['outboundTag'] as String?;
   }
   final strategy = routing['domainStrategy'] ?? 'AsIs';
-  if (strategy != 'IPIfNonMatch' || conn.host.isEmpty) return null;
+  if (strategy != 'IPIfNonMatch' || conn.host.isEmpty) return fallback;
   for (final rule in rules) {
     if (_matches(rule, conn, conn.resolvesTo)) return rule['outboundTag'] as String?;
   }
-  return null;
+  return fallback;
 }
 
 bool _matches(Map<String, dynamic> rule, XrayConn conn, String ip) {

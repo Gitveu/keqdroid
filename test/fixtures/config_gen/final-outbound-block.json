@@ -75,6 +75,10 @@
   ],
   "outbounds": [
     {
+      "protocol": "blackhole",
+      "tag": "block"
+    },
+    {
       "tag": "proxy",
       "protocol": "vless",
       "settings": {
@@ -92,10 +96,6 @@
     {
       "protocol": "freedom",
       "tag": "direct"
-    },
-    {
-      "protocol": "blackhole",
-      "tag": "block"
     },
     {
       "protocol": "dns",
@@ -200,8 +200,11 @@
       },
       {
         "type": "field",
+        "ip": [
+          "0.0.0.0/0",
+          "::/0"
+        ],
         "outboundTag": "block",
-        "network": "tcp,udp",
         "ruleTag": "final"
       }
     ]

@@ -195,7 +195,8 @@ void main() {
     expect(_go(c, _discord, ip: '93.184.216.34'), 'keq-srv-0');
   });
 
-  test('адрес в сайтах маршрута — для соединения по адресу', () {
+  test('адрес в сайтах маршрута: по адресу сразу, по домену после резолва',
+      () {
     final c = _config([
       _route(
         'tg',
@@ -207,6 +208,10 @@ void main() {
     ]);
     expect((c['routing'] as Map)['domainStrategy'], 'IPIfNonMatch');
     expect(_go(c, _telegram, ip: '149.154.167.51'), 'keq-srv-0');
+    expect(
+      _go(c, _telegram, host: 'api.example', resolvesTo: '149.154.167.51'),
+      'keq-srv-0',
+    );
     expect(
       _go(c, _telegram, host: 'yandex.ru', resolvesTo: '149.154.167.51'),
       'direct',

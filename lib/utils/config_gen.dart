@@ -2482,7 +2482,17 @@ class ConfigGeneratorV2 {
             AppSettings.finalOutboundBlock => 'block',
             _ => 'proxy',
           };
-    rules.add(rule('final', {'outboundTag': finalTag, 'network': 'tcp,udp'}));
+    // второй проход с резолвом для правил по адресу xray делает, только если в
+    // первом не совпало ничего (pickRouteInternal), и ловушка «любая сеть» его
+    // отменяла. Домен, который не отрезолвился, уходит в первый выход
+    final resolvesForIpRules =
+        !isPingMode && effectiveDomainStrategy == 'IPIfNonMatch';
+    rules.add(rule(
+      'final',
+      resolvesForIpRules
+          ? {'ip': ['0.0.0.0/0', '::/0'], 'outboundTag': finalTag}
+          : {'outboundTag': finalTag, 'network': 'tcp,udp'},
+    ));
 
     // Фрагментация ClientHello. Сам прокси-аутбаунд резать пакеты не умеет —
     // это делает freedom, поэтому наружу дозванивается он, а прокси-аутбаунд
@@ -2509,12 +2519,7 @@ class ConfigGeneratorV2 {
       isPingMode: isPingMode,
     );
 
-    return {
-      'log': {'loglevel': isPingMode ? 'none' : core.logLevel},
-      'dns': fakeDns ? _withFakeDns(dns) : dns,
-      if (fakeDns) 'fakedns': _fakeDnsPool(),
-      'inbounds': inbounds,
-      'outbounds': [
+    final outbounds = <Map<String, dynamic>>[
         ...proxyOutbounds,
         ...routeOutbounds,
         {
@@ -2539,7 +2544,18 @@ class ConfigGeneratorV2 {
             'tag': 'dns-out',
             'settings': _dnsOutboundSettings(),
           },
-      ],
+    ];
+    if (resolvesForIpRules && finalTag != 'proxy') {
+      final index = outbounds.indexWhere((o) => o['tag'] == finalTag);
+      outbounds.insert(0, outbounds.removeAt(index));
+    }
+
+    return {
+      'log': {'loglevel': isPingMode ? 'none' : core.logLevel},
+      'dns': fakeDns ? _withFakeDns(dns) : dns,
+      if (fakeDns) 'fakedns': _fakeDnsPool(),
+      'inbounds': inbounds,
+      'outbounds': outbounds,
       'routing': {
         'domainStrategy': isPingMode ? 'AsIs' : effectiveDomainStrategy,
         'rules': rules,
