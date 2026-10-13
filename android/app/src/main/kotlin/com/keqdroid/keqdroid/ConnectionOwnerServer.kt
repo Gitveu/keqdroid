@@ -14,9 +14,9 @@ import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
-// Кто открыл соединение: mihomo на Android сам этого не узнает (SELinux), а
+// Кто открыл соединение: ядро на Android само этого не узнает (SELinux), а
 // getConnectionOwnerUid отвечает только владельцу VPN. Протокол и причина в
-// tool/patches/mihomo-android-uid-owner.patch
+// tool/patches/mihomo-android-uid-owner.patch и xray-android-uid-owner.patch
 class ConnectionOwnerServer(private val context: Context) {
 
     val name = "${context.packageName}.owner.${Process.myPid()}.${SystemClock.elapsedRealtimeNanos()}"

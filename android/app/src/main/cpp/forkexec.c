@@ -308,12 +308,12 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
                 if (i != tunFd) close(i);
             }
 
+            /* владельца соединения ядро спрашивает у нас, см. mihomo- и xray-android-uid-owner.patch */
+            if (ownerSocket[0]) setenv("KEQDROID_OWNER_SOCKET", ownerSocket, 1);
             /* xray ищет geoip.dat/geosite.dat по XRAY_LOCATION_ASSET, mihomo —
              * в своём рабочем каталоге (`-d`). Каталог один и тот же (filesDir),
              * различается только способ его назвать. */
             if (isMihomo) {
-                /* владельца соединения mihomo спрашивает у нас, см. mihomo-android-uid-owner.patch */
-                if (ownerSocket[0]) setenv("KEQDROID_OWNER_SOCKET", ownerSocket, 1);
                 char *argv[] = {
                     (char *)binPath, "-d", (char *)assetDir, "-f", (char *)configPath, NULL
                 };

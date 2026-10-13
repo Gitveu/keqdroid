@@ -1569,7 +1569,7 @@ class KeqdisVpnService : VpnService() {
         // объясняют, зачем он понадобился.
         if (freshLog) runCatching { File(filesDir, CORE_LOG_FILE).writeText("") }
         tunReadyFrom = NativeHelper.tunReadyCount()
-        val owner = if (coreKind == CORE_KIND_MIHOMO && tunFd >= 0) {
+        val owner = if (tunFd >= 0) {
             ownerServer ?: runCatching { ConnectionOwnerServer(this) }
                 .onFailure { NativeLog.w("KEQDIS", "owner socket not started: ${it.message}") }
                 .getOrNull()

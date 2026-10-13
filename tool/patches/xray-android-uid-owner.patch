@@ -1,0 +1,173 @@
+Ask the app who owns a connection on Android, and ask it about the right one.
+
+Routes for specific apps are "process" rules, and on Android the process name
+is the package that opened the connection. xray has a hook for that
+(common/net/find_process_android.go), but nothing registers it in a plain
+build, so every lookup fails. The app owns the VPN and is the only caller the
+system answers through ConnectivityManager.getConnectionOwnerUid. It listens
+on an abstract unix socket and passes its name in KEQDROID_OWNER_SOCKET (see
+forkexec.c and ConnectionOwnerServer.kt); main/owner_android.go registers a
+finder that asks there. The protocol is the one mihomo uses
+(mihomo-android-uid-owner.patch): one line "network srcip srcport dstip
+dstport", one line back with the package name, empty when unknown.
+
+The router asks again for every rule with a process condition, so answers are
+kept for two seconds.
+
+app/router/condition.go: the system finds a TCP connection only by both ends,
+and the matcher passed the target, which sniffing (destOverride without
+routeOnly, and fakedns always) has already turned into a domain. The lookup
+then went out with no destination and failed for every site xray sniffed. The
+matcher now passes the address the connection was opened to,
+Outbound.OriginalTarget, the same field app/router/webhook.go reads.
+
+Built by tool/build_xray_android.ps1. Checked against xray-core main of
+2026-10-12: neither file changed upstream.
+
+diff --git a/app/router/condition.go b/app/router/condition.go
+index 4375a8f..99ab6eb 100644
+--- a/app/router/condition.go
++++ b/app/router/condition.go
+@@ -14,6 +14,7 @@ import (
+ 	"github.com/xtls/xray-core/common/net"
+ 	"github.com/xtls/xray-core/features/routing"
+ 	"github.com/xtls/xray-core/features/routing/dns"
++	routing_session "github.com/xtls/xray-core/features/routing/session"
+ )
+ 
+ type Condition interface {
+@@ -364,6 +365,9 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+ 	if ok && len(resolvableContext.Context.GetTargetIPs()) > 0 {
+ 		dstIP = resolvableContext.Context.GetTargetIPs()[0].String()
+ 		dstPort = uint16(resolvableContext.Context.GetTargetPort())
++	} else if ip, port, ok := originalTargetIP(ctx); ok {
++		dstIP = ip
++		dstPort = port
+ 	} else if len(ctx.GetTargetIPs()) > 0 {
+ 		dstIP = ctx.GetTargetIPs()[0].String()
+ 		dstPort = uint16(ctx.GetTargetPort())
+@@ -395,6 +399,24 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+ 	return false
+ }
+ 
++// originalTargetIP is the address the connection was opened to, before
++// sniffing replaced the target with a domain. keqdroid patch, see
++// tool/patches/xray-android-uid-owner.patch.
++func originalTargetIP(ctx routing.Context) (string, uint16, bool) {
++	if resolvable, ok := ctx.(*dns.ResolvableContext); ok {
++		ctx = resolvable.Context
++	}
++	sctx, ok := ctx.(*routing_session.Context)
++	if !ok || sctx.Outbound == nil {
++		return "", 0, false
++	}
++	target := sctx.Outbound.OriginalTarget
++	if target.Address == nil || !target.Address.Family().IsIP() {
++		return "", 0, false
++	}
++	return target.Address.IP().String(), uint16(target.Port), true
++}
++
+ // LocalOSMatcher matches the operating system Xray itself is running on. That never
+ // changes while Xray is running, so the result is resolved when the rule is built.
+ type LocalOSMatcher struct {
+diff --git a/main/owner_android.go b/main/owner_android.go
+new file mode 100644
+index 0000000..94f5797
+--- /dev/null
++++ b/main/owner_android.go
+@@ -0,0 +1,94 @@
++//go:build android
++
++package main
++
++import (
++	"bufio"
++	"fmt"
++	"net"
++	"os"
++	"strings"
++	"sync"
++	"time"
++
++	xnet "github.com/xtls/xray-core/common/net"
++)
++
++// keqdroid: the app that owns the VPN answers on this abstract socket, see
++// the patch header.
++var ownerSocket = os.Getenv("KEQDROID_OWNER_SOCKET")
++
++func init() {
++	if ownerSocket != "" {
++		xnet.RegisterAndroidProcessFinder(findOwner)
++	}
++}
++
++type ownerAnswer struct {
++	pkg string
++	at  time.Time
++}
++
++// The router asks again for every rule with a process condition, so one
++// connection walking past several app routes would pay a round trip each.
++const ownerTTL = 2 * time.Second
++
++var (
++	ownerMu    sync.Mutex
++	ownerCache = map[string]ownerAnswer{}
++)
++
++func findOwner(network, srcIP string, srcPort uint16, dstIP string, dstPort uint16) (int, string, string, error) {
++	if dstIP == "" {
++		return 0, "", "", xnet.ErrNotLocal
++	}
++	key := fmt.Sprintf("%s %s %d %s %d", network, srcIP, srcPort, dstIP, dstPort)
++	now := time.Now()
++	ownerMu.Lock()
++	cached, ok := ownerCache[key]
++	ownerMu.Unlock()
++	if ok && now.Sub(cached.at) < ownerTTL {
++		return ownerResult(cached.pkg)
++	}
++	pkg, err := askOwner(key)
++	if err != nil {
++		return 0, "", "", err
++	}
++	ownerMu.Lock()
++	if len(ownerCache) >= 1024 {
++		for k, a := range ownerCache {
++			if now.Sub(a.at) >= ownerTTL {
++				delete(ownerCache, k)
++			}
++		}
++	}
++	ownerCache[key] = ownerAnswer{pkg: pkg, at: now}
++	ownerMu.Unlock()
++	return ownerResult(pkg)
++}
++
++// An unknown owner is ErrNotLocal: the router drops that one silently instead
++// of logging an error for every connection of a system process.
++func ownerResult(pkg string) (int, string, string, error) {
++	if pkg == "" {
++		return 0, "", "", xnet.ErrNotLocal
++	}
++	return 0, pkg, "", nil
++}
++
++func askOwner(request string) (string, error) {
++	conn, err := net.DialTimeout("unix", "@"+ownerSocket, time.Second)
++	if err != nil {
++		return "", err
++	}
++	defer conn.Close()
++	_ = conn.SetDeadline(time.Now().Add(time.Second))
++	if _, err := fmt.Fprintf(conn, "%s\n", request); err != nil {
++		return "", err
++	}
++	line, err := bufio.NewReader(conn).ReadString('\n')
++	if err != nil {
++		return "", err
++	}
++	return strings.TrimSpace(line), nil
++}
