@@ -87,4 +87,72 @@ void main() {
     expect(_go(c, host: 'router.lan', resolvesTo: '192.168.1.1'), 'direct');
     expect(((c['outbounds'] as List).first as Map)['tag'], 'direct');
   });
+
+  group('готовый JSON', () {
+    String custom(String strategy) => jsonEncode({
+          'outbounds': [
+            {
+              'tag': 'my-proxy',
+              'protocol': 'vless',
+              'settings': {
+                'vnext': [
+                  {
+                    'address': '203.0.113.10',
+                    'port': 443,
+                    'users': [
+                      {
+                        'id': '00000000-0000-4000-8000-000000000000',
+                        'encryption': 'none',
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+            {'tag': 'my-direct', 'protocol': 'freedom'},
+          ],
+          'routing': {
+            'domainStrategy': strategy,
+            'rules': [
+              {
+                'type': 'field',
+                'ip': ['10.130.0.0/16'],
+                'outboundTag': 'my-direct',
+              },
+            ],
+          },
+        });
+
+    Map<String, dynamic> build(String strategy, String finalOutbound) {
+      Socks5Credentials().init('u', 'p');
+      return jsonDecode(ConfigGeneratorV2.generateConfig(
+        custom(strategy),
+        AppSettings(directRules: '', proxyRules: '', blockedRules: '', finalOutbound: finalOutbound),
+      )) as Map<String, dynamic>;
+    }
+
+    test('правило автора по адресу ловит соединение по домену', () {
+      final c = build('IPIfNonMatch', AppSettings.finalOutboundProxy);
+      expect(
+        _go(c, host: 'intranet.corp', resolvesTo: '10.130.4.5'),
+        'my-direct',
+      );
+      expect(_go(c, host: 'example.com', resolvesTo: '93.184.216.34'),
+          'my-proxy');
+    });
+
+    test('«Всё остальное = напрямую» и для домена без адреса', () {
+      final c = build('IPIfNonMatch', AppSettings.finalOutboundDirect);
+      expect(_go(c, host: 'no-such.invalid'), 'my-direct');
+      expect(_go(c, host: 'example.com', resolvesTo: '93.184.216.34'),
+          'my-direct');
+    });
+
+    test('при авторском AsIs всё как было', () {
+      final c = build('AsIs', AppSettings.finalOutboundDirect);
+      final last = ((c['routing'] as Map)['rules'] as List).last as Map;
+      expect(last['network'], 'tcp,udp');
+      expect(((c['outbounds'] as List).first as Map)['tag'], 'my-proxy');
+    });
+  });
 }

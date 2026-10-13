@@ -1197,6 +1197,11 @@ class ConfigGeneratorV2 {
         },
     ];
 
+    // при авторском IPIfNonMatch ловушка «любая сеть» отменила бы его же
+    // правила по адресу для соединений по домену, см. _wrapConfig
+    final authorRouting = custom.json['routing'];
+    final resolvesForIpRules = authorRouting is Map &&
+        authorRouting['domainStrategy'] == 'IPIfNonMatch';
     final appendRules = <Map<String, dynamic>>[
       ...dnsRules,
       ...userRules,
@@ -1204,7 +1209,10 @@ class ConfigGeneratorV2 {
       {
         'type': 'field',
         'ruleTag': 'final',
-        'network': 'tcp,udp',
+        if (resolvesForIpRules)
+          'ip': ['0.0.0.0/0', '::/0']
+        else
+          'network': 'tcp,udp',
         'outboundTag': finalTag,
       },
     ];
@@ -1282,6 +1290,12 @@ class ConfigGeneratorV2 {
         ...(config['outbounds'] as List),
         ...extraOutbounds,
       ];
+    }
+    if (resolvesForIpRules && finalTag != custom.primaryOutboundTag) {
+      final outbounds = [...config['outbounds'] as List];
+      final index = outbounds.indexWhere((o) => o is Map && o['tag'] == finalTag);
+      if (index > 0) outbounds.insert(0, outbounds.removeAt(index));
+      config['outbounds'] = outbounds;
     }
     return config;
   }
