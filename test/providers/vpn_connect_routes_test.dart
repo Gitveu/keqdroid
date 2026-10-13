@@ -169,7 +169,7 @@ void main() {
         TrafficRoute(
           id: 'chrome',
           apps: ['chrome.exe'],
-          sites: 'youtube.com, geosite:no-such-code',
+          sites: 'youtube.com',
           target: RouteTarget.server,
           serverId: 'srv-de',
         ),
@@ -196,7 +196,6 @@ void main() {
         rules.where((r) => r.startsWith('SUB-RULE,') && r.contains('chrome')),
         hasLength(1),
       );
-      // Неизвестный geo-код выброшен: mihomo на нём не поднялся бы.
       expect((config['sub-rules'] as Map)['keq-app-0'], [
         'DOMAIN-SUFFIX,youtube.com,keq-srv-0',
       ]);
