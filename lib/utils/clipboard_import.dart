@@ -9,10 +9,6 @@ import '../providers/providers.dart';
 import 'error_messages.dart';
 import 'import_payload.dart';
 
-/// Ctrl/Cmd+V helpers shared by the subscriptions and servers screens. Kept as
-/// free functions so the desktop home (which owns the keyboard focus across the
-/// IndexedStack tabs) can dispatch them by active tab.
-
 Future<void> pasteSubscriptionFromClipboard(
   BuildContext context,
   WidgetRef ref,
@@ -42,8 +38,6 @@ Future<void> pasteSubscriptionFromClipboard(
   }
 }
 
-/// Ctrl+V во вкладке серверов и кнопка «Вставить ссылку(и)» на её пустом
-/// экране: подписки и серверы из буфера расходятся каждый на своё место.
 Future<void> pasteLinksFromClipboard(
   BuildContext context,
   WidgetRef ref,
@@ -62,8 +56,6 @@ Future<void> pasteLinksFromClipboard(
   if (lines.isNotEmpty) _toast(context, lines.join('\n'));
 }
 
-/// Что добавила вставка. Подписки и серверы считаются порознь: общий счётчик
-/// сказал бы про подписку «Добавлено серверов: 1 из 1».
 class PastedLinksResult {
   final List<String> subscriptionHosts;
   final int serversAdded;
@@ -80,8 +72,6 @@ class PastedLinksResult {
   int get added => subscriptionHosts.length + serversAdded;
 }
 
-/// Разбирает вставленный текст и добавляет каждую часть независимо: первый же
-/// дубликат не должен обрывать импорт и молча терять остальные строки.
 Future<PastedLinksResult> importPastedLinks(
   String raw, {
   required Future<void> Function(String url) addSubscription,
@@ -117,8 +107,6 @@ Future<PastedLinksResult> importPastedLinks(
 Future<PastedLinksResult> importPastedLinksInto(WidgetRef ref, String raw) {
   return importPastedLinks(
     raw,
-    // Имя выведено из адреса, а не задано: пусть его заменит название от
-    // провайдера, когда оно придёт заголовком.
     addSubscription: (url) => ref.read(subscriptionsProvider.notifier).add(
       Subscription.create(name: Uri.parse(url).host, url: url, nameIsAuto: true),
     ),
@@ -126,8 +114,6 @@ Future<PastedLinksResult> importPastedLinksInto(WidgetRef ref, String raw) {
   );
 }
 
-/// Итог без ошибки: её каждый экран показывает по-своему. Null — если ничего
-/// не добавилось и сказать, кроме ошибки, нечего.
 String? pastedLinksSummary(AppLocalizations l10n, PastedLinksResult result) {
   final lines = [
     if (result.subscriptionHosts.isNotEmpty)

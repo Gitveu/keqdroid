@@ -16,11 +16,8 @@ import '../utils/multi_ping_config.dart';
 import '../utils/pooled.dart';
 import '../utils/vpn_core_support.dart';
 
-/// tcp = raw connect latency, url = GET via ephemeral xray,
-/// speed = download throughput in kbps (not ms).
 enum PingType { tcp, url, speed, icmp }
 
-/// latency bands for ui coloring
 enum PingLatencyQuality { good, fair, poor }
 
 const String kDefaultPingTestUrl =
@@ -32,7 +29,6 @@ class PingResult {
   final int? latencyMs;
   final bool success;
   final String error;
-  /// метод, которым получили результат (нужен для порогов цвета)
   final PingType pingType;
 
   const PingResult({
@@ -51,19 +47,15 @@ class PingResult {
 }
 
 class PingService {
-  /// tcp-пинг: меряем время коннекта, работает без vpn
   static Future<PingResult> pingTcp(
     ServerItem server, {
     int timeoutSeconds = 5,
   }) async {
     final protocol = server.protocol;
-    // AmneziaWG (WireGuard/UDP) не отвечает ни на tcp-коннект, ни на произвольный
-    // udp-пакет — меряем доступность сервера обычным ICMP-эхо к endpoint.
+    // AmneziaWG не отвечает ни на tcp-коннект, ни на случайный udp, остаётся ICMP
     if (protocol == 'awg') {
       return _pingIcmp(server, timeoutSeconds: timeoutSeconds);
     }
-    // udp-протоколы пингуем через udp сокет
-    // TUIC тоже поверх QUIC: tcp-коннекта к его порту не бывает.
     if (protocol == 'hysteria' ||
         protocol == 'hysteria2' ||
         protocol == 'hy2' ||
@@ -127,15 +119,12 @@ class PingService {
     }
   }
 
-  /// hysteria/hy2: пробуем udp quic, при obfs или таймауте — фоллбэк на tcp
-  /// ICMP-эхо к endpoint через системный `ping` (для AmneziaWG/WireGuard).
-  /// Если сервер блокирует ICMP — вернёт неуспех (это ограничение, не баг).
   static Future<PingResult> _pingIcmp(
     ServerItem server, {
     required int timeoutSeconds,
   }) async {
     final host = server.address;
-    // host не должен начинаться с '-' — иначе ping примет его за флаг (напр. -t).
+    // host с минусом ping принял бы за флаг
     if (host.isEmpty || host.startsWith('-')) {
       return PingResult(
         serverId: server.id,
@@ -147,13 +136,11 @@ class PingService {
     }
     try {
       final timeoutMs = timeoutSeconds * 1000;
-      // Только латиница/цифры/.-:_ — чтобы безопасно подставить host в cmd.
       final safeHost = RegExp(r'^[A-Za-z0-9._:\-]+$').hasMatch(host);
       final sw = Stopwatch()..start();
       final ProcessResult result;
       if (Platform.isWindows && safeHost) {
-        // chcp 65001 → ping выводит UTF-8 (иначе на локализованной Windows вывод
-        // в OEM-кодировке бьётся и единица "мс" не парсится → ложный 0 мс).
+        // chcp 65001: иначе на русской Windows вывод в OEM-кодировке, и мс не парсится
         result = await Process.run(
           'cmd',
           ['/c', 'chcp 65001>nul & ping -n 1 -w $timeoutMs $host'],
@@ -169,13 +156,11 @@ class PingService {
       sw.stop();
       final out = '${result.stdout}\n${result.stderr}';
 
-      // Вывод ping локализован: en "time=23ms", ru "время=23мс", linux "time=23.4 ms".
-      // Берём число перед единицей ms/мс (с `=` или `<`, запятой или точкой).
+      // вывод ping локализован: time=23ms, время=23мс, time=23.4 ms
       final timeMatch = RegExp(
         r'[=<]\s*([\d]+(?:[.,]\d+)?)\s*(?:ms|мс)',
         caseSensitive: false,
       ).firstMatch(out);
-      // TTL в выводе латиницей во всех локалях; либо распарсенное время = был ответ.
       final hasTtl = RegExp(r'ttl[=:]\s*\d+', caseSensitive: false).hasMatch(out);
 
       if (timeMatch != null || hasTtl) {
@@ -183,7 +168,6 @@ class PingService {
         if (timeMatch != null) {
           ms = double.parse(timeMatch.group(1)!.replaceAll(',', '.')).round();
         } else {
-          // экзотическая локаль без ms/мс — грубая оценка по wall-clock
           ms = sw.elapsedMilliseconds;
         }
         return PingResult(
@@ -216,7 +200,6 @@ class PingService {
     required int timeoutSeconds,
   }) async {
     final params = HysteriaLinkParams.fromConfig(server.config);
-    // с salamander obfs обычные udp/tcp пробы не доходят до hy2
     if (params.hasSalamanderObfs) {
       return PingResult(
         serverId: server.id,
@@ -247,7 +230,6 @@ class PingService {
     );
   }
 
-  /// просто проверка доступности по tcp, без хендшейка hysteria
   static Future<PingResult> _pingTcpReachability(
     ServerItem server, {
     required int timeoutSeconds,
@@ -306,7 +288,6 @@ class PingService {
     }
   }
 
-  /// udp-пинг для wireguard и hysteria (quic)
   static Future<PingResult> _pingUdp(
     ServerItem server, {
     required int timeoutSeconds,
@@ -336,7 +317,6 @@ class PingService {
       }
       final target = targets.first;
 
-      // биндимся на любой порт, учитывая ipv4/ipv6
       socket = await RawDatagramSocket.bind(
         target.type == InternetAddressType.IPv6
             ? InternetAddress.anyIPv6
@@ -346,12 +326,11 @@ class PingService {
 
       final sw = Stopwatch()..start();
 
-      // пейлоад зависит от протокола
       Uint8List payload;
       if (server.protocol == 'hysteria2' ||
           server.protocol == 'hy2' ||
           server.protocol == 'tuic') {
-        // quic initial с фейковой версией, чтобы спровоцировать version negotiation
+        // QUIC initial с выдуманной версией: сервер ответит version negotiation
         payload = Uint8List.fromList([
           0xc0, // long header
           0x12, 0x34, 0x56, 0x78, // dummy version
@@ -360,11 +339,9 @@ class PingService {
           0x00, // scid len
         ]);
       } else if (server.protocol == 'awg') {
-        // wireguard handshake initiation, упрощённый заголовок
         payload = Uint8List(148);
         payload[0] = 1; // type: initiation
       } else {
-        // hysteria 1 или общий udp
         payload = Uint8List(32);
       }
 
@@ -375,7 +352,6 @@ class PingService {
       sub = socket.listen((event) {
         if (event == RawSocketEvent.read) {
           final dg = socket?.receive();
-          // любой ответ — значит сервер живой
           if (dg != null && !completer.isCompleted) {
             sw.stop();
             completer.complete(sw.elapsedMilliseconds);
@@ -416,7 +392,6 @@ class PingService {
     }
   }
 
-  /// реальный пинг: поднимает временный xray на outbound сервера и делает get
   static Future<PingResult> pingUrl(
     ServerItem server,
     AppSettings settings, {
@@ -436,25 +411,10 @@ class PingService {
     return results.first;
   }
 
-  /// Сколько url-замеров идёт одновременно на поштучном пути.
-  ///
-  /// Каждый такой замер — отдельный процесс ядра со своим Go-рантаймом, и
-  /// упирается это не во время старта (оно около 70 мс), а в память: замерено —
-  /// 28 МБ на процесс у keqrnel, 19 МБ у mihomo. По одному нельзя тем более:
-  /// замер ждёт сеть, а мёртвый сервер выкупает весь таймаут и держит слот, за
-  /// которым стоят живые.
-  ///
-  /// Отсюда и разные числа. На десктопе шестнадцать замеров — это 450 МБ на
-  /// несколько секунд, и машина этого не замечает. На телефоне столько держать
-  /// негде, поэтому там шесть, а подписку целиком меряет общий конфиг
-  /// ([multiPingSupported]), где процесс один на десяток серверов.
+  // каждый замер это процесс с Go-рантаймом: 28 МБ у keqrnel, 19 у mihomo.
+  // на телефоне больше шести держать негде
   static int get urlPingConcurrency => PlatformBootstrap.isDesktop ? 16 : 6;
 
-  /// батч url-пинга: dns параллельно, замеры пулом воркеров.
-  ///
-  /// [onResult] дёргается по мере готовности каждого сервера (порядок — какой
-  /// ответил, такой и первый), а возвращаемый список сохраняет порядок входного:
-  /// вызывающий раскладывает результаты по серверам, ему важен именно он.
   static Future<List<PingResult>> pingUrlBatch(
     List<ServerItem> servers,
     AppSettings settings, {
@@ -470,10 +430,6 @@ class PingService {
     final ips = resolvedIps ?? await _resolveServerIps(servers);
     final takenPorts = <int>{};
 
-    // Один процесс ядра на весь батч там, где это умеет платформа. Остальные
-    // серверы (готовый конфиг ядра, цепочка, AmneziaWG) в общий конфиг не
-    // складываются — они несут собственные инбаунды и роутинг — и остаются на
-    // поштучном пути.
     if (multiPingSupported) {
       final byCore = <VpnBackend, List<ServerItem>>{};
       final singles = <ServerItem>[];
@@ -486,9 +442,6 @@ class PingService {
       }
       if (byCore.values.any((group) => group.length > 1)) {
         final results = <String, PingResult>{};
-        // Чанки всех ядер складываются в одну очередь, чтобы несколько общих
-        // конфигов шли одновременно: ядро с десятком проб стоит ровно столько
-        // же, сколько с одной, и держать их по очереди незачем.
         final batches = <({VpnBackend core, List<ServerItem> chunk})>[];
         for (final entry in byCore.entries) {
           final group = entry.value;
@@ -534,8 +487,6 @@ class PingService {
         for (final result in rest) {
           results[result.serverId] = result;
         }
-        // Порядок входного списка: вызывающий раскладывает результаты по
-        // серверам и ждёт их именно в нём.
         return [
           for (final server in servers)
             results[server.id] ??
@@ -564,47 +515,16 @@ class PingService {
     });
   }
 
-  /// Умеет ли платформа мерить батч одним ядром.
-  ///
-  /// Пока только Android, и там это не про скорость старта (она копеечная), а
-  /// про память: полсотни процессов с Go-рантаймом телефон не держит, поэтому
-  /// поштучный путь упирается в пул из шести, и живые серверы стоят в очереди
-  /// за мёртвыми. На десктопе процессов не жалко, и общий конфиг там пришлось
-  /// бы ещё и заворачивать в keqrnel, чьи инбаунды принадлежат sing-box.
-  /// Тесты гоняются на Windows, где группового пути нет; без подмены его
-  /// разбор серверов по ядрам не проверить.
   @visibleForTesting
   static bool? debugMultiPingSupported;
 
   static bool get multiPingSupported =>
       debugMultiPingSupported ?? Platform.isAndroid;
 
-  /// По сколько серверов класть в один конфиг.
-  ///
-  /// Не «все разом», и дело не только в отказе (батч падает целиком из-за
-  /// одного негодного сервера, и чем он больше, тем дороже деление пополам).
-  /// Результаты батча приезжают разом, а список показывает крутилку на каждом
-  /// тайле: один конфиг на всю подписку означал бы неподвижный экран до самого
-  /// конца замера. Десяток — это и порция результатов раз в пару секунд, и
-  /// один старт ядра вместо десяти.
   static const multiPingChunk = 10;
 
-  /// Сколько общих конфигов мерить одновременно.
-  ///
-  /// Ядро с десятком проб стоит 20 МБ против 19 у ядра с одним сервером
-  /// (замерено на mihomo): почти вся цена — сам Go-рантайм, а не содержимое
-  /// конфига. Поэтому дешевле поставить рядом несколько ядер, чем гонять их по
-  /// очереди: три штуки меряют тридцать серверов за 60 МБ — вдвое меньше, чем
-  /// стоили прежние шесть поштучных замеров. Выше не идём не из-за памяти, а
-  /// из-за экрана: результаты батча приезжают разом, и чем больше их в полёте,
-  /// тем реже обновляется список.
   static const multiPingBatches = 3;
 
-  /// Складывается ли сервер в общий конфиг.
-  ///
-  /// Только обычная ссылка: готовый конфиг ядра (Clash/Xray), цепочка и
-  /// AmneziaWG несут собственные инбаунды, роутинг и DNS — в чужой конфиг их
-  /// не вложить, они сами себе конфиг.
   static bool mergeableForMultiPing(String serverConfig) =>
       detectServerFormat(serverConfig) == ServerFormat.link;
 
@@ -614,12 +534,7 @@ class PingService {
     }
   }
 
-  /// Меряет группу серверов одним ядром; при отказе делит её пополам.
-  ///
-  /// Делением, а не разбором ошибки: ядро не говорит, какой из аутбаундов ему
-  /// не понравился, а сказать «не работают все двадцать» из-за одной кривой
-  /// ссылки — худшее, что можно показать. В пределе группа распадается до
-  /// одиночных замеров, то есть до прежнего поведения.
+  // ядро не говорит, какой аутбаунд ему не понравился, поэтому делим пополам
   static Future<List<PingResult>> _pingUrlMulti(
     List<ServerItem> servers,
     AppSettings settings, {
@@ -664,8 +579,6 @@ class PingService {
         ));
         measured.add(server);
       } catch (e) {
-        // Ссылку, которую не берёт генератор, в общий конфиг класть нечего:
-        // она краснеет сама по себе и батч за собой не тянет.
         final result = PingResult(
           serverId: server.id,
           serverName: server.displayName,
@@ -689,7 +602,6 @@ class PingService {
           error: error,
           pingType: PingType.url,
         );
-    // Кому результат уже отдан по ходу батча: в итоговом списке он повторится.
     final reported = <String>{};
 
     List<({String id, bool success, int? latencyMs, String error, int? httpStatus})>?
@@ -752,12 +664,6 @@ class PingService {
     return [...failed, ...results];
   }
 
-  /// Каким ядром мерить этот сервер.
-  ///
-  /// Тем же, каким он поедет: решение принимает та же функция, что и на
-  /// подключении. Пока замер всегда поднимал xray, «зелёный пинг» и «сервер
-  /// работает» были про разные ядра — сервер, живой на mihomo, краснел из-за
-  /// того, что его не понял xray, и наоборот. Теперь расходиться нечему.
   static VpnBackend pingCoreFor(String serverConfig, AppSettings settings) {
     final choice = resolveVpnBackend(
       config: serverConfig,
@@ -769,15 +675,6 @@ class PingService {
         : VpnBackend.xray;
   }
 
-  /// Конфиг замера — генератором того ядра, которое его и поднимет.
-  ///
-  /// `httpInbound` одинаков у обоих: на десктопе проба идёт по HTTP
-  /// (`HttpClient` из dart:io не умеет SOCKS вовсе), на Android — по SOCKS,
-  /// потому что там пробу делает Java через `Proxy.Type.SOCKS`.
-  ///
-  /// Разрешённый адрес сервера нужен только xray: у него это отдельное
-  /// direct-правило в таблице маршрутов. У mihomo правило ровно одно (`MATCH`
-  /// в прокси), и своё соединение до сервера ядро по нему не гоняет.
   static String _pingConfigFor(
     VpnBackend core,
     String serverConfig,
@@ -808,16 +705,9 @@ class PingService {
     String? resolvedIp,
     Set<int>? takenPorts,
   }) async {
-    // Порт на каждый замер, а не общая константа. Готовность временного ядра
-    // проверяется коннектом на 127.0.0.1:<порт>, и кто там слушает — не
-    // проверяется. С общим портом это стреляло дважды: следующий сервер в
-    // батче попадал в ещё не отпущенный сокет предыдущего (гонка, зависящая
-    // от скорости машины), а два наложившихся замера уводили пробу в чужое
-    // ядро — то есть молча мерили не тот сервер.
+    // порт на каждый замер: с общим проба уходила в чужое ядро и мерила не тот сервер
     final socksPort = await _freePort(avoid: takenPorts);
-    // Генерация — внутри try: url-пинг умеет только формат xray, а сервером
-    // бывает и готовый конфиг Clash. Незавёрнутое исключение отсюда роняло бы
-    // весь батч замеров, вместо того чтобы покраснеть одной строкой.
+    // внутри try: исключение генератора иначе роняло бы весь батч
     try {
       final core = pingCoreFor(server.config, settings);
       final config = _pingConfigFor(
@@ -854,12 +744,6 @@ class PingService {
     }
   }
 
-  /// батч спидтеста: на каждый сервер поднимаем временный xray и меряем
-  /// скорость скачивания (kbps), кладём её в PingResult.latencyMs
-  ///
-  /// В отличие от url-пинга — строго по одному. Спидтест меряет полосу канала,
-  /// и параллельные качалки делят её между собой: получилось бы N замеров,
-  /// каждый враньё, и тем сильнее, чем шире пул.
   static Future<List<PingResult>> pingSpeedBatch(
     List<ServerItem> servers,
     AppSettings settings, {
@@ -874,11 +758,8 @@ class PingService {
     final results = <PingResult>[];
 
     for (final s in servers) {
-      // см. pingUrlBatch: порт на каждый замер, иначе соседние ядра путаются.
       final socksPort = await _freePort();
       PingResult result;
-      // Генерация — внутри try: замер умеет только формат xray, а сервером
-      // бывает и готовый конфиг Clash (см. pingUrlBatch).
       try {
         final core = pingCoreFor(s.config, settings);
         final config = _pingConfigFor(
@@ -918,15 +799,6 @@ class PingService {
     return results;
   }
 
-  /// Свободный порт под временное ядро замера. Тот же приём, что у туннельных
-  /// бэкендов: даём ОС выбрать, тут же отпускаем и сразу отдаём ядру. Окно
-  /// между отпусканием и стартом теоретически даёт гонку, но со случайным
-  /// портом она несравнимо менее вероятна, чем гарантированное столкновение на
-  /// общей константе.
-  ///
-  /// [avoid] — номера, уже розданные соседним замерам этого батча. Слушающий
-  /// сокет мы закрываем сразу, так что ОС вправе тут же выдать тот же номер
-  /// другому воркеру; пока замеры шли по одному, это было неважно.
   static Future<int> _freePort({Set<int>? avoid}) async {
     var port = 0;
     for (var attempt = 0; attempt < 8; attempt++) {
@@ -970,7 +842,6 @@ class PingService {
   static String testUrlFromSettings(AppSettings settings) =>
       PingTestConfig.resolveTestUrl(settings);
 
-  /// hy2/udp+obfs нельзя померить tcp/udp пробами, нужен реальный http-пинг
   static bool shouldUseUrlPingForServer(ServerItem server, PingType type) {
     if (type == PingType.url) return true;
     final protocol = server.protocol;
@@ -984,34 +855,20 @@ class PingService {
 
   static PingType effectivePingType(ServerItem server, PingType type) {
     if (type == PingType.speed) return PingType.speed;
-    // У цепочки tcp/icmp померил бы только входной узел — цифра, не имеющая
-    // отношения к тому, как цепочка работает целиком. Реальный round-trip даёт
-    // только url-пинг: он поднимает временное ядро со всей цепочкой.
+    // у цепочки tcp/icmp померил бы только входной узел
     if (server.protocol == 'chain') return PingType.url;
     return shouldUseUrlPingForServer(server, type) ? PingType.url : type;
   }
 
-  /// при активном tun raw tcp-коннект закрывает локальный tun-стек ещё до того,
-  /// как syn дойдёт до сервера, поэтому все сервера показывают одинаковую низкую
-  /// задержку. в этом случае осмысленен только url-пинг через временный core,
-  /// который делает реальный round-trip в обход туннеля.
+  // при поднятом TUN сырой tcp-коннект закрывает локальный стек, и у всех серверов одинаковые 2-4 мс
   static PingType pingTypeForConnectionState(
     PingType base, {
     required bool vpnConnected,
     required bool tunMode,
-    /// платформа, где туннель всегда TUN; подменяется только в тестах
     bool? platformAlwaysTun,
   }) {
-    // Android всегда TUN (VpnService), но [tunMode] туда не доезжает: его
-    // считают из vpnState.activeMode, а android_tunnel_backend это поле не
-    // заполняет вовсе — значит без явной поправки подмена на Android мертва,
-    // и пользователь видит 2-4 мс до любого сервера (пинг меряет локальный
-    // конец туннеля). Обычно собственный трафик приложения из туннеля
-    // исключён и raw tcp честен, но исключение молча отваливается — например
-    // в режиме «только выбранные», где addDisallowedApplication бросает.
+    // на Android активный режим в состояние не доезжает, а туннель там всегда TUN
     final throughTun = tunMode || (platformAlwaysTun ?? Platform.isAndroid);
-    // через tun неизмеримы raw tcp/icmp (закрывает локальный tun-стек / не проходит
-    // само ядро); url и speed идут через временный core в обход туннеля
     if (vpnConnected &&
         throughTun &&
         (base == PingType.tcp || base == PingType.icmp)) {
@@ -1037,7 +894,6 @@ class PingService {
     }
   }
 
-  /// тип для порогов цвета: берём сохранённый last ping type, иначе из настроек
   static PingType pingColorTypeForServer(
     ServerItem server,
     AppSettings settings,
@@ -1047,16 +903,13 @@ class PingService {
     return effectivePingType(server, pingTypeFromSettings(settings));
   }
 
-  // tcp — прямой коннект, мало ms. url — xray + socks + http, базовая планка выше
   static const tcpPingGoodMs = 80;
   static const tcpPingFairMs = 150;
   static const urlPingGoodMs = 600;
   static const urlPingFairMs = 1200;
-  // для speed это kbps, больше — лучше (шкала перевёрнута)
   static const speedGoodKbps = 25000;
   static const speedFairKbps = 8000;
 
-  /// для speed value — это kbps (больше лучше), иначе задержка в ms (меньше лучше)
   static PingLatencyQuality pingLatencyQuality(int value, PingType type) {
     if (type == PingType.speed) {
       if (value >= speedGoodKbps) return PingLatencyQuality.good;
@@ -1071,7 +924,6 @@ class PingService {
     return PingLatencyQuality.poor;
   }
 
-  /// формат значения для ui: mbps для спидтеста, иначе ms
   static String formatPingValue(int value, PingType type) {
     if (type == PingType.speed) {
       final mbps = value / 1000.0;
@@ -1082,7 +934,6 @@ class PingService {
     return '$value ms';
   }
 
-  /// универсальный пинг: tcp или http через xray
   static Future<PingResult> ping(
     ServerItem server,
     PingType type, {
@@ -1112,8 +963,7 @@ class PingService {
       );
       return results.first;
     }
-    // всегда временный xray: vpn socks inbound с паролем, а HttpClient
-    // не умеет слать socks5 креды (в логах: invalid username or password)
+    // всегда временное ядро: у инбаунда VPN пароль, а HttpClient не умеет SOCKS с кредами
     return pingUrl(
       server,
       settings,
@@ -1123,8 +973,6 @@ class PingService {
     );
   }
 
-  /// параллельный пинг нескольких серверов батчами по batchSize.
-  /// url-пинг идёт одним батчем (xray последовательно, без channel на каждый)
   static Future<List<PingResult>> pingBatch(
     List<ServerItem> servers,
     PingType type, {

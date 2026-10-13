@@ -25,7 +25,6 @@ class AndroidTunnelBackend implements TunnelBackend {
     reconnectEventStream();
   }
 
-  /// Переподписка на EventChannel — после onResume нативный eventSink мог обнулиться.
   void reconnectEventStream() {
     _eventSub?.cancel();
     _eventSub = _event.receiveBroadcastStream().listen(
@@ -49,7 +48,6 @@ class AndroidTunnelBackend implements TunnelBackend {
     _stateCtrl.close();
   }
 
-  /// Статистика приходит пушем из нативного VpnService — глушить нечего.
   @override
   void setTrafficStatsPollingEnabled(bool enabled) {}
 
@@ -71,11 +69,6 @@ class AndroidTunnelBackend implements TunnelBackend {
     }
   }
 
-  /// Креды локальных инбаундов уже работающей сессии — в отличие от
-  /// [fetchSocksCredentials], который генерирует новую пару под будущий
-  /// startVpn. Нужно свежему Dart-изоляту, когда VpnService пережил
-  /// пересоздание Flutter-движка: без этого Socks5Credentials пуст и
-  /// локальный http-инбаунд отвечает 407. null — кредов у сервиса нет.
   Future<({String username, String password})?>
       fetchActiveSocksCredentials() async {
     try {
@@ -86,8 +79,6 @@ class AndroidTunnelBackend implements TunnelBackend {
       if (username.isEmpty || password.isEmpty) return null;
       return (username: username, password: password);
     } catch (_) {
-      // Восстановление — best effort: вызывающий ретраит на следующем
-      // эмите состояния.
       return null;
     }
   }
@@ -95,17 +86,8 @@ class AndroidTunnelBackend implements TunnelBackend {
   @override
   Future<void> startSession(TunnelSessionRequest request) async {
     try {
-      // На Android всегда используем chain (чистый libxray), не keqrnel.
-      //
-      // keqrnel-обёртка (KeqrnelConfig.wrapXray) строит sing-box с `route:
-      // {final: proxy}` и гонит весь трафик во встроенный xray как в прокси-
-      // аутбаунд. При этом внутренние direct/proxy/block-правила xray не
-      // применяются → сплит-роутинг (geoip/geosite/домены, обход .ru мимо VPN)
-      // на Android молча не работает: весь трафик идёт через сервер. К тому же
-      // sing-box-инбаунд в обёртке не снифит домен. Чистый libxray исполняет
-      // конфиг целиком — со своим роутингом и снифинг-инбаундом, как любой
-      // xray-клиент на Android. sing-box-слой на Android ничего полезного не
-      // добавляет: TUN поднимает VpnService, а читает его само ядро.
+      // на Android только чистый libxray: обёртка keqrnel отдаёт всё встроенному xray как прокси,
+      // и сплит-роутинг молча перестаёт работать
       final coreConfig = request.xrayConfig;
 
       final args = <String, dynamic>{
@@ -114,9 +96,6 @@ class AndroidTunnelBackend implements TunnelBackend {
         if (request.mihomoConfig != null && request.mihomoConfig!.isNotEmpty)
           'mihomoConfig': request.mihomoConfig,
         'coreEngine': 'chain',
-        // Режим сессии: `proxy` — ядро без VpnService, только локальные
-        // инбаунды. Нативная сторона по нему решает, спрашивать ли разрешение
-        // и поднимать ли интерфейс вовсе.
         'tunnelMode': request.mode.storageValue,
         'socksPort': request.socksPort,
         'excludePackages': request.excludePackages,
@@ -159,8 +138,6 @@ class AndroidTunnelBackend implements TunnelBackend {
     }
   }
 
-  /// Скорости за секунду сервис считает сам (getCurrentState), отдельные
-  /// счётчики сторожу здесь не нужны.
   @override
   Future<({int down, int up})?> sessionTrafficCounters() async => null;
 
@@ -261,8 +238,6 @@ class AndroidTunnelBackend implements TunnelBackend {
         'probes': probes.map((e) => {'id': e.$1, 'port': e.$2}).toList(),
         'batchId': ?batchId,
       });
-      // Пустой ответ — нативная сторона не смогла поднять батч целиком.
-      // Возвращаем null: вызывающий поделит его и попробует снова.
       if (result == null || result.isEmpty) return null;
       return [
         for (final raw in result)
@@ -284,12 +259,7 @@ class AndroidTunnelBackend implements TunnelBackend {
             httpStatus: (map['httpStatus'] as num?)?.toInt(),
           );
 
-  /// Результаты общего замера по одному, пока батч ещё идёт.
-  ///
-  /// Подписка одна на всё время жизни и заводится до первого вызова: канал
-  /// шлёт в никуда, пока его не слушают, а итоговый список всё равно
-  /// приходит ответом на вызов — ранние результаты лишь ускоряют, а не
-  /// заменяют его.
+  // подписка заводится до первого вызова: канал шлёт в никуда, пока его не слушают
   static const _pingProgress = EventChannel('keqdis_ping_progress');
   static StreamSubscription<dynamic>? _pingProgressSub;
   static final _pingProgressListeners =

@@ -17,24 +17,12 @@ import '../services/windows_desktop_service.dart';
 import '../ui/desktop/desktop_connection_mode.dart';
 import '../utils/app_locale.dart';
 
-/// Меню трея на Windows — нативное, через `tray_manager`.
-///
-/// Прежде меню рисовал Flutter: окно приложения на время превращалось в попап —
-/// менялся стиль, размер, z-порядок, вешался мышиный хук, скруглялись углы через
-/// DWM, а потом всё это откатывалось. Каждый шаг мог не откатиться, отсюда и
-/// росла семья багов: микроокно без рамки, «меню не открывается» из-за
-/// рассинхрона флага между C++ и Dart, окно поверх панели задач.
-///
-/// Теперь это обычный `TrackPopupMenu` самой Windows: окно никто не трогает, а
-/// позиционирование, DPI, мультимонитор и клавиатура достаются от системы. Цена
-/// — вид: меню системное, без темы приложения и без флагов.
 class WindowsTrayMenu with TrayListener {
   WindowsTrayMenu(this._ref);
 
   final Ref _ref;
 
-  /// Иконка трея. `.ico` вместо `.png` намеренно: Windows берёт из ico кадр
-  /// нужного размера, а один отмасштабированный png в трее мылится.
+  // ico, чтобы Windows взяла кадр нужного размера, png в трее мылится
   static const _iconAsset = 'assets/tray_icon.ico';
 
   static const _keyToggleVpn = 'vpn';
@@ -46,10 +34,8 @@ class WindowsTrayMenu with TrayListener {
 
   bool _busy = false;
 
-  /// Меню сейчас на экране (TrackPopupMenu модален и держит нас в await).
   bool _menuOpen = false;
 
-  /// Когда меню закрылось в последний раз — см. [_reopenGuard].
   DateTime? _menuClosedAt;
 
   Future<void> init() async {
@@ -70,32 +56,18 @@ class WindowsTrayMenu with TrayListener {
     trayManager.removeListener(this);
     try {
       await trayManager.destroy();
-    } catch (_) {
-      // Выходим в любом случае — иконку подберёт завершение процесса.
-    }
+    } catch (_) {}
   }
-
-  // --- события иконки ---------------------------------------------------
 
   @override
   void onTrayIconMouseDown() {
-    // Левый клик — развернуть окно. Меню он не открывает: так же ведут себя
-    // Telegram и Discord, и так же вела себя прежняя реализация.
     WindowsDesktopService.restoreMainWindow();
   }
 
   @override
   void onTrayIconRightMouseDown() {
-    // Повторный правый клик обязан закрыть меню, а не открыть новое.
-    //
-    // Само закрытие делает Windows: `TrackPopupMenu` модален и гасит меню от
-    // клика где угодно, в том числе по иконке трея. Но следом этот же клик
-    // приезжает к нам обычным уведомлением от иконки — и меню открывалось
-    // заново, будто оно и не закрывалось.
-    //
-    // Ловим двумя способами сразу, потому что порядок «меню закрылось» и
-    // «пришло уведомление» не гарантирован: флагом — если уведомление успело
-    // прийти, пока меню ещё живо, и окном времени — если уже после.
+    // повторный правый клик должен закрыть меню: Windows гасит его сама, но тот же клик
+    // приходит к нам уведомлением. ловим и флагом, и окном времени, порядок не гарантирован
     if (_menuOpen) return;
     final closedAt = _menuClosedAt;
     if (closedAt != null &&
@@ -106,8 +78,6 @@ class WindowsTrayMenu with TrayListener {
     _showMenu();
   }
 
-  /// Сколько после закрытия меню правый клик считается «тем самым, который его
-  /// и закрыл». Человек не успевает осознанно кликнуть повторно быстрее.
   static const _reopenGuard = Duration(milliseconds: 300);
 
   @override
@@ -117,24 +87,12 @@ class WindowsTrayMenu with TrayListener {
     _handle(key);
   }
 
-  // --- построение меню --------------------------------------------------
-
-  /// Меню собирается заново на каждый правый клик, а не поддерживается живым.
-  ///
-  /// Иначе его пришлось бы пересобирать на каждое изменение статуса, списка
-  /// серверов и настроек — то есть держать подписки ради окна, которого 99%
-  /// времени нет на экране. А правый клик и так даёт точку, где состояние
-  /// заведомо свежее.
   Future<void> _showMenu() async {
     if (_menuOpen) return;
     _menuOpen = true;
     try {
       await trayManager.setContextMenu(await _buildMenu());
-      // Возвращается, когда меню закрыто: `TrackPopupMenu` модален.
-      //
-      // Флаг `bringAppToFront` не нужен и ни на что не влияет: в нашей копии
-      // пакета меню принадлежит отдельному невидимому окну, а окно приложения
-      // не активируется вовсе (см. third_party/tray_manager/PATCH.md).
+      // TrackPopupMenu модален, вернёмся после закрытия (патч пакета: third_party/tray_manager/PATCH.md)
       await trayManager.popUpContextMenu();
     } catch (e, st) {
       AppLogger.instance.warn(
@@ -165,8 +123,6 @@ class WindowsTrayMenu with TrayListener {
         status == VpnStatus.connected || status == VpnStatus.connecting;
 
     final items = <MenuItem>[
-      // Статус — неактивным пунктом: в нативном меню это единственный способ
-      // показать текст, который не нажимается.
       MenuItem(
         label: switch (status) {
           VpnStatus.connected => l10n.trayStatusConnected,
@@ -181,7 +137,6 @@ class WindowsTrayMenu with TrayListener {
       MenuItem(
         key: _keyToggleVpn,
         label: connected ? l10n.trayDisconnect : l10n.trayConnect,
-        // «Отключить» доступен и во время подключения — это отмена попытки.
         disabled: connected ? _busy : (active == null || busy),
       ),
       MenuItem.separator(),
@@ -223,9 +178,6 @@ class WindowsTrayMenu with TrayListener {
     return Menu(items: items);
   }
 
-  /// Серверы, сгруппированные по подпискам. Группы становятся вложенными
-  /// подменю — в нативном меню это единственная иерархия, а плоский список из
-  /// сотни строк без заголовков не читается вовсе.
   List<MenuItem> _serverItems({
     required List<ServerItem> servers,
     required ServerItem? active,
@@ -247,8 +199,7 @@ class WindowsTrayMenu with TrayListener {
       }
     }
 
-    // Имена подписок берём из провайдера: у ServerItem.subscriptionName часто
-    // пусто, и группа получала бы заголовок «Подписки» вместо своего имени.
+    // имена из провайдера: у ServerItem.subscriptionName часто пусто
     final subs = _ref.read(subscriptionsProvider).value ?? const [];
     final subNames = {for (final s in subs) s.id: s.name};
     String subTitle(String id) {
@@ -278,7 +229,6 @@ class WindowsTrayMenu with TrayListener {
         (subTitle(id), bySub[id]!),
     ];
 
-    // Одна группа — незачем прятать её в ещё одно подменю.
     if (groups.length <= 1) {
       final only = groups.isEmpty ? servers : groups.first.$2;
       return _chunked([...only]..sort(byName), entry);
@@ -295,25 +245,8 @@ class WindowsTrayMenu with TrayListener {
     ];
   }
 
-  /// Длина, после которой Windows вешает на меню кнопки прокрутки.
-  ///
-  /// Точного числа нет — оно зависит от высоты рабочей области и высоты пункта,
-  /// на ноутбучном экране это примерно три десятка. Берём с запасом: 24 пункта
-  /// в одном меню и так предел читаемости.
   static const _maxItemsPerMenu = 24;
 
-  /// Режет длинный список на подменю, чтобы прокрутка не появлялась.
-  ///
-  /// Это про читаемость: полсотни строк подряд в нативном меню не
-  /// просматриваются, а кнопки прокрутки Win32-меню — худший способ листать
-  /// список из всех возможных.
-  ///
-  /// Уезжание меню под панель задач, с которого началась эта нарезка, лечится
-  /// не здесь, а позиционированием в нашей копии пакета: меню встаёт на границу
-  /// рабочей области (third_party/tray_manager/PATCH.md).
-  ///
-  /// Подписи кусков — по крайним именам: «Германия … Польша» показывает, что
-  /// внутри, а «1–24» не показывает ничего.
   static List<MenuItem> _chunked(
     List<ServerItem> servers,
     MenuItem Function(ServerItem) entry,
@@ -333,7 +266,6 @@ class WindowsTrayMenu with TrayListener {
         ),
       );
     }
-    // Кусков тоже может набраться больше предела — тогда режем ещё раз.
     return chunks.length <= _maxItemsPerMenu
         ? chunks
         : [
@@ -351,13 +283,10 @@ class WindowsTrayMenu with TrayListener {
           ];
   }
 
-  /// Имя для подписи куска: длинные режем, иначе подпись шире самого меню.
   static String _short(String name) {
     final trimmed = name.trim();
     return trimmed.length <= 14 ? trimmed : '${trimmed.substring(0, 13)}…';
   }
-
-  // --- действия ---------------------------------------------------------
 
   Future<void> _handle(String key) async {
     if (key.startsWith(_serverPrefix)) {
@@ -384,8 +313,6 @@ class WindowsTrayMenu with TrayListener {
     try {
       await action();
     } catch (e, st) {
-      // В трее нет снекбаров: ошибку в лог, а статус увидит следующее открытие
-      // меню — там он читается из того же провайдера.
       AppLogger.instance.warn('Tray $what failed', error: e, stackTrace: st);
     } finally {
       _busy = false;
@@ -419,7 +346,6 @@ class WindowsTrayMenu with TrayListener {
             _ref.read(vpnStateProvider).value?.status ?? VpnStatus.disconnected;
         final tunnelActive = status == VpnStatus.connected ||
             status == VpnStatus.connecting;
-        // Повторный выбор активного сервера туннель не перезапускает.
         if (tunnelActive && server.id == serversState.activeServer?.id) return;
         await _ref.read(serversProvider.notifier).setActive(server);
         if (tunnelActive) {
@@ -427,21 +353,11 @@ class WindowsTrayMenu with TrayListener {
         }
       }, 'server select');
 
-  /// Смена режима.
-  ///
-  /// TUN на Windows требует прав администратора, и перезапуск с UAC показывает
-  /// диалог — а диалогу нужен экран. Поэтому здесь окно сперва разворачивается,
-  /// и всё остальное происходит уже в приложении: в прежней реализации ровно за
-  /// этим тянулся хвост «взять всё из ref до закрытия меню, иначе ref мёртв».
   Future<void> _setMode(ConnectionMode next) => _guard(() async {
         final settings =
             _ref.read(settingsNotifierProvider).value ?? const AppSettings();
         if (next == settings.connectionModeEnum) return;
-        // Окно разворачиваем заранее: переход в TUN может спросить про
-        // перезапуск с правами администратора, а диалогу нужен экран. Раньше
-        // ради этого же меню закрывалось вручную, и дальше тянулся хвост
-        // «взять всё из ref до закрытия, иначе ref мёртв» — нативное меню к
-        // этому моменту уже закрыто самой Windows.
+        // окно сперва разворачиваем: переход в TUN может спросить про UAC, диалогу нужен экран
         await WindowsDesktopService.restoreMainWindow();
         final context = rootNavigatorKey.currentContext;
         if (context == null || !context.mounted) return;
@@ -454,20 +370,13 @@ class WindowsTrayMenu with TrayListener {
       }, 'mode switch');
 
   Future<void> _exit() async {
-    // Симметрично Linux (tray Quit): сперва рвём туннель, иначе системный прокси
-    // остаётся указывать на мёртвый 127.0.0.1-порт и после выхода ломает
-    // интернет во всей системе.
+    // сначала рвём туннель, иначе системный прокси после выхода смотрит в мёртвый порт
     try {
       await _ref.read(vpnStateProvider.notifier).disconnect();
-    } catch (_) {
-      // Выходим в любом случае; стартовая зачистка подберёт остатки.
-    }
+    } catch (_) {}
     await WindowsDesktopService.exitApp();
   }
 
-  // --- локализация ------------------------------------------------------
-
-  /// Строки меню вне дерева виджетов: `AppLocalizations.of(context)` тут нет.
   Future<AppLocalizations> _l10n() async {
     final settings =
         _ref.read(settingsNotifierProvider).value ?? const AppSettings();
@@ -482,8 +391,6 @@ class WindowsTrayMenu with TrayListener {
   }
 }
 
-/// Живёт всё время работы приложения: меню трея доступно и тогда, когда окно
-/// спрятано, поэтому провайдер держится за корневой контейнер, а не за экран.
 final windowsTrayMenuProvider = Provider<WindowsTrayMenu?>((ref) {
   if (!Platform.isWindows) return null;
   final menu = WindowsTrayMenu(ref);

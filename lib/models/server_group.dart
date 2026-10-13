@@ -1,29 +1,17 @@
 import 'server_item.dart';
 import 'subscription.dart';
 
-/// Ключ скоупа группы цепочек — общий для пинга, сворачивания и сортировки.
 const String kChainsServerGroupKey = '__chains__';
 
-/// То же для серверов, добавленных руками (без подписки).
 const String kManualServerGroupKey = '__manual__';
 
-/// Откуда взялась группа. Заголовок и действия у трёх видов разные, а порядок
-/// и состав — общие, поэтому вид едет полем, а не тремя списками.
 enum ServerGroupKind { chains, subscription, manual }
 
-/// Группа серверов в том виде, в каком её показывает список.
-///
-/// Отдельный тип нужен ровно затем, чтобы список и боковой навигатор строили
-/// один и тот же набор групп в одном и том же порядке: кнопка «перейти к
-/// группе», которой в списке нет (или которая там третья, а не первая), — это
-/// не мелочь оформления, а сломанная навигация.
 class ServerGroupRef {
   final ServerGroupKind kind;
 
-  /// Ключ группы: `sub.id` у подписки, иначе служебная константа.
   final String key;
 
-  /// Подписка группы; null у цепочек и ручных серверов.
   final Subscription? subscription;
 
   final List<ServerItem> servers;
@@ -35,13 +23,9 @@ class ServerGroupRef {
     required this.servers,
   });
 
-  /// Имя подписки; у служебных групп пусто — заголовок им даёт локализация.
   String get subscriptionName => subscription?.name.trim() ?? '';
 }
 
-/// Группы списка серверов: цепочки → подписки (в порядке самих подписок) →
-/// добавленные руками. Пустые группы выпадают — карточки без единого сервера
-/// в списке нет, значит и кнопки к ней быть не должно.
 List<ServerGroupRef> buildServerGroups({
   required List<ServerItem> servers,
   required List<Subscription> subscriptions,

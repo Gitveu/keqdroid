@@ -1,14 +1,11 @@
 import 'package:flutter/services.dart';
 
-/// Действия, на которые можно повесить хоткей (desktop). Все выключены,
-/// пока пользователь сам не назначит сочетание.
 enum HotkeyAction {
   toggleConnection('toggleConnection'),
   toggleTunMode('toggleTunMode'),
   bestPingServer('bestPingServer'),
   toggleWindow('toggleWindow');
 
-  /// Стабильный id: ключ в настройках и идентификатор в native-канале.
   final String id;
   const HotkeyAction(this.id);
 
@@ -20,18 +17,13 @@ enum HotkeyAction {
   }
 }
 
-/// Сочетание клавиш: модификаторы + основная клавиша (токен из [HotkeyKeys]).
-///
-/// Матчинг идёт по физической клавише (как Ctrl+V-вставка в приложении):
-/// на ЙЦУКЕН-раскладке логическая клавиша была бы «т», а физическая — keyT,
-/// поэтому сочетание работает на любой раскладке.
+// по физической клавише, чтобы сочетание работало и на ЙЦУКЕН
 class HotkeyBinding {
   final bool ctrl;
   final bool alt;
   final bool shift;
   final bool meta;
 
-  /// Токен основной клавиши, например `keyT`, `f5`, `arrowUp`.
   final String key;
 
   const HotkeyBinding({
@@ -42,7 +34,6 @@ class HotkeyBinding {
     required this.key,
   });
 
-  /// Сериализация в строку настроек: `ctrl+shift+keyT`.
   String toToken() => [
         if (ctrl) 'ctrl',
         if (alt) 'alt',
@@ -68,14 +59,11 @@ class HotkeyBinding {
     return binding.isValid ? binding : null;
   }
 
-  /// Голая буква/цифра глобальным хоткеем перехватила бы обычный набор текста
-  /// во всех приложениях. F-клавиши разрешены без модификаторов (как в OBS).
   bool get isValid {
     if (HotkeyKeys.isFunctionKey(key)) return true;
     return ctrl || alt || shift || meta;
   }
 
-  /// Человекочитаемая метка: `Ctrl + Shift + T`.
   String get label => [
         if (ctrl) 'Ctrl',
         if (alt) 'Alt',
@@ -84,7 +72,7 @@ class HotkeyBinding {
         HotkeyKeys.labelFor(key),
       ].join(' + ');
 
-  /// Маска RegisterHotKey: MOD_ALT=1, MOD_CONTROL=2, MOD_SHIFT=4, MOD_WIN=8.
+  // MOD_ALT=1, MOD_CONTROL=2, MOD_SHIFT=4, MOD_WIN=8
   int get windowsModifiers =>
       (alt ? 1 : 0) | (ctrl ? 2 : 0) | (shift ? 4 : 0) | (meta ? 8 : 0);
 
@@ -114,13 +102,10 @@ class _KeyEntry {
   const _KeyEntry(this.physical, this.vk, this.label);
 }
 
-/// Таблица поддерживаемых основных клавиш: токен → физическая клавиша,
-/// Windows virtual-key code и отображаемая метка.
 class HotkeyKeys {
   HotkeyKeys._();
 
   static const Map<String, _KeyEntry> _entries = {
-    // Буквы: VK 0x41..0x5A.
     'keyA': _KeyEntry(PhysicalKeyboardKey.keyA, 0x41, 'A'),
     'keyB': _KeyEntry(PhysicalKeyboardKey.keyB, 0x42, 'B'),
     'keyC': _KeyEntry(PhysicalKeyboardKey.keyC, 0x43, 'C'),
@@ -147,7 +132,6 @@ class HotkeyKeys {
     'keyX': _KeyEntry(PhysicalKeyboardKey.keyX, 0x58, 'X'),
     'keyY': _KeyEntry(PhysicalKeyboardKey.keyY, 0x59, 'Y'),
     'keyZ': _KeyEntry(PhysicalKeyboardKey.keyZ, 0x5A, 'Z'),
-    // Цифры верхнего ряда: VK 0x30..0x39.
     'digit0': _KeyEntry(PhysicalKeyboardKey.digit0, 0x30, '0'),
     'digit1': _KeyEntry(PhysicalKeyboardKey.digit1, 0x31, '1'),
     'digit2': _KeyEntry(PhysicalKeyboardKey.digit2, 0x32, '2'),
@@ -158,7 +142,6 @@ class HotkeyKeys {
     'digit7': _KeyEntry(PhysicalKeyboardKey.digit7, 0x37, '7'),
     'digit8': _KeyEntry(PhysicalKeyboardKey.digit8, 0x38, '8'),
     'digit9': _KeyEntry(PhysicalKeyboardKey.digit9, 0x39, '9'),
-    // F-клавиши: VK 0x70..0x7B.
     'f1': _KeyEntry(PhysicalKeyboardKey.f1, 0x70, 'F1'),
     'f2': _KeyEntry(PhysicalKeyboardKey.f2, 0x71, 'F2'),
     'f3': _KeyEntry(PhysicalKeyboardKey.f3, 0x72, 'F3'),
@@ -171,7 +154,6 @@ class HotkeyKeys {
     'f10': _KeyEntry(PhysicalKeyboardKey.f10, 0x79, 'F10'),
     'f11': _KeyEntry(PhysicalKeyboardKey.f11, 0x7A, 'F11'),
     'f12': _KeyEntry(PhysicalKeyboardKey.f12, 0x7B, 'F12'),
-    // Навигация и прочее.
     'space': _KeyEntry(PhysicalKeyboardKey.space, 0x20, 'Space'),
     'arrowLeft': _KeyEntry(PhysicalKeyboardKey.arrowLeft, 0x25, '←'),
     'arrowUp': _KeyEntry(PhysicalKeyboardKey.arrowUp, 0x26, '↑'),
@@ -196,7 +178,6 @@ class HotkeyKeys {
     'backslash': _KeyEntry(PhysicalKeyboardKey.backslash, 0xDC, '\\'),
   };
 
-  // Обратный индекс PhysicalKeyboardKey.usbHidUsage → токен (для захвата).
   static final Map<int, String> _byUsbHid = {
     for (final e in _entries.entries) e.value.physical.usbHidUsage: e.key,
   };

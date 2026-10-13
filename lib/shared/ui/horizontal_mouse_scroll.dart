@@ -1,17 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
-/// Горизонтальный список, который слушается мыши.
-///
-/// Flutter на десктопе не даёт листать такие списки ничем. Колесо: `Scrollable`
-/// берёт из события дельту по своей оси, то есть `dx`, а обычное колесо шлёт
-/// только `dy` — оси меняются местами лишь пока зажат Shift, о чём догадаться
-/// нельзя. Перетаскивание: мыши нет в `dragDevices` десктопного
-/// `ScrollBehavior`, список тянется пальцем и тачпадом, но не курсором.
-///
-/// На телефоне ни того ни другого не видно, поэтому горизонтальные ряды и
-/// разъезжались по платформам: на Android листаются, на десктопе стоят намертво
-/// и в узком окне уезжают за край без всякой возможности добраться до хвоста.
+// колесо шлёт только dy, а горизонтальный Scrollable берёт dx, и мыши нет в dragDevices
 class HorizontalMouseScroll extends StatelessWidget {
   const HorizontalMouseScroll({
     super.key,
@@ -19,8 +9,6 @@ class HorizontalMouseScroll extends StatelessWidget {
     required this.child,
   });
 
-  /// Контроллер того самого горизонтального списка. Нужен именно он: колесо мы
-  /// обрабатываем сами и двигаем позицию напрямую.
   final ScrollController controller;
 
   final Widget child;
@@ -43,15 +31,10 @@ class HorizontalMouseScroll extends StatelessWidget {
 
   void _onPointerSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
-    // Только вертикальная дельта. Горизонтальную (наклон колеса, Shift,
-    // жест тачпада) `Scrollable` разбирает сам, и вмешательство здесь просто
-    // удвоило бы её.
+    // только dy: горизонтальную дельту Scrollable разбирает сам
     final delta = event.scrollDelta.dy;
     if (delta == 0 || !controller.hasClients) return;
-    // Через позицию, а не `jumpTo`: `pointerScroll` — тот же вход, которым
-    // пользуется сам `Scrollable`, поэтому список ведёт себя одинаково
-    // независимо от того, кто ему передал щелчок колеса (в частности,
-    // сглаживание `SmoothScrollController` остаётся в силе).
+    // pointerScroll, а не jumpTo: тот же вход, что у Scrollable, сглаживание остаётся
     controller.position.pointerScroll(delta);
   }
 }

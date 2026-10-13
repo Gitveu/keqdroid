@@ -102,8 +102,6 @@ Widget _serversStatusText(
       VpnStatus.connecting => l10n.vpnConnecting,
       VpnStatus.disconnecting => l10n.vpnDisconnecting,
       VpnStatus.error => _vpnErrorStatusLabel(errorMessage, context),
-      // connected, но activeServer == null (активный сервер удалили при
-      // живом туннеле) — показываем «подключено», а не «выберите сервер»
       VpnStatus.connected => l10n.vpnConnectedGeneric,
       _ =>
         activeServer != null
@@ -127,11 +125,6 @@ Widget _serversStatusText(
   }
 }
 
-/// Шапка вкладки серверов: волна, круг подключения, статус и чипы трафика.
-///
-/// Отдельный виджет, а не кусок общего `build()`: он сам подписан на состояние
-/// VPN, поэтому смена статуса перерисовывает шапку, а не вкладку вместе со
-/// списком серверов под ней — а список тут самая дорогая часть.
 class _ConnectHeader extends ConsumerWidget {
   const _ConnectHeader({
     super.key,
@@ -141,8 +134,6 @@ class _ConnectHeader extends ConsumerWidget {
     required this.onJumpToActive,
   });
 
-  /// Контроллеры принадлежат состоянию вкладки: оно заводит их в initState и
-  /// само сводит с состоянием VPN. Шапка только рисует по ним.
   final AnimationController stateCtrl;
   final AnimationController waveCtrl;
 
@@ -161,53 +152,25 @@ class _ConnectHeader extends ConsumerWidget {
     final activeServer = ref.watch(
       serversProvider.select((s) => s.activeServer),
     );
-    // Пока выход перепроверяется после смены сервера, флаг прежнего выхода не
-    // показываем: он был бы уже неправдой.
     final exitLookup = ref.watch(exitIpProvider);
     final exit = exitLookup.isLoading ? null : exitLookup.value;
-    // При смене сервера на активном VPN движок на миг проходит через
-    // `disconnected` (старый сервер отключается перед подключением нового).
-    // Без учёта serverSwitchInProgress круг проваливался в серый «неактивный»
-    // вид (spinner → серый → spinner). Пока идёт переключение — держим круг в
-    // состоянии «подключается», чтобы переход был одной плавной дугой.
     final isConnected =
         vpnStatus == VpnStatus.connected && !serverSwitchInProgress;
-    // `disconnecting` сюда не входит, и это не упрощение.
-    //
-    // Отключение мгновенное, но флаг заводил кнопку в состояние «идёт работа»:
-    // на пути в отключённый вид успевал появиться индикатор, дожить до
-    // доводки и только потом уступить место неактивной кнопке. Лишний кадр
-    // там, где нечего ждать. Тапабельность на `disconnecting` гасится ниже
-    // отдельно, по самому статусу.
     final isConnecting =
         serverSwitchInProgress || vpnStatus == VpnStatus.connecting;
 
     final isDesktop = PlatformBootstrap.isDesktop;
-    // Высота волны постоянна. Раньше она ужималась на connecting/connected,
-    // чтобы шапка не разрасталась от чипов трафика, но менялась мгновенно —
-    // и всё выше списка прыгало и слегка уменьшалось в момент подключения.
-    // Единственное, что теперь меняет высоту шапки, — появление чипов, а его
-    // плавно разводит AnimatedSize ниже.
     final waveHeight = isDesktop ? 40.0 : 36.0;
     final topPad = isDesktop ? 20.0 : MediaQuery.of(context).padding.top + 24;
     return Padding(
       padding: EdgeInsets.fromLTRB(24, topPad, 24, 8),
       child: Column(
         children: [
-              // Кнопка анимируется на нажатии и на смене иконки — boundary не
-              // даёт этим перерисовкам тянуть за собой весь хедер.
-              //
-              // «Дыхания» здесь больше нет. Медленный ScaleTransition (1.0 →
-              // 1.05, 2 с) масштабировал всю кнопку вместе с её blur-тенью
-              // каждый кадр: пересчёт тени на дробном масштабе давал видимое
-              // дёрганье вместо плавной пульсации. Состояние подключения и так
-              // видно по цвету круга, иконке и волне под ним.
               RepaintBoundary(
                 child: _ConnectButton(
                   isConnected: isConnected,
                   isConnecting: isConnecting,
-                  // connecting остаётся тапабельным — это отмена попытки;
-                  // блокируем только disconnecting (гасить уже нечего).
+                  // connecting тапабелен: это отмена попытки
                   onTap: vpnStatus == VpnStatus.disconnecting
                       ? null
                       : () => onToggle(vpnStatus),
@@ -215,10 +178,6 @@ class _ConnectHeader extends ConsumerWidget {
               ),
               const SizedBox(height: 18),
               SizedBox(
-                // Высота под статус фиксирована и рассчитана на две строки.
-                // Имена серверов разной длины занимают то одну строку, то две,
-                // и шапка меняла высоту при переключении сервера — волна и
-                // список под ней подпрыгивали.
                 height: _ServersTabState._statusAreaHeight(context),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -248,10 +207,6 @@ class _ConnectHeader extends ConsumerWidget {
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.red(context)),
                   ),
                 ),
-              // Скорость/трафик/время. Появление плавное: AnimatedSize
-              // раздвигает место (контент ниже не прыгает), а чипы всплывают
-              // снизу с фейдом; дефолтный клип AnimatedSize обрезает их на
-              // входе — эффект «из тумана снизу».
               AnimatedSize(
                 duration: const Duration(milliseconds: 380),
                 curve: Curves.easeOutCubic,
@@ -278,7 +233,6 @@ class _ConnectHeader extends ConsumerWidget {
                         ),
                 ),
               ),
-          // Отступ до волны тоже постоянный — он прыгал вместе с её высотой.
           const SizedBox(height: 20),
           _WavePaintWidget(
             waveCtrl: waveCtrl,
@@ -303,21 +257,15 @@ class _ServersTabState extends ConsumerState<ServersTab>
   late final AnimationController _waveCtrl;
   late final AnimationController _stateCtrl;
 
-  /// Сколько волна ещё крутится после перехода к «отключено»: её амплитуда
-  /// гаснет покадрово (~1/8 за кадр) и догоняет ноль десятками кадров позже
-  /// самого перехода, а на медленном рендере это больше секунды.
   static const _waveSettleGrace = Duration(seconds: 2);
   Timer? _waveSettleTimer;
 
   bool _handlingLaunchAction = false;
   bool _appInForeground = true;
 
-  /// Поворот переносит шапку и список между одной колонкой и двумя панелями;
-  /// глобальные ключи переносят их вместе с состоянием.
   final _headerKey = GlobalKey();
   final _listKey = GlobalKey();
 
-  /// Фиксированная панель в двух панелях — 360dp по спеке M3 для «expanded».
   static const double _headerPaneWidth = 360;
 
   @override
@@ -333,10 +281,7 @@ class _ServersTabState extends ConsumerState<ServersTab>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    // Seed the connected/disconnected wave style from the current VPN status.
-    // Without this, reopening from the tray rebuilds this tab fresh while the
-    // VPN is still connected — and since the listener only reacts to status
-    // *changes*, the wave would stay stuck in the disconnected style.
+    // после возврата из трея вкладка строится заново, а listener ловит только смену статуса
     final initialStatus = ref.read(vpnStateProvider).value?.status;
     final initiallyActive =
         initialStatus == VpnStatus.connected ||
@@ -372,12 +317,7 @@ class _ServersTabState extends ConsumerState<ServersTab>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // На десктопе `inactive` = окно видимо, но не в фокусе (клик по другому
-    // окну, разворот из трея через таскбар) — считать его «фоном» нельзя:
-    // при развороте через таскбар Windows нередко доставляет только `inactive`
-    // (`resumed` — лишь при получении фокуса), и анимация линии подключения
-    // осталась бы замороженной. Фон на десктопе — только `hidden`/`paused`
-    // (реально свёрнуто/скрыто в трей).
+    // на десктопе inactive значит окно видно без фокуса, Windows при развороте из трея часто шлёт только его
     final isDesktop =
         Platform.isWindows || Platform.isLinux || Platform.isMacOS;
     final background = state == AppLifecycleState.paused ||
@@ -388,7 +328,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
       _appInForeground = false;
       _syncHeaderAnimations();
     } else {
-      // resumed, либо (на десктопе) inactive — окно на переднем плане
       _appInForeground = true;
       _syncHeaderAnimations();
       if (Platform.isAndroid && state == AppLifecycleState.resumed) {
@@ -414,10 +353,7 @@ class _ServersTabState extends ConsumerState<ServersTab>
         status == VpnStatus.connected ||
         status == VpnStatus.connecting ||
         status == VpnStatus.disconnecting;
-    // Снапшоты из натива (onVpnStatusSnapshot, resumed) приходят и при обычном
-    // подключении из приложения — жёсткое `_stateCtrl.value =` здесь обрывало
-    // 600мс морф волны, уже запущенный listener'ом vpnStateProvider. Поэтому
-    // доводим плавно, и только если контроллер не в цели и не едет к ней.
+    // снапшоты из натива приходят и при обычном подключении, жёсткий value= обрывал морф волны
     final target = active ? 1.0 : 0.0;
     final atTarget = _stateCtrl.value == target && !_stateCtrl.isAnimating;
     final movingToTarget = active
@@ -445,17 +381,7 @@ class _ServersTabState extends ConsumerState<ServersTab>
         status == VpnStatus.connecting ||
         status == VpnStatus.disconnecting ||
         status == VpnStatus.connected;
-    // Бесконечные анимации (60fps) крутим только на переднем плане: в свёрнутом
-    // окне движок рендерил бы их за кадром и жёг 3-4% CPU. При возврате из трея
-    // (resumed) анимация перезапускается. Трей-hide (SW_HIDE = lifecycle
-    // `inactive`) дополнительно гасится глобальным TickerMode в app.dart
-    // (там же — kawaii-оверлей), см. desktopUiVisibleProvider.
-    //
-    // У отключённого волна — ровный трек: фаза двигает синусоиду нулевой
-    // высоты, и каждый кадр рисует то же самое. Такой «анимацией» вкладка
-    // держала под 45% ядра при программном рендере (Linux без GPU-драйвера),
-    // а под X11 движок ещё и копирует каждый кадр через процессор. Пока гаснет
-    // переход к отключению, волна видна и крутится.
+    // ровную волну не крутим: на Linux без GPU такая анимация ела почти половину ядра
     final settled = !vpnActive &&
         _stateCtrl.isDismissed &&
         _waveSettleTimer?.isActive != true;
@@ -478,16 +404,10 @@ class _ServersTabState extends ConsumerState<ServersTab>
       if (url != null && url.isNotEmpty) {
         await _importDeepLink(url);
       } else {
-        // Windows шлёт пуш без ссылки: она лежит у натива и ждёт, пока её
-        // заберут. Так ссылка не теряется, если вкладка сейчас не построена
-        // (например, приложение свёрнуто в трей).
         await _checkPendingDeepLink();
       }
       return;
     }
-    // Notification / QS tile may send a quick status snapshot via native
-    // method channel when EventChannel stream isn't connected. In that case
-    // trigger an explicit sync from native to update VPN state in Riverpod.
     if (call.method == 'onVpnStatusSnapshot') {
       try {
         await ref.read(vpnStateProvider.notifier).syncFromNative();
@@ -499,13 +419,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
     }
   }
 
-  /// Ссылка, которой открыли приложение снаружи (Telegram, браузер): схема
-  /// сервера (vless:// и т.п.) либо `keqdroid://install-config?url=…` с кнопки
-  /// на странице подписки. Холодный старт — забираем одноразовую pending-ссылку
-  /// у натива; тёплый приходит пушем onDeepLink.
-  ///
-  /// Зовётся и при (пере)монтировании вкладки: на Windows ссылка могла прийти,
-  /// пока было открыто меню трея и вкладки не было в дереве.
   Future<void> _checkPendingDeepLink() async {
     if (!VpnNativeBridge.supportsDeepLinks) return;
     try {
@@ -521,12 +434,9 @@ class _ServersTabState extends ConsumerState<ServersTab>
     }
   }
 
-  /// Добавление подписки по адресу — общий путь для QR и для deep link.
   Future<void> _addSubscriptionFromUrl(BuildContext ctx, String url) async {
     final host = Uri.tryParse(url)?.host ?? url;
     try {
-      // Имя выведено из URL, а не задано — пусть его заменит название от
-      // провайдера, когда оно придёт заголовком.
       final sub = Subscription.create(name: host, url: url, nameIsAuto: true);
       await ref.read(subscriptionsProvider.notifier).add(sub);
       if (ctx.mounted) {
@@ -539,7 +449,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
 
   Future<void> _importDeepLink(String raw) async {
     if (!mounted) return;
-    // Код телевизора, прочитанный системной камерой.
     final tv = TvPairing.parse(raw);
     if (tv != null) {
       await sendSubscriptionToTv(context, ref, tv);
@@ -550,8 +459,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
       await _addSubscriptionFromUrl(context, subUrl);
       return;
     }
-    // Тот же путь, что вставка/QR: дубликат или битая ссылка показываются
-    // как ошибка импорта, а не роняют обработчик.
     final result = await _addConfigsResilient([raw]);
     if (!mounted) return;
     if (result.firstError != null) {
@@ -578,14 +485,12 @@ class _ServersTabState extends ConsumerState<ServersTab>
 
       if (!mounted) return;
 
-      // VPN мог уже подняться из уведомления/плитки — не запускаем второй connect().
+      // VPN мог подняться из уведомления или плитки, второй connect() не нужен
       await ref.read(vpnStateProvider.notifier).syncFromNative();
       if (!mounted) return;
       final currentStatus = ref.read(vpnStateProvider).value?.status;
 
-      // Ярлык «Отключить» с иконки приложения: сервис нельзя дёрнуть напрямую
-      // из ярлыка (лаунчер умеет запускать только активности), поэтому
-      // приложение открывается и рвёт соединение здесь.
+      // лаунчер умеет запускать только активности, поэтому ярлык отключения идёт через приложение
       if (action == 'disconnect_from_shortcut') {
         if (currentStatus == VpnStatus.connected ||
             currentStatus == VpnStatus.connecting) {
@@ -658,9 +563,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
       });
     });
 
-    // Видимость вкладки — только listen, не watch: она влияет лишь на явные
-    // контроллер волны через _syncHeaderAnimations, а watch
-    // перестраивал бы весь таб (хедер + список) прямо в кадре свайпа.
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       ref.listen<int>(homeTabIndexProvider, (prev, next) {
         final wasVisible = (prev ?? 0) == 0;
@@ -675,16 +577,11 @@ class _ServersTabState extends ConsumerState<ServersTab>
       });
     }
 
-    // Состояние VPN здесь больше не читается: на него подписана сама шапка, и
-    // смена статуса перерисовывает её, а не вкладку со списком серверов.
     final isDesktop = PlatformBootstrap.isDesktop;
     final twoPane = WindowBreakpoints.isExpandedMobile(context);
-    // Без нижней панели (рейка) жестовая полоса системы лежит прямо под
-    // вкладкой. С панелью Scaffold этот отступ уже снял, и здесь ноль.
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
-    // Ключи — чтобы при повороте шапка и список переехали в другую раскладку
-    // живыми: без них сбросились бы прокрутка списка и анимации кнопки.
+    // ключи переносят шапку и список между раскладками при повороте вместе с состоянием
     final header = _ConnectHeader(
       key: _headerKey,
       stateCtrl: _stateCtrl,
@@ -693,11 +590,7 @@ class _ServersTabState extends ConsumerState<ServersTab>
       onJumpToActive: _jumpToActiveServer,
     );
 
-    // Градиент лежит в одном Stack со списком, а не в общем по измеренной
-    // высоте шапки. Замер делался после кадра, поэтому пока шапка меняла
-    // высоту (подключение убирает часть отступов и укорачивает волну),
-    // градиент отставал на кадр — и из-под волны на мгновение выглядывал
-    // список. Здесь верх Stack и есть низ шапки, всегда в том же кадре.
+    // градиент в одном Stack со списком: по измеренной высоте шапки он отставал на кадр
     final listArea = Stack(
       fit: StackFit.expand,
       clipBehavior: Clip.none,
@@ -734,20 +627,13 @@ class _ServersTabState extends ConsumerState<ServersTab>
     );
 
     if (twoPane) {
-      // Телефон боком: шапка по высоте съедала весь экран, и списку не
-      // оставалось ни пикселя. На ширине «expanded» спека M3 ставит две
-      // панели — фиксированную 360dp и гибкую рядом.
       return Row(
         children: [
           SizedBox(
             width: _headerPaneWidth,
-            // По центру высоты; не влезла (крупный шрифт, чипы трафика) —
-            // прокручивается, а не режется.
             child: Center(child: SingleChildScrollView(child: header)),
           ),
           Expanded(
-            // Статус-бар и вырез камеры со стороны списка. Со стороны рейки
-            // врезку уже забрала она.
             child: SafeArea(
               bottom: false,
               child: _withListChrome(context, listArea, bottomInset),
@@ -779,24 +665,14 @@ class _ServersTabState extends ConsumerState<ServersTab>
     return _withListChrome(context, body, bottomInset);
   }
 
-  /// Нижний градиент, кнопка добавления и прыжок по списку.
-  ///
-  /// Принадлежат списку, а не вкладке: в двух панелях они обязаны стоять над
-  /// ним, а не посреди окна поверх шапки.
   Widget _withListChrome(BuildContext context, Widget child, double bottomInset) {
     final isDesktop = PlatformBootstrap.isDesktop;
     return ScrollJumpOverlay(
-      // Только телефон: на десктопе по группам возит боковой навигатор, а
-      // всплывающая кнопка посреди окна там просто мусор.
       enabled: !isDesktop,
       endLabel: context.l10n.serversScrollToEnd,
       topLabel: context.l10n.serversScrollToTop,
-      // Над нижним градиентом списка и на одной линии с кнопкой добавления.
       bottomInset: 20 + bottomInset,
       child: SizedBox.expand(
-          // Отступ кнопки от края — 16 по спеке. Размер, форма, глиф и тень
-          // приходят из темы FAB: здесь их переопределяли по месту, и кнопка
-          // разъезжалась с двумя другими такими же в приложении.
           child: ScrollHiddenFab(
             right: 16,
             bottom: 16 + bottomInset,
@@ -843,8 +719,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
     );
   }
 
-  /// Сколько серверов годятся узлом цепочки — по этому числу решаем,
-  /// показывать ли пункт «собрать цепочку».
   int get _chainCandidateCount => ref
       .read(serversProvider)
       .servers
@@ -856,8 +730,7 @@ class _ServersTabState extends ConsumerState<ServersTab>
     showModalBottomSheet<void>(
       context: ctx,
       showDragHandle: true,
-      // Без этого шторка не выше 9/16 экрана: у лежащего телефона и на
-      // телевизоре (540dp) три пункта в неё не влезали и обрезались.
+      // без этого шторка не выше 9/16 экрана, и на телевизоре пункты обрезались
       isScrollControlled: true,
       builder: (ctx2) => SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
@@ -897,8 +770,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
                     _importConfigFile(ctx);
                   },
                 ),
-                // Камеры у телевизора нет, а ссылку пультом не набрать —
-                // подписку присылает телефон.
                 if (PlatformBootstrap.isTelevision)
                   ExpressiveActionTile(
                     icon: Icons.install_mobile_rounded,
@@ -910,7 +781,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
                       unawaited(TvReceiveScreen.open(ctx));
                     },
                   )
-                // у mobile_scanner нет имплементации под Windows/Linux
                 else if (!PlatformBootstrap.isDesktop)
                   ExpressiveActionTile(
                     icon: Icons.qr_code_scanner_rounded,
@@ -922,10 +792,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
                       _scanQrAndImport(ctx);
                     },
                   ),
-                // Цепочка собирается из уже добавленных серверов, поэтому она
-                // последняя в списке и появляется, только когда есть из чего
-                // собирать — иначе первый же экран приложения обещал бы то,
-                // чего в нём пока нельзя сделать.
                 if (_chainCandidateCount >= 2)
                   ExpressiveActionTile(
                     icon: Icons.route_rounded,
@@ -949,9 +815,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
     );
   }
 
-  /// Импорт из QR-кода: серверные ссылки/AWG-конфиг добавляются как серверы;
-  /// http(s)-ссылка — это подписка, добавляем её сразу, не гоняя пользователя
-  /// на соседнюю вкладку.
   Future<void> _scanQrAndImport(BuildContext ctx) async {
     final raw = await QrScanScreen.scan(ctx);
     if (raw == null || raw.isEmpty || !ctx.mounted) return;
@@ -980,7 +843,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
         error: result.firstError!,
       );
     } else {
-      // после возврата с камеры без фидбека непонятно, добавилось ли что-то
       _showSnack(
         AppLocalizations.of(ctx)!
             .serversImportedSummary(result.added, configs.length),
@@ -988,7 +850,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
     }
   }
 
-  /// Импорт серверного конфига из файла (AmneziaWG `.conf` или список ссылок).
   Future<void> _importConfigFile(BuildContext ctx) async {
     String? content;
     try {
@@ -1004,8 +865,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
       }
     } catch (e) {
       if (!ctx.mounted) return;
-      // Показать выбор файла в этой сессии нечем — обходной путь предлагаем
-      // тут же, кнопкой: тот же .conf принимает и вставка текстом.
       _showImportError(
         ctx,
         e,
@@ -1025,12 +884,9 @@ class _ServersTabState extends ConsumerState<ServersTab>
     final raw = content.trim();
     if (raw.isEmpty) return;
 
-    // AmneziaWG .conf и готовый json-конфиг ядра — единые многострочные блоки;
-    // иначе список ссылок построчно.
     final configs = splitServerImportPayload(raw);
 
-    // Каждую строку добавляем независимо: если первый же дубликат/битая
-    // ссылка обрывает импорт, остальные валидные строки молча теряются.
+    // по одной: на первом дубликате остальные строки терялись
     final result = await _addConfigsResilient(configs);
     if (!ctx.mounted) return;
     if (result.firstError != null) {
@@ -1060,9 +916,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
     return (added: added, firstError: firstError);
   }
 
-  /// [detailed] дописывает к тексту рекомендацию: обычно она лишняя, но там,
-  /// где чинить нужно не конфиг, а систему («поставьте портал»), ошибка без
-  /// неё — просто отказ без выхода.
   void _showImportError(
     BuildContext ctx,
     Object e, {
@@ -1078,7 +931,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ExpressiveShape.medium)),
         action: action,
-        // С кнопкой снекбар нужно успеть не только прочитать, но и нажать.
         duration: Duration(seconds: action != null ? 10 : 5),
       ),
     );
@@ -1105,8 +957,7 @@ class _ServersTabState extends ConsumerState<ServersTab>
     final l10n = AppLocalizations.of(ctx)!;
     final ctrl = TextEditingController();
     bool loading = false;
-    // Ошибка показывается в самой шторке (snackbar был бы скрыт за модальным
-    // барьером), а текст пользователя не теряется при неудаче.
+    // снек-бар был бы скрыт за модальным барьером
     String? sheetError;
     showModalBottomSheet(
       context: ctx,
@@ -1188,9 +1039,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
                             loading = true;
                             sheetError = null;
                           });
-                          // Та же вставка, что у кнопки на пустом экране:
-                          // пункт называется так же, и ссылка подписки здесь
-                          // тоже становится подпиской.
                           final result = await importPastedLinksInto(ref, raw);
                           if (!ctx2.mounted) return;
                           if (result.firstError == null) {
@@ -1198,7 +1046,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
                             return;
                           }
                           if (result.added > 0) {
-                            // часть добавилась — закрываем и показываем сводку
                             Navigator.pop(ctx2);
                             if (ctx.mounted) {
                               _showImportSummary(
@@ -1209,8 +1056,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
                               );
                             }
                           } else {
-                            // ничего не добавилось — оставляем шторку с
-                            // текстом и показываем ошибку прямо в ней
                             setModalState(() {
                               loading = false;
                               sheetError = ctx.mounted
@@ -1237,26 +1082,13 @@ class _ServersTabState extends ConsumerState<ServersTab>
     );
   }
 
-  /// Вертикальный отступ чипа «подключено». В отличие от текста он не
-  /// масштабируется вместе со шрифтом, поэтому в расчёт высоты области входит
-  /// отдельным слагаемым.
   static const double _statusChipVerticalPadding = 8;
   static const double _statusChipChrome = _statusChipVerticalPadding * 2;
 
-  /// Стиль надписи в чипе — один и тот же и в разметке, и в расчёте высоты.
-  ///
-  /// Держать его здесь обязательно: когда чип переехал на `labelLarge`, а
-  /// расчёт высоты остался на `labelMedium`, области не хватило 9 px и вторая
-  /// строка длинного имени сервера обрезалась по нижнему краю.
+  // тот же стиль идёт в расчёт высоты, иначе вторая строка имени обрезается
   static TextStyle? _statusChipTextStyle(TextTheme textTheme) =>
       textTheme.emphasized(textTheme.labelLarge);
 
-  /// Высота области статуса: столько занимают две строки самого высокого из
-  /// двух вариантов — обычной подписи и чипа «подключено».
-  ///
-  /// Считаем из ролей темы, а не подбираем число: при системном увеличении
-  /// шрифта две строки становятся выше, и фиксированная константа их обрезала
-  /// бы. Роли берём те же, что использует [_statusText].
   static double _statusAreaHeight(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final scaler = MediaQuery.textScalerOf(context);
@@ -1326,16 +1158,10 @@ class _ServersTabState extends ConsumerState<ServersTab>
     final vpnStatus = ref.read(vpnStateProvider).value?.status;
     final tunnelActive =
         vpnStatus == VpnStatus.connected || vpnStatus == VpnStatus.connecting;
-    // Повторный тап по уже активному серверу не перезапускает туннель:
-    // случайное касание не должно рвать соединение циклом disconnect/connect.
     if (tunnelActive &&
         server.id == ref.read(serversProvider).activeServer?.id) {
       return;
     }
-    // Ткнули в сервер руками — автовыбор выключается, и не только в его
-    // подписке. Иначе непонятно, кто выбирает: человек ткнул в один сервер, а
-    // через минуту его увезло на другой. А «Авто» в чужой подписке горело бы,
-    // хотя сервером больше не управляет.
     final subs = ref.read(subscriptionsProvider).value ?? const [];
     if (subs.any((s) => s.autoSelect)) {
       unawaited(ref.read(subscriptionsProvider.notifier).handAutoSelectTo(null));
@@ -1351,24 +1177,14 @@ class _ServersTabState extends ConsumerState<ServersTab>
     }
   }
 
-  /// Тап по чипу «подключено к…»: прокрутить список к строке этого сервера.
-  ///
-  /// Смещение строки считает сама группа (`ServerGroupAnchors`): строки
-  /// строятся лениво, и у сервера, до которого ещё не долистали, нет ни
-  /// контекста, ни render object — `ensureVisible` по нему невозможен в
-  /// принципе, а прыгают как раз к таким.
+  // ensureVisible тут не сработает: строки ленивые, у недолистанного сервера нет render object
   Future<void> _jumpToActiveServer() async {
     final id = ref.read(serversProvider).activeServerId;
     if (id == null) return;
     final anchors = ServerGroupAnchors.instance;
-    // Сервера может не быть в списке вовсе — например, его группу спрятал
-    // поиск. Тогда прыжок молча ничего не делает: уводить экран к чужой
-    // строке хуже, чем не уводить никуда.
     final place = anchors.placeOfServer(id);
     if (place == null) return;
     if (place.collapsed) {
-      // У свёрнутой группы строки нет в дереве — разворачиваем и ждём кадр:
-      // смещение появится, когда группа пересоберётся с тайлами.
       ref
           .read(collapsedServerGroupsProvider.notifier)
           .update((m) => {...m, place.groupKey: false});
@@ -1387,8 +1203,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
         _showSnack(_shortError(e, context));
       }
     } else if (status == VpnStatus.connecting) {
-      // Тап по кругу во время подключения — отмена попытки, иначе мёртвый
-      // сервер держит пользователя на спиннере до конца 45-сек. поллинга.
       try {
         await ref.read(vpnStateProvider.notifier).cancelConnect();
       } catch (e) {
@@ -1406,8 +1220,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
       try {
         await ref.read(vpnStateProvider.notifier).connect();
       } catch (e) {
-        // человекочитаемый текст вместо сырого e.toString(); после await
-        // виджет мог быть демонтирован (сворачивание в трей)
         if (!mounted) return;
         _showSnack(_shortError(e, context));
       }

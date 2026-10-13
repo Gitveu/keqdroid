@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-// mode: "tun" — virtual VPN adapters only; "proxy" — loopback only (legacy).
+// tun считает только виртуальные адаптеры, proxy только loopback
 bool ReadSessionTrafficCounters(const char* mode,
                                 uint64_t* in_octets,
                                 uint64_t* out_octets);

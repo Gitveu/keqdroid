@@ -15,15 +15,12 @@ struct _MyApplication {
   guint startup_watchdog_id;
 };
 
-// Запас на самый медленный честный старт.
+// с запасом на самый медленный честный старт
 constexpr guint kStartupWatchdogSeconds = 20;
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
-// Окно показывается только по первому кадру (см. first_frame_cb). Если кадра
-// нет — например, старт упал до runApp, — остаётся живой процесс без окна и без
-// трея: иконку трея заводит Dart, которого нет. Снять такое можно только через
-// kill, а понять причину нельзя вовсе.
+// окно показывается по первому кадру. без кадра (старт упал до runApp) остаётся процесс без окна и трея, снять только kill
 static gboolean startup_watchdog_cb(gpointer user_data) {
   MyApplication* self = MY_APPLICATION(user_data);
   self->startup_watchdog_id = 0;
@@ -32,8 +29,7 @@ static gboolean startup_watchdog_cb(gpointer user_data) {
   }
 
   gtk_widget_show(GTK_WIDGET(self->window));
-  // Каталог тот же, что вычисляет path_provider: он спрашивает у GLib id
-  // приложения, а это и есть APPLICATION_ID.
+  // тот же каталог, что у path_provider: он берёт id приложения у GLib
   g_autofree gchar* dir =
       g_build_filename(g_get_user_data_dir(), APPLICATION_ID, nullptr);
   g_autofree gchar* text = g_strdup_printf(
@@ -41,8 +37,7 @@ static gboolean startup_watchdog_cb(gpointer user_data) {
       "Закройте это окно и пришлите файл app.log из каталога\n"
       "%s — по нему видно, что сломалось.",
       dir);
-  // Формат отдельным аргументом: с текстом вместо формата сборка падает там,
-  // где -Wformat-security включён ошибкой (а это почти все дистрибутивы).
+  // формат отдельным аргументом: с -Wformat-security, а он почти везде, иначе сборка падает
   GtkWidget* dialog =
       gtk_message_dialog_new(self->window, GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR,
                              GTK_BUTTONS_CLOSE, "%s", text);
@@ -51,24 +46,20 @@ static gboolean startup_watchdog_cb(gpointer user_data) {
   return G_SOURCE_REMOVE;
 }
 
-// Иконка окна для X11: оконный менеджер, не связавший окно с ярлыком, иначе
-// рисует безликий значок из темы. Wayland такое свойство окна не читает, там
-// иконку даёт только ярлык (см. StartupWMClass в tool/package_linux.sh).
+// иконка для X11: без неё WM рисует безликий значок. Wayland её не читает, там иконка от ярлыка (StartupWMClass в tool/package_linux.sh)
 static void set_window_icon(GtkWindow* window) {
   g_autofree gchar* exe = g_file_read_link("/proc/self/exe", nullptr);
   if (exe == nullptr) return;
   g_autofree gchar* dir = g_path_get_dirname(exe);
   g_autofree gchar* path = g_build_filename(
       dir, "data", "flutter_assets", "assets", "icon.png", nullptr);
-  // Исходник 2048×2048, а свойство иконки X11 несёт пиксели целиком.
+  // исходник 2048, а X11 несёт пиксели целиком
   g_autoptr(GdkPixbuf) icon =
       gdk_pixbuf_new_from_file_at_size(path, 256, 256, nullptr);
   if (icon != nullptr) gtk_window_set_icon(window, icon);
 }
 
-// Тайлинговые композиторы рисуют окна без заголовков и сами ими управляют:
-// шапка GTK с кнопками там лишняя полоса над содержимым. Тот же список — в
-// LinuxBackgroundService.isTilingDesktop.
+// тайлинговые композиторы рисуют окна без заголовков, шапка GTK там лишняя. тот же список в LinuxBackgroundService.isTilingDesktop
 static gboolean is_tiling_desktop() {
   const gchar* desktop = g_getenv("XDG_CURRENT_DESKTOP");
   if (desktop == nullptr) return FALSE;
@@ -82,11 +73,8 @@ static gboolean is_tiling_desktop() {
   return FALSE;
 }
 
-// Без OpenGL окно остаётся чёрным: движок пишет предупреждение и рисует в
-// никуда, а на программную отрисовку сам не переходит (setup_opengl в
-// fl_view.cc). Так бывает с неполным драйвером NVIDIA, на удалённом рабочем
-// столе, в части виртуалок. Контекст проверяем заранее и, если его нет,
-// включаем программную отрисовку; переменная, заданная руками, важнее.
+// без OpenGL окно чёрное, на программную отрисовку движок сам не переходит (setup_opengl в fl_view.cc).
+// так бывает с неполным драйвером NVIDIA, по RDP, в виртуалках. заданная руками переменная важнее
 static void use_software_rendering_without_gl(GtkWindow* window) {
   if (g_getenv("FLUTTER_LINUX_RENDERER") != nullptr) return;
   gtk_widget_realize(GTK_WIDGET(window));
@@ -146,8 +134,7 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "keqdroid");
   }
 
-  // Match the Windows runner: 920x720, centered on screen (the GTK default of
-  // 1280x720 placed at the WM origin looked oversized and corner-anchored).
+  // как на Windows: 920x720 по центру, умолчание GTK 1280x720 в углу выглядело огромным
   gtk_window_set_default_size(window, 920, 720);
   gtk_window_set_position(window, GTK_WIN_POS_CENTER);
   set_window_icon(window);

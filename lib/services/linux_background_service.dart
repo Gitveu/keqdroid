@@ -11,15 +11,6 @@ import '../core/app_logger.dart';
 import 'linux_desktop_entry.dart';
 import 'storage_service.dart';
 
-/// Фон и трей на Linux; у Windows трей свой, нативный.
-///
-/// Крестик по умолчанию не выходит из приложения — туннель продолжает
-/// работать. Окно уходит в трей, а когда трея нет (чистый GNOME, тайлинги без
-/// модуля трея), — в панель задач: спрятанное окно без значка вернуть было бы
-/// нечем. Выход — из меню трея, по Ctrl+Q или крестиком, если в настройках
-/// выключено «Сворачивать в трей при закрытии». AppIndicator умеет только
-/// меню, одиночные клики до приложения не доходят вовсе. Второй запуск не
-/// плодит копию, а поднимает уже работающее окно.
 class LinuxBackgroundService with WindowListener, TrayListener {
   LinuxBackgroundService._();
   static final LinuxBackgroundService instance = LinuxBackgroundService._();
@@ -27,45 +18,27 @@ class LinuxBackgroundService with WindowListener, TrayListener {
   @visibleForTesting
   LinuxBackgroundService.forTesting();
 
-  /// Под этим id значок живёт между запусками: по нему KDE помнит, показывать
-  /// ли его всегда.
   static const _trayId = 'keqdroid';
 
-  /// Сколько дать движку дорисовать последний кадр спрятанного окна.
   @visibleForTesting
   static Duration quitSettleDelay = const Duration(milliseconds: 300);
 
-  /// Выход уже идёт: окно закрываем мы сами, и его событие закрытия — не
-  /// просьба человека убрать окно в фон.
   bool _quitting = false;
 
-  /// Видно ли окно человеку — по нашим же действиям. Свёрнутое окно на
-  /// Wayland GTK3 видимым и остаётся: композитор не сообщает о сворачивании,
-  /// и Flutter рисовал бы волну в фоне. Экран гасит по этому флагу анимации и
-  /// опрос трафика, как на Windows (desktopWindowVisibleProvider).
+  // на Wayland GTK3 композитор не сообщает о сворачивании, видимость ведём сами
   final ValueNotifier<bool> uiVisible = ValueNotifier(true);
 
-  /// `XDG_CURRENT_DESKTOP` для тестов.
   @visibleForTesting
   static String? desktopOverride;
 
-  /// Подписи меню трея. До первого кадра языка ещё нет, поэтому английские;
-  /// экран подменяет их на язык интерфейса ([setTrayLabels]).
   String _showLabel = 'Show keqdroid';
   String _quitLabel = 'Quit';
 
   ServerSocket? _lock;
 
-  /// Set by the UI so "Quit" can tear the tunnel down before exiting.
   Future<void> Function()? onQuit;
 
-  /// Замок единственного экземпляра — абстрактный Unix-сокет с uid в имени.
-  ///
-  /// Прежде это был TCP-порт на петле, а петля у всех пользователей машины
-  /// общая: второй вошедший человек упирался в чужой замок, его запуск
-  /// показывал окно первого, а у него самого приложение не открывалось.
-  /// Абстрактный сокет ядро освобождает вместе с процессом, и после падения
-  /// не остаётся файла, мешающего следующему запуску.
+  // абстрактный сокет с uid: TCP-порт на петле общий для всех пользователей машины
   static InternetAddress _lockAddress() => InternetAddress(
         '@keqdroid-${_uid() ?? 'user'}',
         type: InternetAddressType.unix,
@@ -81,23 +54,18 @@ class LinuxBackgroundService with WindowListener, TrayListener {
     return null;
   }
 
-  /// `EADDRINUSE`: замок держит уже запущенный экземпляр.
   static const _addressInUse = 98;
 
-  /// Binds the single-instance lock. Returns `false` when another instance
-  /// already holds it (after asking that instance to show its window) — the
-  /// caller should then `exit(0)`.
   Future<bool> ensureSingleInstance() async {
     final address = _lockAddress();
     try {
       _lock = await ServerSocket.bind(address, 0);
       _lock!.listen((socket) {
-        socket.destroy(); // any ping means "another launch happened" -> show
+        socket.destroy();
         unawaitedShow();
       });
       return true;
     } on SocketException catch (e) {
-      // Замок не взять по другой причине — лучше вторая копия, чем ни одной.
       if (e.osError?.errorCode != _addressInUse) {
         AppLogger.instance.warn(
           'Single-instance lock unavailable, starting without it',
@@ -114,15 +82,12 @@ class LinuxBackgroundService with WindowListener, TrayListener {
         s.add('show'.codeUnits);
         await s.flush();
         s.destroy();
-      } catch (_) {
-        // running instance not answering; fall through and let caller exit
-      }
+      } catch (_) {}
       return false;
     }
   }
 
   Future<void> initWindowAndTray() async {
-    // Ярлык AppImage даёт окну иконку на Wayland, см. LinuxDesktopEntry.
     unawaited(LinuxDesktopEntry.sync());
     await windowManager.ensureInitialized();
     windowManager.addListener(this);
@@ -132,13 +97,9 @@ class LinuxBackgroundService with WindowListener, TrayListener {
     trayManager.addListener(this);
     try {
       await trayManager.setIcon('assets/icon.png', id: _trayId, title: 'keqdroid');
-      // Нет setToolTip: Linux-реализация tray_manager его не поддерживает
-      // (MissingPluginException), а вылет здесь оставит индикатор с пустым
-      // меню — AppIndicator без меню вообще не реагирует на клики.
+      // без setToolTip: на Linux tray_manager кидает MissingPluginException, и меню остаётся пустым
       await _applyTrayMenu();
     } catch (e, st) {
-      // No StatusNotifier/AppIndicator host (e.g. vanilla GNOME): the app still
-      // runs in the background; single-instance relaunch restores the window.
       AppLogger.instance.warn(
         'Tray init failed (no AppIndicator host?). Background mode still works; '
         'relaunch the app to restore the window.',
@@ -156,7 +117,6 @@ class LinuxBackgroundService with WindowListener, TrayListener {
         ]),
       );
 
-  /// Меню трея на языке интерфейса; зовёт экран, когда язык известен или сменился.
   Future<void> setTrayLabels({
     required String show,
     required String quit,
@@ -166,17 +126,13 @@ class LinuxBackgroundService with WindowListener, TrayListener {
     _quitLabel = quit;
     try {
       await _applyTrayMenu();
-    } catch (_) {
-      // Трея нет — меню показывать некому.
-    }
+    } catch (_) {}
   }
 
   void unawaitedShow() {
     _showWindow();
   }
 
-  /// Хоткей «показать/скрыть окно»: видимое окно уходит в фон, скрытое или
-  /// свёрнутое — возвращается.
   Future<void> toggleWindowVisibility() async {
     if (await windowManager.isVisible() && !await windowManager.isMinimized()) {
       _boundsSaveDebounce?.cancel();
@@ -187,9 +143,6 @@ class LinuxBackgroundService with WindowListener, TrayListener {
     }
   }
 
-  /// В трей, если он есть, иначе в панель задач. Тайлинговые композиторы окна
-  /// не сворачивают вовсе — просьба молча пропадает, и крестик выглядел бы
-  /// сломанным; там окно прячется, а возвращает его повторный запуск.
   Future<void> _sendToBackground() async {
     uiVisible.value = false;
     if (await _trayAvailable() || isTilingDesktop(desktopOverride)) {
@@ -201,20 +154,18 @@ class LinuxBackgroundService with WindowListener, TrayListener {
 
   static const _tilingDesktops = {'hyprland', 'sway', 'niri', 'river'};
 
-  /// Тот же список, что у шапки окна в linux/runner/my_application.cc.
   static bool isTilingDesktop([String? desktop]) =>
       (desktop ?? Platform.environment['XDG_CURRENT_DESKTOP'] ?? '')
           .toLowerCase()
           .split(':')
           .any(_tilingDesktops.contains);
 
-  /// Спрашивается в момент закрытия, а не на старте: панель с треем часто
-  /// поднимается позже приложений из автозапуска.
+  // в момент закрытия: панель с треем часто поднимается позже автозапуска
   Future<bool> _trayAvailable() async {
     try {
       return await trayManager.isAvailable();
     } catch (_) {
-      return true; // неизвестно — ведём себя как раньше
+      return true;
     }
   }
 
@@ -223,12 +174,6 @@ class LinuxBackgroundService with WindowListener, TrayListener {
     await windowManager.show();
     await windowManager.focus();
   }
-
-  // ---- Window bounds persistence -------------------------------------------
-  //
-  // GTK шлёт resize/move событиями непрерывно, поэтому запись дебаунсится.
-  // Под Wayland позиция окна недоступна приложению — восстанавливается хотя бы
-  // размер; на X11 работает и позиция.
 
   Timer? _boundsSaveDebounce;
 
@@ -274,8 +219,6 @@ class LinuxBackgroundService with WindowListener, TrayListener {
       final maximized = await windowManager.isMaximized();
       Map<String, dynamic> data;
       if (maximized) {
-        // Не затираем последние «нормальные» границы размером во весь экран —
-        // после unmaximize окно должно вернуться к ним.
         final raw = storage.getWindowBoundsJson();
         final prev = raw != null ? jsonDecode(raw) : null;
         data = prev is Map
@@ -302,8 +245,6 @@ class LinuxBackgroundService with WindowListener, TrayListener {
     }
   }
 
-  // ---- WindowListener -----------------------------------------------------
-
   @override
   void onWindowClose() {
     if (_quitting) return;
@@ -320,8 +261,6 @@ class LinuxBackgroundService with WindowListener, TrayListener {
     }
   }
 
-  /// «Сворачивать в трей при закрытии» — та же настройка, что на Windows:
-  /// выключили — крестик закрывает приложение.
   @visibleForTesting
   static Future<bool> Function() closeToBackground = () async {
     try {
@@ -332,7 +271,7 @@ class LinuxBackgroundService with WindowListener, TrayListener {
     }
   };
 
-  /// Свёрнутое окно вернули из панели задач: другого сигнала на Wayland нет.
+  // на Wayland другого сигнала о возврате из панели задач нет
   @override
   void onWindowFocus() => uiVisible.value = true;
 
@@ -348,11 +287,6 @@ class LinuxBackgroundService with WindowListener, TrayListener {
   @override
   void onWindowUnmaximize() => _scheduleBoundsSave();
 
-  // ---- TrayListener -------------------------------------------------------
-  //
-  // Только пункты меню: mouse-down событий и popUpContextMenu у AppIndicator
-  // нет, меню показывает сам хост (шелл) по клику на иконку.
-
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
     switch (menuItem.key) {
@@ -363,7 +297,6 @@ class LinuxBackgroundService with WindowListener, TrayListener {
     }
   }
 
-  /// Выход: пункт трея и Ctrl+Q.
   Future<void> quit() async {
     if (_quitting) return;
     _quitting = true;
@@ -375,10 +308,7 @@ class LinuxBackgroundService with WindowListener, TrayListener {
     try {
       await trayManager.destroy();
     } catch (_) {}
-    // Окно, уничтоженное посреди кадра, роняет процесс в движке: мьютекс кадра
-    // освобождается, пока его держит растровый поток (abort в g_mutex_clear,
-    // 3 выхода из 6 при открытом окне). Спрятанное окно Flutter не рисует,
-    // поэтому сначала прячем и даём дорисоваться последнему кадру.
+    // окно, уничтоженное посреди кадра, роняет движок (abort в g_mutex_clear), поэтому сначала прячем
     await windowManager.hide();
     await Future<void>.delayed(quitSettleDelay);
     await windowManager.setPreventClose(false);

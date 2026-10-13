@@ -1,25 +1,17 @@
-// Routing lists are now mixed: a single field may contain domains, IP/CIDR
-// ranges and prefixed rules (geosite:/geoip:/full:/regexp:). This helper splits
-// a parsed list into the domain-shaped tokens and the ip-shaped tokens so the
-// xray / sing-box config generators can emit the right rule kind for each.
-
 final _ipV4 = RegExp(r'^(\d{1,3}\.){3}\d{1,3}(/\d{1,2})?$');
 final _ipV6 = RegExp(r'^[0-9a-fA-F:]+(/\d{1,3})?$');
 
-/// True for an IPv4/IPv6 address or CIDR range.
 bool looksLikeIpOrCidr(String value) {
   final v = value.trim();
   if (v.isEmpty) return false;
   if (_ipV4.hasMatch(v)) return true;
-  // ipv6 must contain a colon to avoid matching bare hostnames/labels.
+  // у IPv6 обязательно двоеточие, иначе regex ловил бы голые имена
   if (v.contains(':') && _ipV6.hasMatch(v)) return true;
   return false;
 }
 
-/// Приватные, LAN- и служебные диапазоны: всегда напрямую. Своими адресами в
-/// списках их не считают: у многих они лежат в обходе со времён пресета
-/// «Локальная сеть», и стратегия резолва от этого подниматься не должна. Список
-/// общий на оба генератора, чтобы «свои адреса» у ядер не разъехались.
+// своими адресами не считаем: у многих они в обходе со времён пресета, и стратегия резолва подниматься не должна.
+// список общий на оба генератора
 const Set<String> kBasePrivateRanges = {
   '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8',
   '169.254.0.0/16', '172.16.0.0/12', '172.19.0.0/30',
@@ -28,11 +20,6 @@ const Set<String> kBasePrivateRanges = {
   '::1/128', 'fc00::/7', 'fe80::/10',
 };
 
-/// Делит записи роутинга на доменные и адресные.
-///
-/// В [ips] уходят `geoip:*` (ядро сопоставляет их как ip-правила), адреса и
-/// диапазоны CIDR. Всё остальное — голые хосты, `.суффиксы`, `domain:`, `full:`,
-/// `regexp:`, `geosite:` — это [domains], их нормализуют дальше по цепочке.
 ({List<String> domains, List<String> ips}) splitDomainsAndIps(
   List<String> entries,
 ) {
@@ -54,8 +41,6 @@ const Set<String> kBasePrivateRanges = {
   return (domains: domains, ips: ips);
 }
 
-/// Pulls `geoip:XX` tokens out of [ips] for proper xray `geoip` rules.
-/// Plain IPv4/IPv6/CIDR entries stay in [plainIps].
 ({List<String> plainIps, List<String> geoipCodes}) splitGeoipTokens(
   List<String> ips,
 ) {

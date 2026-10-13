@@ -6,13 +6,10 @@
 
 namespace {
 
-// Tagged into WM_COPYDATA so a stray copy-data message from another
-// application is never mistaken for a link.
+// метка в WM_COPYDATA, чтобы чужое сообщение не приняли за ссылку
 constexpr ULONG_PTR kCopyDataId = 0x4B455144;  // 'KEQD'
 
-// Schemes a subscription panel may put on its "add to client" button. Both are
-// an external contract — they are typed into panel settings and cannot be
-// renamed, see lib/utils/subscription_deep_link.dart.
+// схемы вписаны в настройки чужих панелей, переименовать нельзя (lib/utils/subscription_deep_link.dart)
 const wchar_t* const kSchemes[] = {L"keqdroid", L"keqdis"};
 
 std::string WideToUtf8(const std::wstring& text) {
@@ -79,14 +76,12 @@ void RegisterScheme(const wchar_t* scheme, const std::wstring& exe_path) {
   const std::wstring command_key = base + L"\\shell\\open\\command";
   const std::wstring command = L"\"" + exe_path + L"\" \"%1\"";
 
-  // Startup path: skip the writes when the registration already points here.
   if (ReadDefaultValue(command_key) == command) {
     return;
   }
 
   WriteValue(base, nullptr, std::wstring(L"URL:KeqDroid link"));
-  // Presence of this (empty) value is what makes Windows treat the key as a
-  // protocol handler rather than a file association.
+  // по этому пустому значению Windows считает ключ обработчиком протокола, а не ассоциацией файла
   WriteValue(base, L"URL Protocol", std::wstring());
   WriteValue(base + L"\\DefaultIcon", nullptr, exe_path + L",0");
   WriteValue(command_key, nullptr, command);
@@ -116,9 +111,7 @@ std::string KeqdroidDeepLinkFromCommandLine() {
     if (arg.rfind(L"-", 0) == 0) {
       continue;  // --autostart, --admin-restart
     }
-    // Any scheme, not just ours: a vless:// link dropped onto the executable
-    // imports exactly like the one shared into the app on Android. Dart is the
-    // one that validates it.
+    // любая схема: vless:// на exe импортируется как на Android, проверяет Dart
     if (arg.find(L"://") == std::wstring::npos) {
       continue;
     }
@@ -138,8 +131,7 @@ bool KeqdroidForwardDeepLinkToRunningInstance(HWND target,
   payload.cbData = static_cast<DWORD>(url.size() + 1);
   payload.lpData = const_cast<char*>(url.c_str());
 
-  // SendMessage and not Post: the payload lives on our stack and this process
-  // exits right after. The timeout keeps a wedged instance from hanging us.
+  // SendMessage, не Post: данные на нашем стеке, а процесс сразу выходит. таймаут от зависшего экземпляра
   DWORD_PTR unused = 0;
   return ::SendMessageTimeoutW(target, WM_COPYDATA, 0,
                                reinterpret_cast<LPARAM>(&payload),

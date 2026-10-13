@@ -12,10 +12,6 @@ class _AdvancedSettingsScreen extends ConsumerWidget {
       title: l10n.settingsAdvanced,
       physics: const ClampingScrollPhysics(),
       children: [
-          // Та же группировка, что на верхнем уровне настроек: «трафик и
-          // ядро», «система», «диагностика». Раньше это была стопка из семи
-          // отдельных карточек через 12 px — тот вид, из-за которого
-          // экран читался как свалка.
           ExpressiveSectionHeader(l10n.settingsAdvancedGroupTraffic),
           ExpressiveGroup(
             children: [

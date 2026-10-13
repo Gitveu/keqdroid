@@ -1,4 +1,3 @@
-/// Crashlytics is Android-only; desktop builds use [NoopCrashlyticsReporter].
 abstract class CrashlyticsReporter {
   Future<void> recordError(
     Object error,

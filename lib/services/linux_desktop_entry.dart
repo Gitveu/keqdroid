@@ -8,22 +8,13 @@ import 'package:path/path.dart' as p;
 import '../core/app_logger.dart';
 import 'linux_appimage_updater.dart';
 
-/// Ярлык и иконка для AppImage в `~/.local/share`.
-///
-/// Сам AppImage в систему ничего не ставит, а на Wayland иконку окна среда
-/// берёт только из ярлыка, связанного с окном через StartupWMClass: без него
-/// значка нет ни в доке, ни в переключателе окон. Имя ярлыка то же, что у
-/// пакетов (`keqdroid.desktop`), поэтому рядом с установленным deb он не даёт
-/// второго пункта меню, а запуск не из AppImage убирает его, чтобы не
-/// перекрывать системный.
+// на Wayland иконку окна среда берёт только из ярлыка со StartupWMClass
 class LinuxDesktopEntry {
   LinuxDesktopEntry._();
 
   static const _fileName = 'keqdroid.desktop';
   static const _iconNames = ['keqdroid', 'com.keqdroid.keqdroid'];
 
-  /// Метка нашего ярлыка: чужой ярлык с тем же именем (написанный руками) не
-  /// трогаем ни при записи, ни при уборке.
   static const marker = 'X-KeqDroid-AppImage=true';
 
   static Future<void> sync() async {
@@ -51,7 +42,7 @@ class LinuxDesktopEntry {
           try {
             others.add(await f.readAsString());
           } on FileSystemException {
-            // битый или чужой нечитаемый ярлык — не наш случай
+            // битый или чужой ярлык, не наш случай
           }
         }
       }
@@ -73,8 +64,6 @@ class LinuxDesktopEntry {
     }
   }
 
-  /// Встроен ли этот AppImage ярлыком менеджера AppImage (AppImageLauncher,
-  /// Gear Lever): тогда пункт меню уже есть, и наш нужен только ради иконки.
   @visibleForTesting
   static bool integratedElsewhere(String appImage, Iterable<String> entries) =>
       entries.any((text) => text.contains(appImage));
@@ -87,7 +76,6 @@ class LinuxDesktopEntry {
       'Name=KeqDroid',
       'Comment=KEQDIS proxy/VPN client',
       'Exec=${execArgument(appImage)}',
-      // Файл AppImage удалён — ярлык пропадает из меню сам.
       'TryExec=${appImage.replaceAll(r'\', r'\\')}',
       'Icon=keqdroid',
       'Categories=Network;',
@@ -99,9 +87,6 @@ class LinuxDesktopEntry {
     ].join('\n');
   }
 
-  /// Путь в Exec по спецификации ярлыков: в кавычках, с экранированием внутри
-  /// кавычек и ещё раз — как строковое значение ключа; `%` — коды полей.
-  /// Нужен и ярлыку автозапуска ([LinuxAutostart]).
   static String execArgument(String path) {
     final quoted = path
         .replaceAll(r'\', r'\\')
@@ -111,8 +96,6 @@ class LinuxDesktopEntry {
     return '"${quoted.replaceAll(r'\', r'\\')}"'.replaceAll('%', '%%');
   }
 
-  /// Исходник 2048×2048; в теме иконок он лёг бы в каталог 256×256 не своим
-  /// размером, и каждая панель масштабировала бы его заново.
   static Future<void> _writeIcons(String dataHome) async {
     final data = await rootBundle.load('assets/icon.png');
     final codec = await ui.instantiateImageCodec(

@@ -8,18 +8,7 @@ import 'package:keqdroid/shared/ui/server_avatar.dart';
 
 import '../../services/exit_ip_service.dart';
 
-/// Чип «Подключено к …» под кнопкой подключения.
-///
-/// Тональная пилюля вместо обводки: у M3E это штатный вид активного статуса,
-/// а тот же secondaryContainer носит активный сервер в списке. Нажатие везёт к
-/// его строке в списке — найти её среди полусотни других иначе только
-/// свайпами.
-///
-/// Ведущим элементом — флаг страны выхода, той же формы, что флаги серверов.
-/// Он не отдельной ячейкой в полосе показателей: та стоит сеткой 2×2, и пятая
-/// ячейка ломала её в 3+2 с дырой. Нажатие на флаг на время подменяет текст
-/// чипа адресом, нажатие на адрес его копирует. Сам адрес постоянно не виден:
-/// скриншоты главного экрана уходят в чаты и issue.
+// адрес постоянно не показываем: скриншоты главного экрана уходят в чаты и issue
 class ConnectedStatusChip extends StatefulWidget {
   const ConnectedStatusChip({
     super.key,
@@ -32,14 +21,12 @@ class ConnectedStatusChip extends StatefulWidget {
 
   final String label;
 
-  /// Выход подключения; без флага чип такой же, как был до него.
   final ExitIp? exit;
 
   final VoidCallback onJumpToActive;
   final TextStyle? textStyle;
   final double verticalPadding;
 
-  /// Сколько адрес держится вместо подписи, если его не трогать.
   static const revealFor = Duration(seconds: 5);
 
   static const double flagSize = 22;
@@ -55,7 +42,6 @@ class _ConnectedStatusChipState extends State<ConnectedStatusChip> {
   @override
   void didUpdateWidget(ConnectedStatusChip old) {
     super.didUpdateWidget(old);
-    // Сменился выход (другой сервер) — показанный адрес уже неправда.
     if (old.exit?.ip != widget.exit?.ip) _setRevealed(false);
   }
 
@@ -108,15 +94,10 @@ class _ConnectedStatusChipState extends State<ConnectedStatusChip> {
       overflow: TextOverflow.ellipsis,
       style: widget.textStyle?.copyWith(
         color: scheme.onSecondaryContainer,
-        // Цифры адреса одной ширины — строка не дрожит при смене выхода.
         fontFeatures:
             revealed ? const [FontFeature.tabularFigures()] : null,
       ),
     );
-    // Сначала гаснет прежний текст, потом появляется новый: два текста на
-    // одном месте одновременно читались кашей. Адрес выезжает из-за флага от
-    // начала строки (слева направо, в RTL — справа налево); подпись просто
-    // проявляется.
     final rtl = Directionality.of(context) == TextDirection.rtl;
     final swapped = AnimatedSwitcher(
       duration: ExpressiveMotion.durationDefault,
@@ -126,8 +107,6 @@ class _ConnectedStatusChipState extends State<ConnectedStatusChip> {
         curve: ExpressiveMotion.emphasizedDecelerate,
       ),
       switchOutCurve: const Interval(0.6, 1),
-      // Уходящий текст размер не держит: чип подстраивается под новый сразу,
-      // одним движением с появлением, а не догоняет его после.
       layoutBuilder: (current, previous) => Stack(
         alignment: AlignmentDirectional.centerStart,
         children: [
@@ -139,8 +118,6 @@ class _ConnectedStatusChipState extends State<ConnectedStatusChip> {
       transitionBuilder: (child, animation) {
         final faded = FadeTransition(opacity: animation, child: child);
         if (child.key != const ValueKey(true)) return faded;
-        // Маска, а не изменение ширины: адрес с первого кадра занимает своё
-        // место, и чип сужается под него плавно, а не схлопывается к флагу.
         return ClipRect(
           clipper: _RevealFromStart(animation, rtl: rtl),
           child: faded,
@@ -149,8 +126,6 @@ class _ConnectedStatusChipState extends State<ConnectedStatusChip> {
       child: text,
     );
 
-    // Кнопка флага выше строки текста на 8dp — на столько же меньше поле
-    // сверху и снизу, и чип с флагом той же высоты, что без него.
     final inset = flag != null ? 4.0 : 0.0;
     return Tooltip(
       message: revealed ? l10n.exitIpLabel : l10n.serversJumpToActive,
@@ -207,8 +182,6 @@ class _ConnectedStatusChipState extends State<ConnectedStatusChip> {
   }
 }
 
-/// Открывает содержимое от начала строки — со стороны флага — по мере
-/// [progress].
 class _RevealFromStart extends CustomClipper<Rect> {
   _RevealFromStart(this.progress, {required this.rtl})
       : super(reclip: progress);

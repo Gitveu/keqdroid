@@ -8,11 +8,6 @@ import '../models/subscription.dart';
 import '../providers/providers.dart';
 import '../services/tv_handoff.dart';
 
-/// Телефон отсканировал код телевизора: спросить, какую подписку отправить,
-/// и отправить.
-///
-/// Код ловится везде, где телефон читает QR или ссылку: сканер на вкладке
-/// серверов, сканер в шторке подписки и системная камера через deep link.
 Future<void> sendSubscriptionToTv(
   BuildContext context,
   WidgetRef ref,
@@ -36,8 +31,6 @@ Future<void> sendSubscriptionToTv(
   }
 }
 
-/// Выбор подписки и отправка. Ошибка показывается в самом диалоге: снекбар
-/// лёг бы под модальный барьер, а закрытие отняло бы повтор одним нажатием.
 class TvSendDialog extends StatefulWidget {
   const TvSendDialog({
     super.key,
@@ -93,7 +86,6 @@ class _TvSendDialogState extends State<TvSendDialog> {
     final textTheme = Theme.of(context).textTheme;
     return AlertDialog(
       title: Text(l10n.tvSendTitle),
-      // Подписок бывает много — список прокручивается, кнопки остаются.
       scrollable: true,
       content: Column(
         mainAxisSize: MainAxisSize.min,

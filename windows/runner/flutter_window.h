@@ -23,7 +23,6 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
-  // Показать окно и сказать, куда смотреть, когда первого кадра так и не было.
   void ReportStartupFailure(HWND hwnd);
 
   // The project to run.
@@ -32,8 +31,7 @@ class FlutterWindow : public Win32Window {
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
 
-  // Сторож старта снимается по первому кадру, а не по видимости окна: при
-  // автозапуске Dart законно прячет уже показанное окно в трей.
+  // по первому кадру, а не по видимости: при автозапуске Dart законно прячет окно в трей
   bool first_frame_seen_ = false;
 };
 

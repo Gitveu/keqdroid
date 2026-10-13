@@ -55,9 +55,6 @@ class _PingSettingsScreenState extends ConsumerState<_PingSettingsScreen> {
       _customUrlCtrl.text = settings.pingTestUrlCustom;
     }
 
-    // Заголовок секции и карточка — общие на все подэкраны настроек
-    // (`ExpressiveSectionHeader` / `ExpressiveCard`), локальных вариантов
-    // больше нет: раньше каждый экран объявлял свои и они разъезжались.
     Widget card({required List<Widget> children}) => ExpressiveCard(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           child: Column(children: children),

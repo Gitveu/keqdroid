@@ -1,13 +1,3 @@
-/// Страница подэкрана: крупный заголовок, который сворачивается при прокрутке.
-///
-/// До этого все пятнадцать подэкранов настроек открывались одинаково безлично —
-/// маленькая шапка и сразу список. В анатомии M3 детальный экран начинается
-/// крупным заголовком (`SliverAppBar.large`), который при прокрутке съезжает в
-/// обычную шапку: страница получает начало, а не просто начинается.
-///
-/// Здесь же снимается копипаста: цвет фона, `elevation`, `iconTheme` и стиль
-/// заголовка больше не задаются на каждом экране руками — всё приходит из
-/// `appBarTheme` (см. `buildExpressiveComponentThemes`).
 library;
 
 import 'package:flutter/material.dart';
@@ -19,7 +9,6 @@ import 'package:keqdroid/shared/ui/smooth_scroll.dart';
 class ExpressivePage extends StatelessWidget {
   final String title;
 
-  /// Содержимое — как список детей обычного `ListView`.
   final List<Widget> children;
 
   final List<Widget>? actions;
@@ -28,18 +17,10 @@ class ExpressivePage extends StatelessWidget {
 
   final Widget? floatingActionButton;
 
-  /// Физика прокрутки. Задаётся там, где экран уже полагался на неё явно
-  /// (`ClampingScrollPhysics` вместо андроидного оттяга).
   final ScrollPhysics? physics;
 
-  /// Принудительно включить/выключить крупный заголовок. По умолчанию решение
-  /// принимается по высоте окна: на низком вьюпорте крупная шапка съедает
-  /// заметную долю экрана, и там честнее обычная.
   final bool? largeTitle;
 
-  /// Ниже этой высоты окна крупный заголовок не показываем. Значение выбрано
-  /// по десктопному сценарию: окно в трее сжимается до узкого и невысокого,
-  /// и 152dp шапки там были бы половиной содержимого.
   static const double _largeTitleMinHeight = 600;
 
   const ExpressivePage({
@@ -72,9 +53,7 @@ class ExpressivePage extends StatelessWidget {
           controller: controller,
           physics: physics,
           slivers: [
-            // Заливку задаём явно, чтобы она перетекала: `WidgetStateColor` из
-            // темы переключился бы рывком, а `animateColor` у `SliverAppBar`
-            // нет. Перестраивается здесь только сама шапка.
+            // заливку задаём сами: из темы она переключилась бы рывком, а animateColor у SliverAppBar нет
             ExpressiveScrolledUnderBuilder(
               builder: (context, background) => useLarge
                   ? SliverAppBar.large(

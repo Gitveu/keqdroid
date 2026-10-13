@@ -3,35 +3,19 @@ package com.keqdroid.keqdroid
 import android.content.Context
 import java.io.File
 
-// Copies bundled xray geo databases into [targetDir] (app filesDir).
-// xray reads them via XRAY_LOCATION_ASSET when routing uses geoip:/geosite: rules.
-//
-// Extraction repeats whenever the bundled database changes. The old "skip if the
-// file exists" check made every geo update dead on arrival: a device that had
-// extracted geoip.dat once kept that copy forever, so codes added to the bundled
-// base (geoip:telegram, geosite:refilter, ...) never appeared on device and the
-// rules using them were silently dropped before connecting.
-//
-// Freshness is tracked by a stamp file holding a fingerprint per database rather
-// than by comparing sizes directly: the stamp is what we actually extracted, so
-// an unexpected fingerprint can never put us in a re-extract-every-start loop
-// (that would mean copying ~25 MB on each VPN start).
+// распаковка повторяется при каждой смене вшитой базы: прежняя проверка есть файл оставляла первую копию навсегда,
+// и новые коды (geoip:telegram, geosite:refilter) молча выпадали. в штампе отпечаток того, что распаковано,
+// поэтому неожиданный отпечаток не зациклит распаковку 25 МБ на каждом старте
 object XrayGeoAssets {
-    // Target file name -> Flutter asset it is extracted from. They differ:
-    // geoip ships trimmed to the codes the app can emit on its own (0.6 MB out
-    // of 23.5), and anything else a user's rule needs is downloaded on top of
-    // it at runtime. geosite ships whole. See the pubspec asset list.
+    // geoip вшит урезанным (0.6 МБ из 23.5), остальное докачивается по правилам. geosite целиком
     private val geoFiles = mapOf(
         "geoip.dat" to "assets/geo/geoip-lite.dat",
         "geosite.dat" to "assets/bin/windows/geosite.dat",
     )
     private const val stampName = "geo_assets.stamp"
 
-    // Путь ассета внутри APK — сами, а не через FlutterLoader.getLookupKeyForAsset:
-    // тот работает, только когда Flutter в процессе уже поднят, иначе роняет
-    // NullPointerException. А сервис стартует и там, где Flutter не запускался
-    // вовсе: из плитки после убийства приложения, при подъёме сессии системой.
-    // Каталог — умолчание Flutter, у нас не переопределён.
+    // путь сами, не через FlutterLoader.getLookupKeyForAsset: без поднятого Flutter он падает NPE,
+    // а сервис стартует и без Flutter (плитка после убийства, подъём системой)
     private const val flutterAssetsDir = "flutter_assets"
 
     fun ensure(context: Context, targetDir: File) {
@@ -50,16 +34,8 @@ object XrayGeoAssets {
                 continue
             }
 
-            // Не затирать базу БОГАЧЕ вшитой.
-            //
-            // geoip мы теперь поставляем урезанным, а поверх него ложится
-            // полная база — либо скачанная пользователем, либо оставшаяся от
-            // версии, которая возила полную в APK. Отпечаток у неё не совпадёт
-            // ни с чем, и обычная логика «не совпало — перезаписать» откатила
-            // бы человека с полной базы на урезанную при первом же запуске.
-            //
-            // Сравниваем размеры: файл больше ассета — значит в нём заведомо
-            // больше кодов, и трогать его нельзя.
+            // базу богаче вшитой не затираем: полная (скачанная или от старой версии) иначе откатилась бы на урезанную.
+            // файл больше ассета значит кодов в нём больше
             val assetSize = assetSize(context, assetKey)
             if (out.exists() && assetSize > 0L && out.length() > assetSize) {
                 NativeLog.i(
@@ -67,8 +43,7 @@ object XrayGeoAssets {
                     "Keeping richer geo base $name (${out.length()} bytes on disk " +
                         "vs $assetSize bundled)",
                 )
-                // В штамп кладём отпечаток вшитого ассета: иначе на каждом
-                // старте сюда будет заходить заново.
+                // в штамп отпечаток вшитого, иначе заходили бы сюда на каждом старте
                 continue
             }
 
@@ -85,7 +60,7 @@ object XrayGeoAssets {
                     "KEQDIS",
                     "Xray geo asset $name not bundled - geoip:/geosite: routing may fail",
                 )
-                // Не помечаем как извлечённый: на следующем старте попробуем снова.
+                // не отмечаем, попробуем на следующем старте
                 current.remove(name)
             }
         }
@@ -93,18 +68,14 @@ object XrayGeoAssets {
         writeStamp(stampFile, current)
     }
 
-    // Identity of the bundled database: its uncompressed size when the asset can
-    // report it (AssetInputStream.available() gives the remaining uncompressed
-    // bytes), otherwise the app version code - a rebuilt database always ships
-    // with a new version, so that is a safe fallback.
+    // размер распакованного ассета, иначе versionCode: пересобранная база всегда едет с новой версией
     private fun fingerprint(context: Context, assetKey: String): String {
         val size = assetSize(context, assetKey)
         if (size > 0L) return "size:$size"
         return "app:${appVersionCode(context)}"
     }
 
-    // Распакованный размер ассета: AssetInputStream.available() отдаёт остаток
-    // в байтах, то есть для нетронутого потока — весь файл.
+    // available() у нетронутого потока это весь файл
     private fun assetSize(context: Context, assetKey: String): Long =
         runCatching {
             context.assets.open(assetKey).use { it.available().toLong() }

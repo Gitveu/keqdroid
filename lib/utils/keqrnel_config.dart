@@ -2,11 +2,6 @@ import 'dart:convert';
 
 import 'singbox_tun_config.dart' show kSingboxBlockAction;
 
-/// Строит единый конфиг для ядра `keqrnel` из уже сгенерированных конфигов
-/// цепочки. Берёт sing-box TUN-конфиг и заменяет его socks-outbound `proxy`
-/// (который шёл в локальный xray) на встроенный xray-outbound
-/// `{"type":"xray","xray": <xrayConfig>}`. Один процесс keqrnel заменяет связку
-/// xray + sing-box; TUN/роутинг/DNS из sing-box-конфига сохраняются как есть.
 class KeqrnelConfig {
   KeqrnelConfig._();
 
@@ -15,14 +10,6 @@ class KeqrnelConfig {
         if (secret != null && secret.isNotEmpty) 'secret': secret,
       };
 
-  /// [singboxConfig] — результат `SingBoxTunConfigGen.generate` (desktop TUN).
-  /// [xrayConfig] — обычный xray-конфиг сервера (его `outbounds` исполнит
-  /// встроенный xray). [windows] управляет именем процесса в bypass-правиле.
-  /// [clashApiPort] — порт clash_api sing-box-части. Нужен дебаг-экрану
-  /// «Соединения» (`GET /connections` отдаёт процесс, домен, правило и байты) и
-  /// подсчёту трафика. null — не поднимать API вовсе.
-  /// [clashApiSecret] — пароль API: петля общая для всех пользователей машины,
-  /// а API отдаёт список соединений и умеет их рвать.
   static String fromChain({
     required String singboxConfig,
     required String xrayConfig,
@@ -41,7 +28,6 @@ class KeqrnelConfig {
       box['experimental'] = experimental;
     }
 
-    // 1. Подменяем socks-`proxy` на встроенный xray-движок.
     final outbounds = box['outbounds'] as List;
     var swapped = false;
     for (var i = 0; i < outbounds.length; i++) {
@@ -58,9 +44,7 @@ class KeqrnelConfig {
       );
     }
 
-    // 2. Bypass собственного трафика keqrnel, чтобы коннект встроенного xray к
-    //    серверу не заворачивался обратно в TUN (петля). В цепочке так
-    //    обходили xray.exe/sing-box.exe — здесь единственный процесс keqrnel.
+    // трафик самого keqrnel мимо TUN, иначе коннект встроенного xray к серверу завернётся в петлю
     final route = box['route'] as Map<String, dynamic>;
     final rules = route['rules'] as List;
     rules.insert(0, <String, dynamic>{
@@ -71,12 +55,6 @@ class KeqrnelConfig {
     return const JsonEncoder.withIndent('  ').convert(box);
   }
 
-  /// Конфиг keqrnel как чистого socks/http-провайдера: оборачиваем готовый
-  /// xray-конфиг (в нём уже свои inbounds с теми же портами/кредами и outbound
-  /// сервера) во встроенный xray-движок, без sing-box TUN. Используется там, где
-  /// туннель держит кто-то другой: на Android это VpnService, а на
-  /// десктопе — эфемерное ядро url-пинга. Proxy-режим десктопа идёт через
-  /// [proxyWithStats], там нужен подсчёт трафика.
   static String wrapXray(String xrayConfig) {
     final xray = jsonDecode(xrayConfig) as Map<String, dynamic>;
     final inbounds = _singboxInboundsFromXray(xray);
@@ -156,18 +134,7 @@ class KeqrnelConfig {
     return result;
   }
 
-  /// Desktop proxy-режим с подсчётом трафика. В отличие от [wrapXray], локальные
-  /// SOCKS/HTTP слушает сам sing-box (а не встроенный xray), весь трафик идёт
-  /// через него в xray-bridge — поэтому sing-box его считает и отдаёт через
-  /// clash_api по HTTP. Сплит-роутинг xray (direct/proxy/block по доменам/IP)
-  /// сохраняется: он применяется внутри встроенного xray в core.Dial. У xray
-  /// убираем все inbounds: loopback-листенеры sing-box поднимает сам, а
-  /// LAN-инбаунды (socks-lan/http-lan) переезжают на его сторону вместе с
-  /// кредами; вход в них, как и в xray-роутинге, только с частных адресов.
-  /// [findProcess] включает поиск процесса-владельца соединения: clash_api тогда
-  /// отдаёт `processPath` для дебаг-экрана «Соединения». В proxy-режиме своих
-  /// process-правил нет, поэтому без флага sing-box процесс не ищет вовсе.
-  /// Включаем только в дебаг-режиме — это syscall на каждое соединение.
+  // поиск процесса только в дебаг-режиме: это syscall на каждое соединение
   static String proxyWithStats({
     required String xrayConfig,
     required int socksPort,
@@ -177,7 +144,6 @@ class KeqrnelConfig {
     bool findProcess = false,
   }) {
     final xray = jsonDecode(xrayConfig) as Map<String, dynamic>;
-    // Loopback-инбаунды xray не переносим — их порты уже держат socks-in/http-in.
     final lanInbounds = _singboxInboundsFromXray(xray)
         .where((i) => !const {'127.0.0.1', '::1', 'localhost'}.contains(i['listen']))
         .toList();
@@ -211,8 +177,7 @@ class KeqrnelConfig {
       ],
       'route': {
         if (findProcess) 'find_process': true,
-        // Зеркало source-правил xray-роутинга (ConfigGeneratorV2): LAN-инбаунды
-        // доступны только с частных адресов, прочие источники — block.
+        // зеркало source-правил xray: в LAN-инбаунды только с частных адресов
         if (lanTags.isNotEmpty)
           'rules': [
             {
@@ -228,8 +193,6 @@ class KeqrnelConfig {
     return const JsonEncoder.withIndent('  ').convert(box);
   }
 
-  /// Частные диапазоны, которым открыт вход в LAN-инбаунды — тот же список,
-  /// что в source-правиле xray-роутинга (ConfigGeneratorV2).
   static const _lanAllowedSources = [
     '10.0.0.0/8',
     '172.16.0.0/12',

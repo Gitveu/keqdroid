@@ -5,8 +5,7 @@ namespace {
 constexpr wchar_t kRegistryKey[] = L"Software\\KeqDroid";
 constexpr wchar_t kPlacementValue[] = L"MainWindowPlacement";
 
-// Anything smaller than this is a corrupt record, never a size the user
-// actually dragged the main window to.
+// меньше этого запись битая, такого размера человек окну не тянул
 constexpr int kMinSavedWidth = 400;
 constexpr int kMinSavedHeight = 300;
 
@@ -36,9 +35,7 @@ bool LoadSavedPlacement(WINDOWPLACEMENT* out) {
     return false;
   }
 
-  // Monitor layout may have changed since the save (undocked laptop, second
-  // monitor unplugged). If the saved rect no longer touches any monitor, fall
-  // back to the default centered window instead of restoring off-screen.
+  // мониторы могли смениться (ноутбук без дока): запись, не касающаяся ни одного, даёт окно по центру, а не за экраном
   if (::MonitorFromRect(&wp.rcNormalPosition, MONITOR_DEFAULTTONULL) ==
       nullptr) {
     return false;
@@ -68,9 +65,7 @@ bool KeqdroidRestoreWindowPlacement(HWND hwnd, bool* out_maximized) {
     *out_maximized = maximized;
   }
 
-  // The window stays hidden until Flutter renders its first frame (Show() in
-  // FlutterWindow::OnCreate's next-frame callback), so apply the rect without
-  // showing anything here.
+  // окно скрыто до первого кадра, поэтому только границы
   wp.showCmd = SW_HIDE;
   if (maximized) {
     wp.flags |= WPF_RESTORETOMAXIMIZED;
@@ -97,8 +92,7 @@ void KeqdroidSaveWindowPlacement(HWND hwnd) {
     return;
   }
 
-  // Normalize: hidden-in-tray windows report SW_HIDE; store the state they
-  // should reopen with instead.
+  // спрятанное в трей отдаёт SW_HIDE, храним то, с чем открываться
   const bool maximized =
       wp.showCmd == SW_SHOWMAXIMIZED ||
       (wp.showCmd == SW_HIDE && (wp.flags & WPF_RESTORETOMAXIMIZED) != 0);

@@ -17,7 +17,6 @@ import 'windows_zip_updater.dart';
 import '../core/app_logger.dart';
 import '../utils/local_vpn_proxy.dart';
 
-/// инфа о доступном обновлении
 class UpdateInfo {
   final String currentVersion;
   final String latestVersion;
@@ -26,13 +25,8 @@ class UpdateInfo {
   final int apkSize;
   final bool openInBrowser;
 
-  /// File name of the release asset being downloaded (e.g. `keqdroid-0.5.0.apk`).
-  /// Used to locate its SHA-256 line inside a multi-asset checksums file.
   final String assetName;
 
-  /// `browser_download_url` of the file holding the SHA-256 for [assetName]:
-  /// its own `.sha256` or the release-wide `SHA256SUMS`. `null` means no
-  /// checksum is available.
   final String? checksumUrl;
 
   UpdateInfo({
@@ -68,9 +62,7 @@ class UpdateService {
   static const _owner = 'Lemonochka';
   static const _repo = 'keqdroid';
 
-  /// Единый semver-тег релиза: v0.1.0, v0.4.1 (Android + Windows в одном release).
-  // Ведущая "v" опциональна: в репозитории есть теги обоих видов (`v0.5.1` и
-  // `0.5.1`), и требование "v" молча прятало бы часть релизов от авто-обновления.
+  // ведущая v необязательна: в репозитории есть теги обоих видов
   static final _releaseTagPattern = RegExp(
     r'^v?\d+\.\d+(\.\d+)?(-[\w.]+)?$',
     caseSensitive: false,
@@ -78,33 +70,21 @@ class UpdateService {
 
   static const _prefSkipVersion = 'skip_update_version';
 
-  /// Кэш последнего авто-чека (in-memory, на процесс): ре-раны
-  /// updateInfoProvider (смена VPN-статуса, resume, периодический таймер)
-  /// не должны ни долбить GitHub чаще [_minAutoCheckGap], ни затирать уже
-  /// найденное обновление возвратом null (иначе бейдж в настройках пропадает
-  /// после первого же переключения VPN).
+  // найденное обновление не затираем null-ом, иначе бейдж в настройках пропадает после переключения VPN
   static UpdateInfo? _cachedAutoResult;
   static DateTime? _lastAutoCheckAt;
   static const _minAutoCheckGap = Duration(minutes: 30);
 
-  /// Когда авто-чек последний раз реально ходил в сеть (null — ещё ни разу
-  /// или последняя попытка провалилась). Нужно updateInfoProvider, чтобы
-  /// перепроверить после долгой заморозки процесса.
   static DateTime? get lastAutoCheckAt => _lastAutoCheckAt;
 
-  /// When the VPN is connected, GitHub traffic rides the tunnel through the
-  /// local HTTP inbound (Dart IO does not support SOCKS in
-  /// [HttpClient.findProxy]) — including Android in xray mode: the app's own
-  /// package is excluded from the TUN there, so direct Dio bypasses the VPN
-  /// and hits the RKN block on release-assets.githubusercontent.com.
-  /// [viaLocalProxy] — считается вызывающим через [tunnelHasLocalHttpProxy].
+  // при включённом VPN через локальный HTTP-инбаунд: пакет приложения исключён из TUN,
+  // а release-assets.githubusercontent.com заблокирован
   static Dio _buildDio({bool viaLocalProxy = false, int httpPort = 2081}) {
     final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 60),
-        // GitHub's REST API rejects requests without a User-Agent with HTTP 403;
-        // the default `Dart/x.y` UA is also flagged. Send the app name as the docs require.
+        // без User-Agent GitHub отвечает 403, Dart/x.y тоже режет
         headers: {'User-Agent': '$_repo-updater'},
       ),
     );
@@ -127,8 +107,7 @@ class UpdateService {
           DateTime.now().difference(last) < _minAutoCheckGap) {
         return _cachedResultRespectingSkip();
       }
-      // отмечаем до сети, чтобы параллельные ре-раны провайдера не прошли
-      // гейт вдвоём
+      // отмечаем до сети, чтобы параллельные ре-раны не прошли гейт вдвоём
       _lastAutoCheckAt = DateTime.now();
     }
 
@@ -141,8 +120,7 @@ class UpdateService {
         if (force) {
           throw StateError('Could not fetch releases from GitHub');
         }
-        // сеть/лимит: не считаем попытку (следующий ре-ран — например,
-        // подключение VPN даст выход в сеть — перепроверит сразу)
+        // сеть или лимит: попытку не считаем, следующий ре-ран перепроверит сразу
         _lastAutoCheckAt = null;
         return _cachedResultRespectingSkip();
       }
@@ -150,8 +128,6 @@ class UpdateService {
       final result =
           buildUpdateInfo(releases, currentVersion, linuxKind: linuxKind);
       _lastAutoCheckAt = DateTime.now();
-      // force тоже обновляет кэш: settings инвалидирует провайдер после
-      // ручной проверки, и throttle-путь должен вернуть свежий результат
       _cachedAutoResult = result;
 
       if (result == null) return null;
@@ -163,22 +139,17 @@ class UpdateService {
       }
       return result;
     } catch (e) {
-      // Текст ошибки без маршрута ничего не говорит: одна и та же поломка TLS
-      // значит разное, если запрос шёл через ядро или мимо него.
       AppLogger.instance.warn(
         'Update check failed '
         '(${viaLocalProxy ? 'via local proxy 127.0.0.1:$httpPort' : 'direct'}, '
         '${force ? 'manual' : 'auto'}): $e',
       );
       if (force) rethrow;
-      // транзиентная ошибка не должна ни закрывать гейт, ни стирать бейдж
       _lastAutoCheckAt = null;
       return _cachedResultRespectingSkip();
     }
   }
 
-  /// Кэшированный результат минус пропущенная пользователем версия
-  /// (skip мог случиться позже того, как результат попал в кэш).
   static Future<UpdateInfo?> _cachedResultRespectingSkip() async {
     final cached = _cachedAutoResult;
     if (cached == null) return null;
@@ -187,8 +158,6 @@ class UpdateService {
     return cached;
   }
 
-  /// [linuxKind] задан только на Linux: там файл релиза зависит от того, как
-  /// установлено приложение.
   @visibleForTesting
   static UpdateInfo? buildUpdateInfo(
     List<Map<String, dynamic>> releases,
@@ -224,9 +193,7 @@ class UpdateService {
     return UpdateInfo(
       currentVersion: currentVersion,
       latestVersion: latestTag,
-      // Пакет pacman обновляет pacman, а не мы: ведём на страницу релиза с
-      // новым PKGBUILD. Не на AUR: keqdroid-bin там может и не быть, а
-      // собранные из релизного PKGBUILD попали бы на 404.
+      // pacman обновляет pacman: ведём на страницу релиза, keqdroid-bin в AUR может и не быть
       downloadUrl: linuxKind == LinuxInstallKind.pacman
           ? (latestRelease['html_url'] ??
               'https://github.com/$_owner/$_repo/releases/latest')
@@ -250,8 +217,7 @@ class UpdateService {
   static Future<List<Map<String, dynamic>>> fetchReleases(Dio dio) async {
     final filtered = <Map<String, dynamic>>[];
 
-    // Two pages (200 releases) is plenty; the endpoint returns newest-first.
-    // Fetching more just burns the unauthenticated 60-req/hour rate limit.
+    // двух страниц хватает, больше только жжёт лимит 60 запросов в час
     for (var page = 1; page <= 2; page++) {
       final Response response;
       try {
@@ -259,8 +225,6 @@ class UpdateService {
       } on DioException catch (e) {
         final status = e.response?.statusCode;
         if (status == 403 || status == 429) {
-          // Unauthenticated GitHub API: 60 requests/hour per IP. When the VPN is
-          // up the proxy exit IP may already be throttled by other users.
           throw StateError(
             'GitHub rate limit reached (HTTP $status). Try again in a few minutes'
             '${page == 1 ? '' : ', or check without the VPN connected'}.',
@@ -297,13 +261,7 @@ class UpdateService {
     return filtered;
   }
 
-  /// Страница релизов с одним повтором, если соединение сломалось, не дойдя
-  /// до ответа.
-  ///
-  /// Такие сбои разовые: люди ловили `WRONG_VERSION_NUMBER` (рукопожатие с
-  /// GitHub прошло, а начало ответа приехало испорченным), и повторное
-  /// нажатие тут же проходило. Таймауты не повторяем — ручная проверка ждала
-  /// бы вдвое дольше, — а ответ сервера вроде 403/429 повтор не исправит.
+  // один повтор: WRONG_VERSION_NUMBER бывает разовым, таймауты не повторяем
   static Future<Response> _getReleasesPage(Dio dio, int page) async {
     for (var attempt = 0;; attempt++) {
       try {
@@ -326,7 +284,6 @@ class UpdateService {
   static bool isBrokenConnection(DioException e) =>
       e.response == null &&
       (e.type == DioExceptionType.connectionError ||
-          // Так Dio заворачивает сбой сокета или TLS посреди обмена.
           (e.type == DioExceptionType.unknown && e.error is IOException));
 
   static DateTime? _releaseDate(Map<String, dynamic> release) {
@@ -347,18 +304,10 @@ class UpdateService {
     return null;
   }
 
-  /// Метка 32-битного APK в имени: `keqdroid-<версия>-armeabi-v7a-android.apk`.
   static const _arm32ApkMarker = 'armeabi-v7a';
 
-  /// APK той же архитектуры, в которой работает само приложение.
-  ///
-  /// В релизе их два: основной arm64 и armeabi-v7a для телефонов с 32-битной
-  /// прошивкой. Раз процесс уже запущен в своей ABI, APK этой ABI на телефон
-  /// встанет, а чужой может и не встать: arm64 на 32-битной прошивке не
-  /// ставится вовсе. Нужного в релизе нет (в старых релизах 32-битного не
-  /// было) — обновления для этого телефона нет. Брать просто первый .apk
-  /// нельзя: так выбирают все версии, вышедшие до 32-битного APK, и он стоит
-  /// в списке вторым ровно ради них (см. make_release.ps1).
+  // APK своей ABI: arm64 на 32-битную прошивку не встанет.
+  // первый .apk брать нельзя, его выбирают версии до 32-битного APK
   static Map<String, dynamic>? _findApkAsset(
     List? assets, {
     required bool arm32,
@@ -373,14 +322,11 @@ class UpdateService {
     return null;
   }
 
-  /// Android и Windows; у Linux свой выбор, по способу установки.
   static Map<String, dynamic>? _findAssetForCurrentPlatform(List? assets) {
     if (Platform.isWindows) return _findWindowsAsset(assets);
     return _findApkAsset(assets, arm32: Abi.current() == Abi.androidArm);
   }
 
-  /// [platform] — `android` (arm64), `android-arm` (armeabi-v7a), `windows`,
-  /// `linux` (с установкой [linuxKind]).
   static String? findAssetNameForPlatform(
     List? assets,
     String platform, {
@@ -408,9 +354,7 @@ class UpdateService {
     return null;
   }
 
-  /// Файл того же вида, каким приложение установлено: AppImage вместо deb
-  /// оставлял установленную версию старой и запускал новую рядом с ней. Нет
-  /// такого файла в релизе — нет и обновления, чужой формат не подсовывается.
+  // файл того же вида, что установлен: AppImage вместо deb оставлял старую версию
   static Map<String, dynamic>? _findLinuxAsset(
     List? assets,
     LinuxInstallKind kind,
@@ -420,7 +364,6 @@ class UpdateService {
       LinuxInstallKind.appImage => const ['-x86_64.appimage', '.appimage'],
       LinuxInstallKind.deb => const ['_amd64.deb', '.deb'],
       LinuxInstallKind.rpm => const ['.x86_64.rpm', '.rpm'],
-      // Из этого архива собирается и пакет pacman, так что размер в окне — его.
       LinuxInstallKind.pacman ||
       LinuxInstallKind.portable ||
       LinuxInstallKind.readOnly =>
@@ -435,19 +378,13 @@ class UpdateService {
     return null;
   }
 
-  /// Ассет с контрольной суммой для [assetName] — то же правило, по которому
-  /// ищет его апдейтер. Нужен и загрузчику geo-базы: иначе у них разошлось бы
-  /// то, где лежит хеш.
   static Map<String, dynamic>? checksumAssetFor(
     List? assets,
     String assetName,
   ) =>
       _findChecksumAsset(assets, assetName);
 
-  /// Locates the SHA-256 checksum asset for [assetName]. Supports either a
-  /// per-asset sidecar (`<assetName>.sha256`) or a shared checksums file
-  /// (`SHA256SUMS` / `checksums.txt`) listing `<hash>  <filename>` lines.
-  /// Releases from 0.19.0 carry only the shared file.
+  // хеш либо в <имя>.sha256 рядом, либо в общем SHA256SUMS/checksums.txt, с 0.19.0 только общий
   static Map<String, dynamic>? _findChecksumAsset(
     List? assets,
     String assetName,
@@ -455,13 +392,11 @@ class UpdateService {
     if (assets == null || assetName.isEmpty) return null;
     final target = '${assetName.toLowerCase()}.sha256';
 
-    // 1) dedicated sidecar next to the asset.
     for (final asset in assets) {
       final name = (asset['name'] ?? '').toString().toLowerCase();
       if (name == target) return asset as Map<String, dynamic>;
     }
 
-    // 2) shared checksums manifest.
     const shared = {
       'sha256sums',
       'sha256sums.txt',
@@ -485,7 +420,6 @@ class UpdateService {
     return _releaseTagPattern.hasMatch(tagName.trim());
   }
 
-  /// Извлекает semver из тега (v0.4.1 → 0.4.1; legacy Android/Desktop — для skip pref).
   static String _extractVersion(String tag) {
     var cleaned = tag.trim();
     if (cleaned.toLowerCase().startsWith('v') &&
@@ -557,7 +491,6 @@ class UpdateService {
     await prefs.setString(_prefSkipVersion, version);
   }
 
-  /// Returns `true` when the app is exiting to apply a Windows portable update.
   static Future<bool> downloadAndInstall(
     UpdateInfo info, {
     bool viaLocalProxy = false,
@@ -589,7 +522,7 @@ class UpdateService {
       },
     );
 
-    // Never hand an unverified binary to the OS installer / portable updater.
+    // непроверенный файл установщику не отдаём
     try {
       await _verifyDownloadedFile(file, info, dio);
     } catch (_) {
@@ -608,10 +541,8 @@ class UpdateService {
 
     if (Platform.isLinux && ext == '.appimage') {
       final target = LinuxAppImageUpdater.currentAppImagePath();
-      // Заменить можно только там, куда можно писать: иначе скрипт после
-      // выхода не заменит файл и молча запустит старую версию.
+      // только туда, куда можно писать, иначе скрипт молча запустит старую версию
       if (target != null && LinuxInstall.isWritableDir(p.dirname(target))) {
-        // Running as an AppImage: swap it in place and relaunch.
         return LinuxAppImageUpdater.applyInPlace(
           newAppImage: file.path,
           targetAppImage: target,
@@ -668,22 +599,16 @@ class UpdateService {
     ]) {
       if (path.endsWith(ext)) return ext;
     }
-    // Не угадываем: fallback ".zip" на Windows отправил бы произвольный файл
-    // в портейбл-апдейтер (распаковка + подмена файлов приложения).
+    // не угадываем: .zip ушёл бы в портейбл-апдейтер с распаковкой поверх приложения
     throw StateError(
       'Unsupported update file type: ${path.split('/').last}. '
       'Download the release manually.',
     );
   }
 
-  /// Fail closed: refuse to install an update whose SHA-256 can't be verified.
-  /// Set to `false` only if you must support releases published without a
-  /// checksum sidecar (weakens the integrity guarantee).
+  // без проверенного хеша не ставим
   static const bool _requireChecksum = true;
 
-  /// Throws if the downloaded [file] doesn't match the release's published
-  /// SHA-256. A `null`/missing checksum is treated as a failure when
-  /// [_requireChecksum] is set.
   static Future<void> _verifyDownloadedFile(
     File file,
     UpdateInfo info,
@@ -720,10 +645,9 @@ class UpdateService {
     }
   }
 
-  /// Streams [file] through SHA-256 so large updates aren't loaded into memory.
   static Future<String> _sha256OfFile(File file) async {
     final digest = await sha256.bind(file.openRead()).first;
-    return digest.toString(); // lowercase hex
+    return digest.toString();
   }
 
   static Future<String?> _fetchExpectedSha256(
@@ -740,12 +664,9 @@ class UpdateService {
     }
   }
 
-  /// Test hook for [_parseSha256] (kept public like the other version helpers).
   static String? extractSha256(String manifest, String assetName) =>
       _parseSha256(manifest, assetName);
 
-  /// Extracts the 64-hex-char SHA-256 for [assetName]. Handles a bare hash, a
-  /// `sha256sum`-style `<hash>  <file>` line, and multi-asset manifests.
   static String? _parseSha256(String text, String assetName) {
     final hexPattern = RegExp(r'\b[a-fA-F0-9]{64}\b');
     final lowerAsset = assetName.toLowerCase();
@@ -759,13 +680,11 @@ class UpdateService {
       }
     }
 
-    // Dedicated sidecar usually contains exactly one hash and no filename.
     final m = hexPattern.firstMatch(text);
     return m?.group(0)?.toLowerCase();
   }
 
-  /// Только https и без shell-метасимволов — защита от инъекции в `cmd /c start`,
-  /// если имя релизного ассета вдруг содержит `&`, `^`, `"` и т.п.
+  // только https и без метасимволов cmd: ссылка идёт в cmd /c start
   static bool _isSafeHttpsUrl(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return false;
@@ -774,15 +693,12 @@ class UpdateService {
 
   static Future<void> _openUrlInBrowser(String url) async {
     if (!_isSafeHttpsUrl(url)) {
-      // Кидаем, а не выходим молча: иначе клик по «Обновить» просто ничего
-      // не делает, и непонятно почему.
       throw StateError(
         'Refusing to open unsafe download URL. '
         'Download the release manually from GitHub.',
       );
     }
     if (Platform.isWindows) {
-      // без runInShell; url уже провалидирован (нет метасимволов cmd)
       await Process.start('cmd', ['/c', 'start', '', url]);
       return;
     }

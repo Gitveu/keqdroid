@@ -5,7 +5,6 @@
 
 flutter::EncodableList ListWindowsApps(bool include_system);
 
-/// Lazy icon load for a single exe/icon path (PNG base64).
 std::string GetWindowsAppIconBase64(const std::wstring& icon_source);
 
 #endif  // RUNNER_WINDOWS_APPS_LIST_H_

@@ -30,57 +30,30 @@ import 'vpn_backend.dart';
 import 'windows_core_paths.dart';
 import 'xray_session_stats.dart';
 
-/// windows: xray всегда + sing-box только для tun, системный прокси через wininet
 class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   static const _method = MethodChannel('keqdis_vpn_channel');
 
-  /// Active session backend — for Xray log export on desktop.
   static WindowsTunnelBackend? activeInstance;
 
-  /// Логи последней завершённой сессии. После teardown [activeInstance]
-  /// зануляется, и экран логов отвечал «подключитесь сначала» ровно в тот
-  /// момент, когда логи нужнее всего — после внезапной смерти ядра.
+  // после teardown activeInstance обнуляется, а логи нужнее всего как раз после смерти ядра
   static String lastSessionLogs = '';
 
   final _stateCtrl = StreamController<VpnState>.broadcast();
   Process? _xrayProcess;
-  // keqrnel: единое ядро (sing-box host + встроенный xray) — заменяет прежнюю
-  // связку xray.exe + sing-box.exe. null когда неактивно.
   Process? _keqrnelProcess;
-  // Порт clash_api keqrnel — из него читаем кумулятивный трафик (proxy-режим)
-  // и список соединений для дебаг-экрана (оба режима).
   int? _keqrnelClashPort;
 
-  /// С какого уровня строки xray доходят до лога сессии; 0 — все. Поднятый
-  /// до info xray пишет больше, чем заказано, ради счётчика отказов (см.
-  /// XraySessionLog). Строки mihomo и sing-box меток xray не несут, и порог
-  /// их не трогает.
   int _xrayLogThreshold = 0;
 
-  /// Включала ли системный прокси эта сессия.
-  ///
-  /// Выключать его есть смысл только тогда. Каждое переключение рассылает
-  /// всем окнам WM_SETTINGCHANGE, и одно занятое окно держит рассылку до пяти
-  /// секунд: первое подключение после запуска так стояло четыре секунды,
-  /// выключая прокси, который и так был выключен. Оставшийся после падения
-  /// прокси чинит нативная уборка ещё до старта Dart (CleanupStaleSystemProxy).
+  // выключаем только если включали: рассылка WM_SETTINGCHANGE стоит до пяти секунд на занятом окне,
+  // а остатки после падения снимает нативная уборка до старта Dart
   bool _systemProxyApplied = false;
 
-  // mihomo: одно ядро на оба режима. В proxy-режиме держит локальные socks/http,
-  // в TUN — ещё и сам wintun-адаптер (keqrnel в этой схеме не участвует вовсе).
   Process? _mihomoProcess;
 
-  /// Порт clash_api активной сессии; null — сессии нет или API не поднят
-  /// (цепочка xray+sing-box его не даёт). Читает [ConnectionsService].
-  ///
-  /// У mihomo координаты API придумывает не бэкенд, а тот же код, что собирал
-  /// конфиг ([MihomoApiSession]) — порт и `secret` едут внутрь конфига, и второй
-  /// источник правды тут был бы просто вторым шансом разъехаться.
   int? get clashApiPort =>
       _keqrnelClashPort ?? (_mihomoProcess != null ? MihomoApiSession().port : null);
 
-  /// PID живых процессов ядра: подпись → pid. Пустая карта — сессии нет.
-  /// Читает панель «Внутренности»; больше эти процессы из Dart нигде не видны.
   Map<String, int> get activeCorePids => {
     if (_keqrnelProcess != null) 'keqrnel': _keqrnelProcess!.pid,
     if (_mihomoProcess != null) 'mihomo': _mihomoProcess!.pid,
@@ -95,8 +68,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   final StringBuffer _xrayLog = StringBuffer();
   final StringBuffer _singboxLog = StringBuffer();
 
-  // true пока идёт штатный stopSession — чтобы вотчдог не принял наш же
-  // kill за внезапную смерть ядра.
+  // пока идёт штатный стоп, вотчдог не должен принять наш kill за смерть ядра
   bool _stoppingSession = false;
 
   String? _xrayBinPath;
@@ -114,7 +86,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     _stateCtrl.close();
   }
 
-  /// Tail of Xray (+ sing-box in TUN) stdout/stderr for the debug screen.
   String exportSessionLogs({int maxLines = 400}) {
     final combined = StringBuffer()
       ..writeln(_xrayLog)
@@ -122,8 +93,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     return _tail(combined, maxLines: maxLines);
   }
 
-  /// `true` — админ, `false` — нет, `null` — выяснить не удалось (канал не
-  /// ответил). На `null` попытку не блокируем: лучше дать ядру сказать своё.
+  // на null попытку не блокируем, пусть ядро скажет своё
   Future<bool?> _isElevated() async {
     try {
       return await _method.invokeMethod<bool>('requestTunnelPermission');
@@ -132,8 +102,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  /// Несколько последних строк вывода ядра для текста ошибки. Пусто, если
-  /// ядро вообще ничего не написало.
   String _sessionLogTail({int maxLines = 10}) {
     final text = exportSessionLogs(maxLines: maxLines).trim();
     return text == '(no process output)' ? '' : text;
@@ -163,18 +131,11 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     try {
       await _cleanupForRestart();
       activeInstance = this;
-      // _cleanupForRestart() зануляет _activeMode внутри _stopSessionInner —
-      // вернуть режим новой сессии. Иначе вся сессия живёт с _activeMode=null:
-      // getCurrentState теряет режим, а setTrafficStatsPollingEnabled(true)
-      // после разворота из трея молча не перезапускает опрос счётчиков —
-      // трафик/время замерзают до реконнекта.
+      // _cleanupForRestart обнуляет режим, без возврата опрос счётчиков после трея не перезапустится
       _activeMode = request.mode;
 
-      // TUN поднимает wintun-адаптер и правит таблицу маршрутов — без прав
-      // администратора ядро просто умирает, и пользователь видит «keqrnel
-      // stopped unexpectedly (exit code 1)» вместо причины. Отсекаем заранее:
-      // формулировка со словами «administrator rights» попадает в готовый
-      // локализованный случай UiErrorCode.tunAdmin (см. explainError).
+      // без прав администратора ядро просто умирает с exit code 1, отсекаем заранее.
+      // слова administrator rights ловит explainError (UiErrorCode.tunAdmin)
       if (request.mode == ConnectionMode.tun && await _isElevated() == false) {
         throw const VpnStartException(
           'TUN mode needs administrator rights: the wintun adapter and the '
@@ -189,23 +150,15 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         case VpnBackend.mihomo:
           await _startMihomoSession(request);
         case VpnBackend.xray:
-          // keqrnel — единственное ядро для xray-протоколов (proxy и TUN);
-          // отдельные xray.exe/sing-box.exe не поставляются.
           await _startKeqrnelSession(request);
       }
 
       startStatsLoop(request.mode);
       emitConnectedTelemetry(request.mode);
 
-      // «Ядро поднялось» и «через него что-то ходит» — разные утверждения, и
-      // расходятся они постоянно: истёкшая подписка, мёртвый сервер, правило,
-      // отправившее всё в block. Снаружи это «подключено, но ничего не
-      // грузится» без единой строчки о причине. Проверяем сами — в фоне, чтобы
-      // не задерживать подключение.
       unawaited(_verifyChainReachable(request));
 
-      // Смерть ядра посреди сессии без вотчдога оставляла UI в «Connected»,
-      // а системный прокси — направленным на мёртвый порт.
+      // без вотчдога смерть ядра оставляла UI в Connected, а системный прокси на мёртвом порту
       _watchProcessExit(_keqrnelProcess, 'keqrnel');
       _watchProcessExit(_mihomoProcess, 'mihomo');
       _watchProcessExit(_xrayProcess, 'xray');
@@ -224,7 +177,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  /// keqrnel (единое ядро) — один процесс вместо цепочки. Диспетчер по режиму.
   Future<void> _startKeqrnelSession(TunnelSessionRequest request) async {
     if (request.mode == ConnectionMode.tun) {
       await _startKeqrnelTunSession(request);
@@ -233,9 +185,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  /// proxy-режим: локальные socks/http (и LAN-инбаунды при шаринге) слушает
-  /// sing-box-часть keqrnel, внутри — встроенный xray. Системный прокси
-  /// Windows — поверх. sing-box TUN здесь не задействован, админ не нужен.
   Future<void> _startKeqrnelProxySession(TunnelSessionRequest request) async {
     final bin = await WindowsCorePaths.keqrnelExecutable();
     if (bin == null) {
@@ -244,8 +193,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       );
     }
 
-    // sing-box owns the local SOCKS/HTTP listeners and forwards through the
-    // xray bridge, so it counts traffic and exposes it via clash_api.
     final clashPort = await _freePort();
     final xrayLog = XraySessionLog.raise(request.xrayConfig);
     _xrayLogThreshold = xrayLog.threshold;
@@ -310,9 +257,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     );
   }
 
-  /// TUN-режим: один процесс вместо xray + sing-box. Берём тот же sing-box
-  /// TUN-конфиг, но его socks-`proxy` заменён на встроенный xray
-  /// (см. [KeqrnelConfig.fromChain]). Запускается из каталога с wintun.dll.
   Future<void> _startKeqrnelTunSession(TunnelSessionRequest request) async {
     final bin = await WindowsCorePaths.keqrnelExecutable();
     if (bin == null) {
@@ -342,7 +286,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     final configFile = File('${_sessionDir!.path}/keqrnel.json');
     await configFile.writeAsString(merged);
 
-    // Запускаем рядом с wintun.dll (как sing-box); xray-ассеты — через env.
+    // рядом с wintun.dll, xray-ассеты через env
     final workDir = p.dirname(bin);
     final geoDir = await WindowsCorePaths.geoAssetDir();
 
@@ -369,13 +313,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     );
   }
 
-  /// mihomo — второе полноценное ядро, а не обёртка вокруг keqrnel.
-  ///
-  /// Отличие от xray-пути принципиальное: в TUN-режиме адаптером владеет само
-  /// mihomo (внутри у него тот же sing-tun), поэтому связки «ядро → локальный
-  /// SOCKS → sing-box» здесь нет вовсе — процесс один на любой режим. Отсюда и
-  /// требования те же, что к keqrnel: права администратора и `wintun.dll`
-  /// рядом с бинарём.
   Future<void> _startMihomoSession(TunnelSessionRequest request) async {
     final bin = await WindowsCorePaths.mihomoExecutable();
     if (bin == null) {
@@ -392,27 +329,19 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     if (isTun) {
       await _ensureTunPrerequisites(bin, request);
     } else {
-      // mihomo поднимает оба локальных инбаунда из одного конфига, и занятый
-      // соседом порт роняет старт целиком, а не отключает одну возможность.
       await _ensurePortsAvailable(request);
     }
 
-    // Расширение `.yaml` — то, что ядро ждёт; содержимое при этом JSON (YAML 1.2
-    // его надмножество, см. MihomoConfigGen).
+    // ядро ждёт .yaml, а JSON для YAML 1.2 подмножество
     final configFile = File('${_sessionDir!.path}/mihomo.yaml');
     await configFile.writeAsString(config);
 
-    // `-d` — домашний каталог ядра: оттуда оно берёт geoip.dat/geosite.dat,
-    // туда же пишет свой cache.db и, если конфига там нет, создаёт пустой
-    // `config.yaml`. Последнее и решает: на каталоге без права записи это
-    // ошибка `config.Init`, после которой ядро не стартует вовсе.
     final home = await WindowsCorePaths.mihomoHomeDir();
 
     _mihomoProcess = await Process.start(
       bin,
       ['-d', home, '-f', configFile.path],
-      // Рядом с бинарём лежит wintun.dll, а грузит его ядро по имени, то есть
-      // из каталога процесса.
+      // wintun.dll ядро грузит по имени, то есть из каталога процесса
       workingDirectory: p.dirname(bin),
       mode: ProcessStartMode.normal,
     );
@@ -464,12 +393,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     );
   }
 
-  /// Готовность TUN у mihomo — по появлению интерфейса и по его собственной
-  /// строке лога.
-  ///
-  /// По адресу, как у sing-box, спрашивать нельзя: адрес интерфейса mihomo
-  /// считает из `dns.fake-ip-range` и задать его отдельно не даёт (см.
-  /// [MihomoConfigGen.buildTun]). Зато имя мы задаём сами — по нему и смотрим.
+  // по адресу нельзя: его mihomo считает из fake-ip-range, а имя задаём сами
   Future<bool> _waitForMihomoTun({
     required Process process,
     required StringBuffer log,
@@ -491,7 +415,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     return false;
   }
 
-  /// Свободный TCP-порт на loopback (для clash_api ядра).
   Future<int> _freePort() async {
     final s = await ServerSocket.bind('127.0.0.1', 0);
     final port = s.port;
@@ -499,15 +422,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     return port;
   }
 
-  /// Что должно быть на месте до старта TUN, но проверяется только там.
-  ///
-  /// Оба случая иначе выглядят одинаково — «keqrnel TUN did not start» с
-  /// невнятным хвостом лога, — а причины у них разные и обе чинятся руками:
-  ///
-  /// Первое — `wintun.dll` рядом с ядром: его сносит антивирус и теряет ручная
-  /// распаковка портативной сборки, а без него sing-tun адаптер не создаёт
-  /// вовсе. Второе — локальные порты: в TUN их слушает встроенный xray, и если
-  /// 2080 занял сосед, ядро падает на старте инбаунда, хотя TUN тут ни при чём.
+  // wintun.dll сносит антивирус и теряет ручная распаковка, без него адаптера нет вовсе
   Future<void> _ensureTunPrerequisites(
     String binPath,
     TunnelSessionRequest request,
@@ -524,18 +439,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     await _ensurePortsAvailable(request);
   }
 
-  /// Последняя проверка портов перед стартом ядра.
-  ///
-  /// Обычно сюда приезжают уже подобранные порты ([LocalPortResolver] отработал
-  /// до генерации конфига), так что срабатывает это на гонке «занял между
-  /// проверкой и стартом» — и тогда важно назвать причину: «занят соседом»,
-  /// «изъят Windows под Hyper-V/WSL» и «запрещён защитой» лечатся по-разному, а
-  /// выглядят одинаково.
-  ///
-  /// Порта здесь два, и оба обязательны в любом режиме: HTTP-инбаунд ядро
-  /// поднимает всегда (через него ходит апдейтер и на него смотрит системный
-  /// прокси), поэтому занятый HTTP-порт роняет ядро целиком — а не «отключает
-  /// одну возможность», как считалось раньше.
+  // HTTP-инбаунд ядро поднимает всегда, занятый HTTP-порт роняет его целиком
   Future<void> _ensurePortsAvailable(TunnelSessionRequest request) async {
     final socksIssue =
         await LocalPortResolver.probe('127.0.0.1', request.socksPort);
@@ -548,8 +452,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         ),
       );
     }
-    // HTTP-инбаунд поднимает то же ядро и в TUN-режиме (его порты лифтит
-    // keqrnel), поэтому занятый порт роняет старт независимо от режима.
     final httpIssue =
         await LocalPortResolver.probe('127.0.0.1', request.httpPort);
     if (httpIssue != null) {
@@ -567,7 +469,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     AppLogger.instance.info(
       'setSystemProxy: socks=${request.socksPort} http=${request.httpPort}',
     );
-    // До вызова: и наполовину применённый прокси при остановке надо снять.
+    // до вызова: наполовину применённый прокси тоже надо снять
     _systemProxyApplied = true;
     try {
       final proxyResult = await _method.invokeMethod<Map<Object?, Object?>>(
@@ -616,25 +518,18 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  /// Вотчдог: ядро завершилось само (не через [stopSession]) → снимаем
-  /// системный прокси, чистим состояние и эмитим error вместо вечного
-  /// «Connected» поверх мёртвого туннеля.
   void _watchProcessExit(Process? process, String label) {
     if (process == null) return;
     unawaited(process.exitCode.then((code) async {
       if (_stoppingSession) return;
-      // Процесс уже не из активной сессии (штатный stop занулил поля).
       if (!identical(process, _keqrnelProcess) &&
           !identical(process, _mihomoProcess) &&
           !identical(process, _xrayProcess)) {
         return;
       }
-      // Хвост снимаем до teardown и кладём прямо в текст ошибки: голый exit
-      // code не говорит ничего, а экран логов после остановки сессии показать
-      // уже нечего (см. lastSessionLogs).
+      // хвост до teardown: голый exit code ничего не говорит, а после остановки логов уже нет
       final details = _sessionLogTail();
-      // Причину ищем в полном выводе сессии, а не в хвосте: строка с реальной
-      // ошибкой часто оказывается выше десятка строк агонии ядра.
+      // причину ищем во всём выводе: настоящая ошибка часто выше десятка строк агонии ядра
       final hint = tunFailureHint(exportSessionLogs(), windows: true);
       AppLogger.instance.error(
         '$label exited unexpectedly with code $code; tearing the session down'
@@ -664,10 +559,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  /// Зачистка перед стартом новой сессии — без эмитов disconnecting/disconnected.
-  /// Нотифаер пропускает disconnected из стрима в UI даже при connect-in-flight
-  /// (так нужно Android'у: отмена диалога разрешения), поэтому эмит отсюда
-  /// проваливал кнопку в серый «отключён» на пару секунд, пока поднимались ядра.
+  // без эмитов: disconnected из стрима проходит в UI и при connect-in-flight, кнопка проваливалась в серое
   Future<void> _cleanupForRestart() async {
     _stoppingSession = true;
     try {
@@ -680,9 +572,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   Future<void> _stopSessionInner({bool emitStates = true}) async {
     final wasTun = _activeMode == ConnectionMode.tun;
     stopStatsLoop();
-    // Забираем логи сессии до её разбора: после teardown экран логов уже не
-    // достучится до этого инстанса, а разбирать чаще всего приходится именно
-    // упавшую сессию.
     final logs = exportSessionLogs();
     if (logs.trim().isNotEmpty && logs.trim() != '(no process output)') {
       lastSessionLogs = logs;
@@ -696,12 +585,10 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       _systemProxyApplied = false;
     }
 
-    // TUN owners first (gracefully, so the embedded sing-box reverts the TUN
-    // adapter / routes / DNS), then the upstream socks providers.
+    // сначала владелец TUN и мягко, чтобы встроенный sing-box вернул адаптер, маршруты и DNS
     await _killProcess(_keqrnelProcess, graceful: true);
-    // mihomo слушает сигналы, а не stdin: на Windows это всё равно жёсткий
-    // TerminateProcess, поэтому уборку адаптера доделывает драйвер wintun —
-    // её и дожидается _awaitTunAdapterGone ниже.
+    // mihomo слушает сигналы, а не stdin, на Windows это жёсткий TerminateProcess.
+    // уборку адаптера доделывает драйвер, её ждёт _awaitTunAdapterGone
     await _killProcess(_mihomoProcess);
     await _killProcess(_xrayProcess);
     _xrayProcess = null;
@@ -712,17 +599,8 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
 
     await WindowsDesktopService.clearSessionCoreProcesses();
 
-    // Процесс мёртв — адаптер ещё нет. wintun снимает его, когда закрылся
-    // последний хэндл, и Windows делает это не мгновенно; при жёстком добивании
-    // (graceful не успел) он и вовсе доживает до конца драйверной уборки.
-    // Стартовать поверх такого адаптера нельзя: sing-tun на занятом имени
-    // получает от CreateAdapter ErrExist и делает OpenAdapter — то есть
-    // настраивает умирающий адаптер. Снаружи это «через раз ошибка, через раз
-    // туннель поднялся, а трафика нет».
-    //
-    // Только если сессия реально была TUN: чужой sing-box-клиент рядом держит
-    // тот же адрес 172.19.0.1 (это дефолт sing-box), и ждать его исчезновения
-    // на каждом отключении прокси-режима незачем.
+    // процесс мёртв, адаптер ещё нет: на занятом имени sing-tun делает OpenAdapter и настраивает умирающий.
+    // ждём только после TUN: чужой sing-box рядом держит тот же 172.19.0.1
     if (wasTun) await _awaitTunAdapterGone();
 
     final dir = _sessionDir;
@@ -748,8 +626,8 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  /// Счётчики API ядра, а не адаптера: в TUN-режиме рукопожатия TCP
-  /// отвечает локальный стек, и «пришло» там было бы и от мёртвого сервера.
+  // счётчики API ядра, а не адаптера: рукопожатия TCP отвечает локальный стек,
+  // и пришло было бы и от мёртвого сервера
   @override
   Future<({int down, int up})?> sessionTrafficCounters() async {
     if (_mihomoProcess != null) {
@@ -845,9 +723,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     int concurrency = 16,
     UrlTestProgress? onEach,
   }) async =>
-      // Десктоп меряет поштучно: процессов тут не жалко, а общий конфиг xray
-      // пришлось бы ещё и заворачивать в keqrnel, чьи инбаунды принадлежат
-      // sing-box и про xray-роутинг ничего не знают.
       null;
 
   @override
@@ -914,24 +789,19 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     );
   }
 
-  /// Dart [Process.start] replaces the whole environment when `environment` is
-  /// set — merge with the parent so keqrnel keeps PATH, SystemRoot, etc.
+  // с environment Process.start заменяет окружение целиком, поэтому мержим с родительским
   static Map<String, String>? _coreProcessEnvironment(String? geoDir) {
     if (geoDir == null) return null;
     return {...Platform.environment, 'XRAY_LOCATION_ASSET': geoDir};
   }
 
   void _pipeProcessOutput(Process process, StringBuffer buffer, String tag) {
-    // just buffer for the debug log screen. logging per line here janks the ui
-    // on connect, since xray/sing-box spam lines and developer.log runs on the ui isolate.
+    // только буфер: лог на каждую строку ядра подтормаживал UI при подключении
     void append(String line) {
-      // Тихая прослушка автовыбора: отказы дозвона до сервера считаются прямо
-      // здесь, где строка уже в руках (см. CoreDialFailures).
       CoreDialFailures.observe(line);
       XrayRouteDecisions.observe(line);
       if (!XraySessionLog.keep(line, _xrayLogThreshold)) return;
       buffer.writeln(line);
-      // keep only the tail so the buffer doesn't grow unbounded
       if (buffer.length > 64 * 1024) {
         final trimmed = _tail(buffer, maxLines: 200);
         buffer
@@ -940,13 +810,9 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       }
     }
 
-    // allowMalformed: a core line in the system ANSI codepage (RU Windows) or
-    // a stray binary byte must not throw FormatException and silently kill the
-    // log pipe — that's exactly when the log matters most.
+    // allowMalformed: строка ядра в ANSI-кодировке русской Windows иначе роняет весь пайп лога
     const decoder = Utf8Decoder(allowMalformed: true);
-    // Строки режутся по всему потоку, а не по кускам пайпа: кусок обрывается
-    // где попало, и строка на границе распадалась на две половинки, которых
-    // не узнал бы ни счётчик отказов, ни человек в логе.
+    // строки режем по всему потоку: кусок пайпа обрывается где попало
     process.stderr
         .transform(decoder)
         .transform(const LineSplitter())
@@ -957,10 +823,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         .listen(append);
   }
 
-  /// Non-blocking peek at a process's exit status. `null` means still running;
-  /// otherwise the exit code. On Windows a killed process yields a large exit
-  /// code (not a negative signal like Linux), but keep the same null-means-
-  /// running contract so "exited" is never misread as "alive".
   static Future<int?> _exitCodeOrNull(Process process) => process.exitCode
       .then<int?>((c) => c)
       .timeout(const Duration(milliseconds: 1), onTimeout: () => null);
@@ -969,10 +831,8 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     if (process == null) return;
     try {
       if (graceful) {
-        // On Windows kill() is a hard TerminateProcess — sing-box then never
-        // reverts the TUN adapter, routes and DNS, which can leave the network
-        // broken after disconnect. keqrnel shuts down cleanly on stdin EOF, so
-        // close stdin and give it time to revert; hard-kill only as a fallback.
+        // kill на Windows это жёсткий TerminateProcess, и sing-box не вернул бы адаптер, маршруты и DNS.
+        // keqrnel мягко выходит по EOF на stdin
         try {
           await process.stdin.close();
         } catch (_) {}
@@ -1006,21 +866,13 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
           '${_tunStartError(log ?? StringBuffer())}',
         );
       }
-      // Готовность — только по строкам самого sing-box (см. singboxTunReady):
-      // баннер встроенного xray печатается раньше, чем поднят TUN.
+      // строка только от sing-box: баннер встроенного xray печатается раньше tun-инбаунда
       if (singboxTunReady((log ?? StringBuffer()).toString())) return true;
-      // Адаптер с нашим адресом — тот же сигнал, но не из лога: у сборки без
-      // привычных строк (или с другим уровнем лога) он остаётся единственным.
-      // Спрашиваем не сразу: адаптер мог остаться от убитой сессии (sing-tun
-      // снимает его при штатном выходе, а после kill он живёт ещё пару секунд),
-      // и на первых опросах это был бы чужой сигнал.
+      // адаптер не сразу: после kill прошлой сессии он живёт ещё пару секунд
       if (waited >= 5000 && await _tunAdapterUp()) return true;
       await Future<void>.delayed(const Duration(milliseconds: 300));
       waited += 300;
     }
-    // Ни строки, ни адаптера за бюджет: живой процесс всё ещё считаем удачей
-    // (так было и раньше), но говорим об этом в лог — «подключено» тут уже
-    // предположение, а не факт.
     final stillRunning = await _exitCodeOrNull(process);
     if (stillRunning == null) {
       AppLogger.instance.warn(
@@ -1032,13 +884,9 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     return stillRunning == null;
   }
 
-  /// Бюджет ожидания TUN. Больше прежних 15с: сюда попадает и разбор geo-баз
-  /// встроенным xray (geoip.dat — десятки мегабайт), и создание wintun-адаптера.
+  // 30 с: сюда входит разбор geo-баз встроенным xray и создание адаптера
   static const _tunReadyBudgetMs = 30000;
 
-  /// Текст отказа старта TUN: опознанная причина (если она в логе есть) +
-  /// общий совет + хвост лога. Без разбора наружу уходило одно и то же
-  /// «did not start» на десяток совершенно разных поломок.
   String _tunStartError(StringBuffer log, {String core = 'keqrnel.exe'}) {
     final text = log.toString();
     return tunStartFailureMessage(
@@ -1050,12 +898,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     );
   }
 
-  /// Сверяет стек TUN-инбаунда с тем, что умеет этот бинарь ядра.
-  ///
-  /// Ядро без `-tags with_gvisor` на `stack: gvisor` не ругается в конфиге, а
-  /// падает при старте — «TUN не поднялся, exit code 1» на ровном месте.
-  /// Поставляемый keqrnel собран с тегом, но собранный руками из исходников
-  /// (`go build ./...`) — нет.
   Future<String> _tunStackForCore(String singboxConfig, String binPath) async {
     final result = applyTunStackFallback(
       singboxConfig,
@@ -1069,11 +911,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         'if there is no traffic at all, that rule is the first thing to check.',
       );
     } else if (result.config.contains('"stack": "${TunSettings.stackSystem}"')) {
-      // Стек выбран пользователем, а не подставлен откатом — но предупредить
-      // всё равно надо: system терминирует TCP листенером на адресе самого
-      // интерфейса, и без входящего разрешения фаервола адаптер поднят,
-      // маршруты стоят, ошибок нет, а трафика нет вовсе. Правило sing-tun
-      // заводит сам, но результат игнорирует.
       AppLogger.instance.warn(
         'TUN stack is "system": on Windows it terminates TCP with a listener on '
         'the TUN interface address and therefore needs an inbound Windows '
@@ -1086,11 +923,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     return result.config;
   }
 
-  /// Ждёт исчезновения нашего wintun-адаптера после остановки ядра.
-  ///
-  /// Возвращается сразу, если адаптера и так нет (обычный случай: сессии не
-  /// было либо она была proxy-режимом). Не дождались — не блокируем старт:
-  /// лучше попытка с предупреждением в логе, чем отказ подключаться.
   Future<void> _awaitTunAdapterGone() async {
     const budgetMs = 6000;
     var waited = 0;
@@ -1106,12 +938,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     );
   }
 
-  /// Поднялся ли наш wintun-адаптер: у интерфейса есть адрес из TUN-подсети.
-  /// Имя интерфейса на Windows зависит от того, что показывает система, а
-  /// адрес мы задаём сами (singbox_tun_config), поэтому ищем по нему.
-  ///
-  /// [extraAddress] — адрес второго ядра: у mihomo он не наш выбор, а
-  /// производная от `dns.fake-ip-range`, поэтому передаётся отдельно.
+  // ищем по адресу: его задаём мы, а имя интерфейса на Windows зависит от системы
   Future<bool> _tunAdapterUp({String? extraAddress}) async {
     try {
       final interfaces = await NetworkInterface.list(
@@ -1125,13 +952,11 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
           if (extraAddress != null && addr.address == extraAddress) return true;
         }
       }
-    } catch (_) {
-      // Перечисление интерфейсов не удалось — решает лог.
-    }
+    } catch (_) {}
     return false;
   }
 
-  /// Адрес tun-интерфейса mihomo — первый адрес его `fake-ip-range`.
+  // первый адрес fake-ip-range
   static const _mihomoTunAddress = '198.18.0.1';
 
   Future<bool> _waitForPort(
@@ -1147,8 +972,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         final code = await _exitCodeOrNull(process);
         if (code != null) {
           if (code != 0) {
-            // Причина почти всегда в самом выводе (порт, конфиг, права) —
-            // называем её, а не только код выхода.
             final buffer = log ?? StringBuffer();
             final hint = tunFailureHint(buffer.toString(), windows: true);
             throw VpnStartException(
@@ -1209,9 +1032,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       final int outOctets;
 
       if (_mihomoProcess != null) {
-        // У mihomo источник один на оба режима — его собственный RESTful API.
-        // Счётчик там кумулятивный по всем соединениям ядра, то есть тот же
-        // смысл, что у clash_api keqrnel.
         final api = MihomoApiSession();
         final port = api.port;
         if (port == null) {
@@ -1240,14 +1060,12 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
           {'mode': 'tun'},
         );
         if (result == null || result['ok'] != true) {
-          // Counters unavailable — still keep the session timer ticking.
           emitConnectedTelemetry(mode);
           return;
         }
         inOctets = (result['inOctets'] as num?)?.toInt() ?? 0;
         outOctets = (result['outOctets'] as num?)?.toInt() ?? 0;
       } else if (mode == ConnectionMode.proxy && _keqrnelClashPort != null) {
-        // keqrnel proxy: кумулятивный трафик из clash_api sing-box.
         final t = await queryClashTraffic(_keqrnelClashPort!);
         if (t == null) {
           emitConnectedTelemetry(mode);
@@ -1256,7 +1074,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         inOctets = t.down;
         outOctets = t.up;
       } else {
-        // нет источника счётчика — хотя бы тикаем длительность сессии.
         emitConnectedTelemetry(mode);
         return;
       }
@@ -1324,21 +1141,9 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  /// Ходит ли хоть что-нибудь через поднятое ядро.
-  ///
-  /// Проверка идёт через локальный HTTP-инбаунд — он есть в обоих режимах (в
-  /// TUN его инбаунды лифтит keqrnel, через него же качается обновление), и
-  /// путь через него тот же, что у трафика из туннеля: те же правила
-  /// роутинга, тот же аутбаунд, тот же сервер. Неудача означает, что не
-  /// загрузится ничего, — и сказать об этом надо сразу, а не оставлять
-  /// пользователя наедине с зелёной кнопкой.
-  ///
-  /// Только предупреждение: сессию не рвём. Правило пользователя, отправляющее
-  /// тестовый адрес в block, — тоже причина, и разрывать из-за неё живой
-  /// туннель нельзя.
   Future<void> _verifyChainReachable(TunnelSessionRequest request) async {
     await Future<void>.delayed(const Duration(seconds: 3));
-    if (_activeMode == null) return; // сессию уже погасили
+    if (_activeMode == null) return;
     final result = await _probeLocalHttpProxy(request.httpPort);
     if (result.contains('status=204') || result.contains('status=200')) return;
     if (_activeMode == null) return;
@@ -1391,7 +1196,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  /// Accepts `127.0.0.1:2081` or `http=127.0.0.1:2081;https=127.0.0.1:2081;...`.
   static bool _registryProxyMatchesHttp(String registryServer, int httpPort) {
     if (registryServer.isEmpty) return false;
     final hostPort = '127.0.0.1:$httpPort';

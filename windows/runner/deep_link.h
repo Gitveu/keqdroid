@@ -5,27 +5,18 @@
 
 #include <string>
 
-// Teaches Windows about the keqdroid:// and keqdis:// schemes (HKCU, no admin
-// rights needed). Without this the "add to client" button on a subscription
-// panel page has nothing to open and the click does nothing at all.
-// Idempotent, and refreshes the stored path when the executable has moved.
+// без регистрации кнопка добавить в клиент на странице панели ничего не открывает. HKCU, без админа
 void KeqdroidRegisterUrlProtocols();
 
-// The link the system was asked to open us with (cold start), UTF-8.
-// Empty string for a plain launch.
 std::string KeqdroidDeepLinkFromCommandLine();
 
-// Warm start: hand the link to the instance that is already running.
 bool KeqdroidForwardDeepLinkToRunningInstance(HWND target,
                                               const std::string& url);
 
-// Let a non-elevated sender through UIPI: TUN mode restarts this app as
-// administrator, while the browser that opens the link is not elevated, and
-// its WM_COPYDATA would otherwise be dropped without a trace.
+// пропуск через UIPI: в TUN приложение перезапускается админом, а браузер нет, и его WM_COPYDATA пропал бы молча
 void KeqdroidAllowDeepLinkMessages(HWND hwnd);
 
-// Reads the link back out of a WM_COPYDATA payload.
-// false — the message came from someone else and must be passed on.
+// false: сообщение чужое, его надо пропустить дальше
 bool KeqdroidDeepLinkFromCopyData(LPARAM lparam, std::string* url);
 
 #endif  // RUNNER_DEEP_LINK_H_

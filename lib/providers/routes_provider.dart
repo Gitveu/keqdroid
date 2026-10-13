@@ -1,11 +1,6 @@
 part of 'providers.dart';
 
-/// Маршруты экрана «Маршрутизация». Порядок в списке значения не имеет:
-/// разделы и место в них выводятся из самих маршрутов ([orderedRoutes]).
-///
-/// Состояние меняется раньше записи на диск, как у настроек: правка не
-/// транзакция, а круговой рейс до SharedPreferences не должен тормозить
-/// экран. Порядок записей держит очередь StorageService.
+// состояние меняется раньше записи на диск, как у настроек. порядок записей держит очередь StorageService
 class RoutesNotifier extends AsyncNotifier<List<TrafficRoute>> {
   @override
   Future<List<TrafficRoute>> build() => ref.read(storageProvider).getRoutes();
@@ -15,7 +10,6 @@ class RoutesNotifier extends AsyncNotifier<List<TrafficRoute>> {
     await ref.read(storageProvider).saveRoutes(routes);
   }
 
-  /// Новый маршрут добавляется в конец, существующий меняется на месте.
   Future<void> upsert(TrafficRoute route) async {
     final current = await future;
     final exists = current.any((r) => r.id == route.id);
@@ -34,7 +28,6 @@ class RoutesNotifier extends AsyncNotifier<List<TrafficRoute>> {
     ]);
   }
 
-  /// Замена целиком — импорт резервной копии.
   Future<void> replaceAll(List<TrafficRoute> routes) => _save(routes);
 }
 
@@ -43,10 +36,7 @@ final routesProvider =
   RoutesNotifier.new,
 );
 
-/// Что маршруты умеют прямо сейчас: различать приложения и вести трафик на
-/// другой сервер. Зависит от платформы и ядра активного сервера. Чего ядро
-/// не умеет, того в шторках нет, а уже заведённый маршрут с таким пунктом
-/// показывает на карточке, почему не работает.
+// чего ядро не умеет, того в шторках нет, а заведённый маршрут с этим показывает причину на карточке
 class RouteCapabilities {
   const RouteCapabilities({
     this.apps = false,
@@ -57,15 +47,11 @@ class RouteCapabilities {
 
   final bool apps;
 
-  /// Ядро и платформа приложения различают, но сессия идёт в режиме прокси:
-  /// маршрут заработает после переключения в TUN. Выбор приложений тогда
-  /// не прячется — до рабочего маршрута один переключатель.
+  // сессия в режиме прокси: маршрут заработает в TUN, поэтому выбор приложений не прячем
   final bool appsNeedTun;
 
   final bool servers;
 
-  /// Ядро активного сервера: от него зависит, какой сервер встанет в маршрут
-  /// отдельным выходом (`routeServerSupported`).
   final VpnBackend core;
 
   bool get appsOffered => apps || appsNeedTun;
@@ -88,7 +74,6 @@ final routeCapabilitiesProvider = Provider<RouteCapabilities>((ref) {
   );
 });
 
-/// Разовая подсказка «списки стали маршрутами» после обновления.
 class RoutesHintNotifier extends Notifier<bool> {
   @override
   bool build() => ref.read(storageProvider).routesHintPending;

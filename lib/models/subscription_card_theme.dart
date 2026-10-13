@@ -2,21 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-/// Насколько плотно картинка притушена под текстом.
-///
-/// Вуаль здесь не украшение: под текстом лежит произвольная фотография, и без
-/// неё крупное значение трафика пропадает на любом светлом участке. Поэтому
-/// [none] — осознанный выбор («картинка важнее»), а не то, что получают по
-/// невнимательности: по умолчанию стоит [medium], то самое затемнение, с
-/// которым карточка и была нарисована.
 enum CardVeil {
   none,
   light,
   medium,
   strong;
 
-  /// Прозрачности трёх опорных точек: под текстом → к середине → у правого
-  /// края, где картинку и видно.
   List<double> get alphas => switch (this) {
         CardVeil.none => const [0, 0, 0],
         CardVeil.light => const [0.62, 0.38, 0.1],
@@ -24,9 +15,6 @@ enum CardVeil {
         CardVeil.strong => const [0.98, 0.86, 0.5],
       };
 
-  /// Разбор значения из хранилища. Незнакомое имя — [medium]: настройку писала
-  /// версия новее этой, и карточка со штатным затемнением лучше, чем упавший
-  /// разбор списка подписок.
   static CardVeil byName(String? name) {
     for (final veil in values) {
       if (veil.name == name) return veil;
@@ -35,12 +23,6 @@ enum CardVeil {
   }
 }
 
-/// Вуаль поверх картинки: слева плотная (под текстом), справа картинка открыта.
-///
-/// Один виджет на оба места, где картинка темы лежит под текстом, — карточку
-/// подписки и шапку её группы в списке серверов. Раньше это были два
-/// одинаковых градиента в разных файлах, и «убрать затемнение» пришлось бы
-/// делать дважды, а расходиться они начали бы с первой правки одного из них.
 class CardVeilOverlay extends StatelessWidget {
   const CardVeilOverlay({
     super.key,
@@ -48,17 +30,12 @@ class CardVeilOverlay extends StatelessWidget {
     required this.veil,
   });
 
-  /// Чем кроется картинка — фактическим фоном того, на чём она лежит. У группы
-  /// серверов он подкрашен акцентом подписки, и цвет роли дал бы шов на стыке
-  /// с первым сервером.
   final Color color;
 
   final CardVeil veil;
 
   @override
   Widget build(BuildContext context) {
-    // Нулевая вуаль — это отсутствие слоя, а не прозрачный градиент: рисовать
-    // невидимое на каждый кадр незачем.
     if (veil == CardVeil.none) return const SizedBox.shrink();
     final alphas = veil.alphas;
     return DecoratedBox(
@@ -66,9 +43,6 @@ class CardVeilOverlay extends StatelessWidget {
         gradient: LinearGradient(
           begin: AlignmentDirectional.centerStart,
           end: AlignmentDirectional.centerEnd,
-          // Правая цифра и есть «насколько видно картинку». Левая держит
-          // крупный текст, средняя отодвигает спад вправо — под цифрой трафика
-          // ещё плотно, дальше уже видно картинку.
           stops: const [0, 0.45, 1],
           colors: [for (final alpha in alphas) color.withValues(alpha: alpha)],
         ),
@@ -77,22 +51,7 @@ class CardVeilOverlay extends StatelessWidget {
   }
 }
 
-/// Оформление карточки подписки: подложка под содержимым.
-///
-/// Список подписок — несколько одинаковых прямоугольников, отличаются они только
-/// текстом. Своя подложка превращает «третью сверху» в «вон ту».
-///
-/// Палитровые подложки рисуются кодом из текущей схемы: перекрашиваются вместе с
-/// темой и ничего не весят. Картиночные бывают только своими — встроенных нет
-/// намеренно, одна и та же картинка у всех подписку от подписки не отличает, а
-/// вес её платят все платформы.
-///
-/// Контраст держится тем, что подложка ложится поверх обычного цвета карточки
-/// полупрозрачной: текст остаётся тем же `onSurface`, и проверять каждую
-/// комбинацию отдельно не нужно. У картинок ту же роль играет вуаль цветом
-/// карточки — без неё светлый текст исчезает на светлом участке фотографии.
 class SubscriptionCardTheme {
-  /// Без подложки — обычная карточка. Дефолт: тему выбирают, а не получают.
   const SubscriptionCardTheme.plain()
       : id = '',
         palette = null,
@@ -100,42 +59,18 @@ class SubscriptionCardTheme {
 
   const SubscriptionCardTheme.palette(this.id, this.palette) : asset = null;
 
-  /// Своя картинка пользователя: лежит в каталоге приложения, а не в ассетах.
-  /// В настройках подписки хранится как `file:<имя файла>`.
   SubscriptionCardTheme.file(String fileName, String directory)
       : id = '$filePrefix$fileName',
         palette = null,
         asset = '$directory/$fileName';
 
-  /// Отличает свою картинку от встроенной темы в одном и том же поле настроек.
   static const filePrefix = 'file:';
 
-  /// Каталог, где лежат свои картинки пользователя.
-  ///
-  /// Статикой, потому что путь достаётся асинхронно (path_provider), а карточка
-  /// рисуется синхронно: иначе весь список подписок пришлось бы заворачивать в
-  /// FutureBuilder ради одного поля. Заполняется один раз на старте
-  /// (`CardImageService.warmUp`); пока пусто — своя картинка выглядит как
-  /// обычная карточка, а не как исключение (так же ведут себя тесты).
   static String? customDirectory;
 
-  /// Имена своих картинок, которые действительно лежат в [customDirectory].
-  ///
-  /// Бэкап хранит `cardThemeId` и байты картинки порознь, и они расходятся:
-  /// подписка приезжает с `file:<имя>`, а картинки в бэкапе не оказалось. Тема
-  /// при этом считалась «с картинкой»: шапка группы вырастала на полосу
-  /// растворения, тумблер стоял включённым — а показывать было нечего.
-  ///
-  /// Набор держим здесь и синхронно: [resolveCardTheme] зовут из build, ходить в
-  /// файловую систему на каждую перерисовку нельзя. Заполняется один раз на
-  /// старте и правится теми же операциями, что пишут и удаляют файлы.
-  ///
-  /// null — каталог ещё не читали или не смогли. Тогда тема считается живой:
-  /// прятать оформление из-за неудачи со списком каталога хуже, чем показать
-  /// пустую подложку.
   static Set<String>? customFiles;
 
-  /// Уезжает в настройки подписки — переименование сбросит выбор на «без темы».
+  // id лежит в настройках подписок, переименование сбросит выбор
   final String id;
 
   final CardPalette? palette;
@@ -143,23 +78,8 @@ class SubscriptionCardTheme {
 
   bool get isPlain => palette == null && asset == null;
 
-  /// Есть ли у темы картинка, а не просто подложка.
-  ///
-  /// Палитра рисуется цветами схемы на месте и переносить её некуда: там, где
-  /// картинка связывает группу с карточкой буквально, палитра уже отдала свой
-  /// оттенок акценту группы, и рисовать поверх нечего. Отличать это от
-  /// [isPlain] обязательно — «не пустая» и «с картинкой» разошлись ровно на
-  /// палитрах, и шапка группы вырастала на полосу пустоты.
   bool get hasImage => asset != null;
 
-  /// Подложка под содержимое карточки. Ложится в `Stack` под текстом и
-  /// обрезается формой карточки снаружи.
-  ///
-  /// [veil] — насколько притушить картинку. Параметр обязателен и у палитр,
-  /// хотя им он и не нужен: вызывающий обязан решить этот вопрос осознанно, а
-  /// молчаливое «как всегда» — то, из-за чего шапка группы кроет картинку
-  /// дважды. Шапка как раз и передаёт [CardVeil.none]: свою вуаль она рисует
-  /// сама, цветом фона группы.
   Widget background(BuildContext context, {required CardVeil veil}) {
     final scheme = Theme.of(context).colorScheme;
     final asset = this.asset;
@@ -172,10 +92,6 @@ class SubscriptionCardTheme {
   }
 }
 
-/// Из каких ролей схемы собирается палитровая подложка.
-///
-/// Роли, а не цвета: карточка обязана перекраситься вместе с темой, иначе
-/// «Sunset» останется оранжевой на лавандовой теме и будет выглядеть чужой.
 enum CardPalette {
   sunset,
   aurora,
@@ -183,7 +99,6 @@ enum CardPalette {
   mint,
   ember;
 
-  /// Три опорных цвета: от левого верхнего угла к правому нижнему плюс блик.
   List<Color> colors(ColorScheme scheme) => switch (this) {
         CardPalette.sunset => [
             scheme.primary,
@@ -213,7 +128,6 @@ enum CardPalette {
       };
 }
 
-/// Встроенный набор: «без темы», палитры, картинки сборки.
 const kSubscriptionCardThemes = <SubscriptionCardTheme>[
   SubscriptionCardTheme.plain(),
   SubscriptionCardTheme.palette('sunset', CardPalette.sunset),
@@ -223,20 +137,13 @@ const kSubscriptionCardThemes = <SubscriptionCardTheme>[
   SubscriptionCardTheme.palette('ember', CardPalette.ember),
 ];
 
-/// Тема по её id. Неизвестный id (тема удалена, картинку убрали из сборки) —
-/// обычная карточка, а не пустое место и не исключение.
 SubscriptionCardTheme resolveCardTheme(String? id) {
   if (id == null || id.isEmpty) return const SubscriptionCardTheme.plain();
-  // Своя картинка не лежит в каталоге: она у каждой подписки своя и известна
-  // только по имени файла. Собираем тему на месте — иначе выбранная картинка
-  // оставалась бы записанной в настройках, но карточка её не показывала.
   if (id.startsWith(SubscriptionCardTheme.filePrefix)) {
     final directory = SubscriptionCardTheme.customDirectory;
     if (directory == null) return const SubscriptionCardTheme.plain();
     final name = id.substring(SubscriptionCardTheme.filePrefix.length);
-    // Записи о картинке мало — нужен сам файл. Иначе подписка из бэкапа без
-    // картинки числилась бы темой «с картинкой»: пустая полоса в шапке группы
-    // и включённый тумблер про то, чего нет. См. [SubscriptionCardTheme.customFiles].
+    // подписка из бэкапа может приехать без своей картинки
     final known = SubscriptionCardTheme.customFiles;
     if (known != null && !known.contains(name)) {
       return const SubscriptionCardTheme.plain();
@@ -256,8 +163,6 @@ class _ImageBackground extends StatelessWidget {
     required this.veil,
   });
 
-  /// Полный путь к файлу картинки: своя картинка — единственный вид, встроенных
-  /// в ассетах нет.
   final String asset;
   final ColorScheme scheme;
   final CardVeil veil;
@@ -270,25 +175,14 @@ class _ImageBackground extends StatelessWidget {
         Image(
           image: FileImage(File(asset)),
           fit: BoxFit.cover,
-          // Картинку удалили с диска — карточка остаётся обычной, а не
-          // показывает сломанную картинку.
           errorBuilder: (_, _, _) => const SizedBox.shrink(),
         ),
-        // Вуаль цветом карточки: слева, под текстом, почти непрозрачная,
-        // справа картинка открыта. Так текст читается на любой картинке, а не
-        // только на тёмной. Насколько плотно — решает пользователь в редакторе
-        // карточки; при [CardVeil.none] слоя нет вовсе.
         CardVeilOverlay(color: scheme.surfaceContainerHigh, veil: veil),
       ],
     );
   }
 }
 
-/// Мягкая подложка: диагональный градиент и два размытых пятна.
-///
-/// Прозрачности низкие намеренно — подложка тонирует карточку, а не заменяет
-/// её цвет: иначе `onSurface`-текст поверх пришлось бы подбирать под каждую
-/// комбинацию темы и палитры.
 class _PaletteArtPainter extends CustomPainter {
   const _PaletteArtPainter(this.colors);
 
@@ -325,8 +219,6 @@ class _PaletteArtPainter extends CustomPainter {
       );
     }
 
-    // Пятна привязаны к размеру, а не к пикселям: карточка на телефоне и на
-    // десктопе разной ширины, а рисунок должен читаться одинаково.
     blob(
       Offset(size.width * 0.86, size.height * 0.18),
       size.height * 0.9,

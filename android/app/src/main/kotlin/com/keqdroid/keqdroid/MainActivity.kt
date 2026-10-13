@@ -47,9 +47,7 @@ class MainActivity : FlutterFragmentActivity() {
         const val EVENT_CHANNEL          = "keqdis_vpn_status"
         const val PING_PROGRESS_CHANNEL  = "keqdis_ping_progress"
         const val EXTRA_LAUNCH_ACTION    = "action"
-        // Значения EXTRA_LAUNCH_ACTION, которые обрабатывает Dart (servers_tab).
-        // Держатся здесь, чтобы ярлыки из res/xml/shortcuts.xml и уведомление
-        // не разъезжались со строками в коде.
+        // те же строки в res/xml/shortcuts.xml и в servers_tab на стороне Dart
         const val LAUNCH_ACTION_CONNECT    = "connect_from_notification"
         const val LAUNCH_ACTION_DISCONNECT = "disconnect_from_shortcut"
         private val LAUNCH_ACTIONS = setOf(
@@ -57,8 +55,7 @@ class MainActivity : FlutterFragmentActivity() {
             LAUNCH_ACTION_DISCONNECT,
         )
         private const val ICON_SIZE_PX   = 96
-        // Фон окна: держим отдельно от FlutterSharedPreferences — читаем его в
-        // onCreate, до того как Flutter вообще поднялся.
+        // отдельно от FlutterSharedPreferences: читаем в onCreate, до подъёма Flutter
         private const val PREFS_WINDOW = "keqdis_window"
         private const val KEY_WINDOW_BACKGROUND = "window_background"
         private const val DEFAULT_SPEED_TEST_URL =
@@ -81,8 +78,6 @@ class MainActivity : FlutterFragmentActivity() {
             pendingPermissionResult?.success(activityResult.resultCode == Activity.RESULT_OK)
             pendingPermissionResult = null
         }
-    // Сохранение файла через системный диалог; почему своё, а не file_picker, —
-    // у writeDocument.
     private var pendingSaveBytes: ByteArray? = null
     private var pendingSaveResult: MethodChannel.Result? = null
 
@@ -110,8 +105,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingSocksUsername: String? = null
     private var pendingSocksPassword: String? = null
 
-    // Серверная ссылка (vless:// и т.п.), которой открыли приложение с холодного
-    // старта: Dart забирает её через getPendingDeepLink, когда UI уже поднят.
+    // ссылка холодного старта, Dart заберёт её через getPendingDeepLink, когда поднимется UI
     private var pendingDeepLink: String? = null
     private var eventSink: EventChannel.EventSink? = null
     private var telemetryJob: Job? = null
@@ -120,32 +114,26 @@ class MainActivity : FlutterFragmentActivity() {
     private var methodChannel: MethodChannel? = null
     private var eventChannel: EventChannel? = null
 
-    // Результаты общего замера по одному, пока батч ещё идёт (см.
-    // EphemeralXrayPing.urlTestMulti, onEach). Нет слушателя — просто молчим:
-    // итоговый список всё равно приходит ответом на вызов.
+    // нет слушателя, молчим: итог всё равно придёт ответом на вызов
     private var pingProgressChannel: EventChannel? = null
     private var pingProgressSink: EventChannel.EventSink? = null
 
-    // Был ли bindService успешен: unbindService без привязки кидает
-    // IllegalArgumentException.
+    // unbindService без привязки кидает IllegalArgumentException
     private var serviceBound = false
     private var vpnStatusReceiverRegistered = false
 
-    // Мгновенные обновления статуса из KeqdisVpnService (плитка QS / уведомление),
-    // когда binder ещё не переподключился после рестарта foreground-сервиса.
+    // статус от плитки и уведомления, пока binder не переподключился
     private val vpnStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != KeqdisVpnService.BROADCAST_VPN_STATUS_CHANGED) return
             val status = intent.getStringExtra("status")
             mainScope.launch {
-                // Emit over EventChannel if Flutter is listening.
                 emitVpnSnapshot(statusOverride = status)
-                // Additionally notify Flutter via MethodChannel so the Dart side
-                // can react even when EventChannel stream isn't active yet.
+                // и через MethodChannel: поток EventChannel может быть ещё не открыт
                 try {
                     methodChannel?.invokeMethod("onVpnStatusSnapshot", mapOf("status" to status))
                 } catch (_: Exception) {
-                    // ignore
+                    // движок мог уже отцепиться
                 }
             }
         }
@@ -156,8 +144,7 @@ class MainActivity : FlutterFragmentActivity() {
             vpnServiceBinder = binder as KeqdisVpnService.LocalBinder
             vpnServiceBinder?.setStatusListener { status, extra ->
                 lastStatusError = extra
-                // EventSink.success/error ДОЛЖНЫ вызываться только из Main thread.
-                // mainScope.launch гарантирует это — не меняйте на Dispatchers.IO.
+                // EventSink зовётся только с main thread
                 mainScope.launch {
                     emitVpnSnapshot(statusOverride = status, errorOverride = extra)
                 }
@@ -175,17 +162,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Фон окна — цвет ПРИЛОЖЕНИЯ, а не системной темы.
-        //
-        // NormalTheme в styles.xml наследуется от Theme.Light/Theme.Black, то
-        // есть переключается СИСТЕМНОЙ тёмной темой, а тема приложения
-        // выбирается своей настройкой. У человека со светлой системой и тёмным
-        // приложением фон окна оставался белым, и там, где поверхность Flutter
-        // не достаёт до края экрана (на HyperOS под панелью навигации остаётся
-        // полоска в несколько пикселей), он и торчал белой полосой.
-        //
-        // Цвет присылает Dart на каждую смену темы; здесь берём запомненный,
-        // чтобы окно было правильным ещё до первого кадра.
+        // фон окна цвета приложения, а не системы: NormalTheme переключается тёмной темой системы,
+        // и на HyperOS под панелью навигации торчала белая полоска. запомненный цвет нужен до первого кадра
         rememberedWindowBackground()?.let { applyWindowBackground(it) }
         pendingDeepLink = deepLinkFrom(intent)
     }
@@ -230,8 +208,7 @@ class MainActivity : FlutterFragmentActivity() {
             })
         }
         registerVpnStatusReceiver()
-        // После setupMethodChannel: слушатель шлёт цвета в Dart и без канала
-        // ронял бы их в пустоту.
+        // после setupMethodChannel: без канала цвета ушли бы в пустоту
         startWallpaperColorsWatch()
     }
 
@@ -261,29 +238,18 @@ class MainActivity : FlutterFragmentActivity() {
         vpnStatusReceiverRegistered = true
     }
 
-    /** Статус из QS-prefs, если binder ещё не готов (плитка/уведомление стартуют сервис сами). */
     private fun readQsVpnStatus(): String =
         getSharedPreferences(KeqdisVpnService.PREFS_QS, Context.MODE_PRIVATE)
             .getString(KeqdisVpnService.KEY_QS_STATUS, "disconnected")
             ?.lowercase()
             ?: "disconnected"
 
-    /** Причина ошибки оттуда же: сервис кладёт её в prefs тем же setStatus. */
     private fun readQsVpnError(): String? =
         getSharedPreferences(KeqdisVpnService.PREFS_QS, Context.MODE_PRIVATE)
             .getString(KeqdisVpnService.KEY_QS_ERROR, null)
 
-    /**
-     * ARGB системного акцента (Material You `system_accent1_500`) на Android 12+.
-     *
-     * Плагин dynamic_color отдаёт схему только когда OEM выставил официальный
-     * флаг поддержки Material You — Pixel это делает, а Realme/ColorOS, OneUI и
-     * прочие часто НЕ выставляют, хотя ресурсы `system_accent1_*` у них заполнены
-     * из обоев/темы. Тогда DynamicColorBuilder возвращает null и приложение
-     * застывает на дефолтном сид-цвете. Читаем ресурс напрямую как запасной сид —
-     * так «динамические цвета» работают и на не-Pixel устройствах. Возвращаем
-     * null на API < 31 (ресурса нет) и при любой ошибке чтения.
-     */
+    // dynamic_color молчит, если OEM не выставил флаг Material You (Realme, OneUI), хотя system_accent1_* заполнены.
+    // тогда читаем ресурс сами как запасной сид
     private fun readSystemAccentColor(): Int? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
         return runCatching {
@@ -292,21 +258,7 @@ class MainActivity : FlutterFragmentActivity() {
         }.getOrNull()
     }
 
-    /**
-     * Цвет системных обоев — источник акцента для прошивок, где Material You
-     * выключен.
-     *
-     * Ресурсы `system_accent1_*` есть на любом API 31+, но перекрашивает их
-     * системный ThemeOverlayController, и когда OEM его не включает (ColorOS и
-     * подобные), там остаётся дефолтная палитра AOSP: значение приходит, оно
-     * валидное, но это константа, которая не меняется ни от обоев, ни от темы.
-     * Снаружи это выглядит как «приложение всегда одного цвета».
-     *
-     * Обои же читаются публичным API с API 27 и на всех прошивках, а Material
-     * You и сам выводит палитру из них — поэтому как сид они ближе к тому, что
-     * пользователь видит вокруг. Null при любой ошибке: вызывающий откатится на
-     * `system_accent1_500`.
-     */
+    // обои читаются публичным API на любой прошивке, а Material You и сам выводит палитру из них
     private fun readWallpaperAccentColor(): Int? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return null
         return runCatching {
@@ -317,21 +269,8 @@ class MainActivity : FlutterFragmentActivity() {
         }.getOrNull()
     }
 
-    /**
-     * Сид темы, выбранный в системных настройках.
-     *
-     * Самый прямой из источников: это не «похожий цвет», а ровно то значение,
-     * из которого система развернула свои палитры. Лежит в
-     * `Settings.Secure.theme_customization_overlay_packages` — JSON, куда
-     * пишут все прошивки, реализующие механизм AOSP (ColorOS/realme UI, MIUI,
-     * One UI). Читается обычным приложением без разрешений.
-     *
-     * Ключ строкой, а не константой: `THEME_CUSTOMIZATION_OVERLAY_PACKAGES`
-     * помечен @hide и в SDK его нет.
-     *
-     * `accent_color` — форма до Android 13; читаем обе, потому что прошивки
-     * обновляют этот механизм с задержкой в пару лет.
-     */
+    // ключ строкой: THEME_CUSTOMIZATION_OVERLAY_PACKAGES помечен @hide.
+    // accent_color это форма до Android 13, прошивки отстают на пару лет
     private fun readThemeSettingSeed(): Int? = runCatching {
         val raw = Settings.Secure.getString(
             contentResolver,
@@ -344,10 +283,6 @@ class MainActivity : FlutterFragmentActivity() {
         parseThemeHex(hex)
     }.getOrNull()
 
-    /**
-     * Цвет из настройки темы: `RRGGBB` либо `AARRGGBB`, изредка с решёткой.
-     * Всё остальное — не наш формат, и гадать не нужно: пусто честнее.
-     */
     private fun parseThemeHex(raw: String?): Int? {
         val hex = raw?.trim()?.removePrefix("#") ?: return null
         val value = when (hex.length) {
@@ -358,20 +293,14 @@ class MainActivity : FlutterFragmentActivity() {
         return value.toInt()
     }
 
-    /** Всё, что удалось добыть; выбирает из этого Dart (см. system_accent.dart). */
+    // выбирает Dart (system_accent.dart)
     private fun collectAccentCandidates(): Map<String, Any?> = mapOf(
         "themeSetting" to readThemeSettingSeed(),
         "wallpaper" to readWallpaperAccentColor(),
         "systemResource" to readSystemAccentColor(),
     )
 
-    /**
-     * Обои сменили — пересобираем тему.
-     *
-     * Без этого «поставил обои, а приложение прежнего цвета» лечилось только
-     * перезапуском: извлечение цвета система запускает при установке обоев, то
-     * есть уже ПОСЛЕ того, как мы прочитали их на старте.
-     */
+    // без этого новые обои подхватывались только перезапуском: цвета система извлекает уже после установки
     private var wallpaperColorsListener: WallpaperManager.OnColorsChangedListener? = null
 
     private fun startWallpaperColorsWatch() {
@@ -402,10 +331,8 @@ class MainActivity : FlutterFragmentActivity() {
                 ch.setMethodCallHandler { call, result ->
                     when (call.method) {
                         "setWindowBackgroundColor" -> {
-                            // Непрозрачный ARGB больше Int.MAX_VALUE, и канал
-                            // привозит его как Long: argument<Int> падал на каждом
-                            // вызове, и цвет не запоминался вовсе. toInt() берёт
-                            // младшие 32 бита — ровно те биты ARGB, что прислал Dart.
+                            // непрозрачный ARGB больше Int.MAX_VALUE и приезжает Long, argument<Int> падал на каждом вызове.
+                            // toInt() берёт младшие 32 бита, ровно ARGB
                             val color = call.argument<Number>("color")?.toInt()
                             if (color == null) {
                                 result.error("INVALID_ARGS", "Missing color", null)
@@ -424,8 +351,7 @@ class MainActivity : FlutterFragmentActivity() {
                                 ?.filterIsInstance<String>() ?: emptyList()
                             val includePackages = call.argument<List<*>>("includePackages")
                                 ?.filterIsInstance<String>() ?: emptyList()
-                            // Отсутствующий режим — это старый Dart или чужой
-                            // вызов: поднимаем VPN, как было всегда.
+                            // нет режима значит старый Dart, поднимаем VPN
                             val tunnelMode =
                                 if (call.argument<String>("tunnelMode") ==
                                     KeqdisVpnService.TUNNEL_MODE_PROXY
@@ -465,11 +391,10 @@ class MainActivity : FlutterFragmentActivity() {
                                         includePackages,
                                         serverName,
                                         result,
-                                        // coreEngine у mihomo смысла не имеет — он
-                                        // про связку xray → sing-box.
+                                        // движок у mihomo ни на что не влияет
                                         KeqdisVpnService.CORE_ENGINE_CHAIN,
                                         KeqdisVpnService.VPN_BACKEND_MIHOMO,
-                                        // Ядро читает YAML; наш JSON — его подмножество.
+                                        // расширение yaml, внутри JSON: он подмножество YAML
                                         "mihomo_config.yaml",
                                         tunnelMode = tunnelMode,
                                     )
@@ -486,9 +411,7 @@ class MainActivity : FlutterFragmentActivity() {
                             result,
                         )
                         "getSocksCredentials"  -> {
-                            // Генерируем свежие credentials.
-                            // Они будут переданы в сервис через Intent при startVpn —
-                            // так конфиг ядра и локальный прокси приложения гарантированно совпадают.
+                            // свежие креды уйдут в сервис через Intent при startVpn, так конфиг ядра и прокси приложения совпадают
                             pendingSocksUsername = randomToken(16)
                             pendingSocksPassword = randomToken(24)
                             NativeLog.d("KEQDIS", "getSocksCredentials: generated new credentials")
@@ -498,16 +421,12 @@ class MainActivity : FlutterFragmentActivity() {
                             ))
                         }
                         "getActiveSocksCredentials" -> {
-                            // Креды УЖЕ работающей сессии, БЕЗ генерации новых: VpnService
-                            // переживает пересоздание Flutter-движка, а Dart-синглтон
-                            // Socks5Credentials — нет. Без восстановления свежий изолят ходит
-                            // в запароленный локальный http-инбаунд без Proxy-Authorization
-                            // и получает 407 (проверка обновлений, рефреш подписок).
+                            // креды живой сессии, без новых: сервис переживает пересоздание Flutter-движка, а Dart-синглтон нет,
+                            // и свежий изолят получал 407 от своего же инбаунда
                             var user = vpnServiceBinder?.getSocksUsername() ?: ""
                             var pass = vpnServiceBinder?.getSocksPassword() ?: ""
                             if (user.isEmpty() || pass.isEmpty()) {
-                                // Binder ещё не привязан (холодный старт) — сервис кладёт
-                                // те же креды в QS-prefs при каждом старте xray-сессии.
+                                // binder ещё не привязан: те же креды сервис кладёт в QS-prefs
                                 val prefs = getSharedPreferences(KeqdisVpnService.PREFS_QS, Context.MODE_PRIVATE)
                                 user = prefs.getString(KeqdisVpnService.KEY_QS_LAST_SOCKS_USERNAME, "") ?: ""
                                 pass = prefs.getString(KeqdisVpnService.KEY_QS_LAST_SOCKS_PASSWORD, "") ?: ""
@@ -528,8 +447,6 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                         "getStatus" -> getStatus(result)
                         "openAppSettings" -> {
-                            // Системный экран «О приложении» — там пользователь
-                            // отзывает любые разрешения (уведомления, камера, и т.д.).
                             try {
                                 startActivity(
                                     Intent(
@@ -542,10 +459,7 @@ class MainActivity : FlutterFragmentActivity() {
                                 result.error("OPEN_SETTINGS_FAILED", e.message, null)
                             }
                         }
-                        // Снятая оптимизация батареи — исключение из официального
-                        // списка Android на запуск сервиса из фона. В режиме VPN
-                        // такое право даёт уже согласие на VPN (REASON_OP_ACTIVATE_VPN),
-                        // в режиме прокси его может не быть — и тогда держится на ней.
+                        // снятая оптимизация батареи разрешает старт из фона. в VPN право даёт согласие на VPN, в режиме прокси его нет
                         "isIgnoringBatteryOptimizations" -> {
                             val pm = getSystemService(android.os.PowerManager::class.java)
                             result.success(pm?.isIgnoringBatteryOptimizations(packageName) ?: false)
@@ -574,24 +488,17 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                         "getProcessExits" -> result.success(ProcessExits.recent(this))
                         "getDeviceModel" -> result.success(android.os.Build.MODEL ?: "Android Device")
-                        // Телевизор: пульт вместо пальца и камеры нет. По режиму
-                        // интерфейса, а не по размеру экрана — планшет в
-                        // альбомной тоже широкий, но им управляют касанием.
+                        // по режиму интерфейса, а не по размеру: планшет в альбомной тоже широкий
                         "isTelevision" -> result.success(
                             (getSystemService(android.content.Context.UI_MODE_SERVICE) as? android.app.UiModeManager)
                                 ?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION,
                         )
                         "getNativeInternals" -> {
-                            // Панель «Внутренности» читает версии ядер прямо из
-                            // файлов (Go build info), поэтому ей нужен каталог с
-                            // libxray.so — из Dart он не виден.
-                            // PID берём здесь же: они живут в сервисе, а не в Dart.
+                            // версии ядер панель читает из файлов, а nativeLibraryDir из Dart не виден
                             result.success(mapOf(
                                 "nativeLibraryDir" to applicationInfo.nativeLibraryDir,
                                 "xrayPid" to (vpnServiceBinder?.getXrayPid() ?: -1),
-                                // Ядро ЖИВОЙ сессии. Binder не привязан (холодный
-                                // старт при работающем туннеле) — берём из тех же
-                                // QS-prefs, что и всё остальное о прошлом старте.
+                                // binder не привязан при живом туннеле, берём из QS-prefs
                                 "coreKind" to (vpnServiceBinder?.getCoreKind()
                                     ?: getSharedPreferences(KeqdisVpnService.PREFS_QS, Context.MODE_PRIVATE)
                                         .getString(KeqdisVpnService.KEY_QS_LAST_CORE_KIND, "")
@@ -602,15 +509,9 @@ class MainActivity : FlutterFragmentActivity() {
                                 "manufacturer" to (android.os.Build.MANUFACTURER ?: ""),
                             ))
                         }
-                        // Обои первыми: сюда попадаем только когда dynamic_color
-                        // промолчал, то есть Material You у прошивки нет, и
-                        // system_accent1_500 с большой вероятностью не перекрашен.
-                        // Отдаём ВСЕ источники разом, а выбирает между ними Dart:
-                        // отбраковка непеpекрашенной палитры AOSP требует счёта
-                        // тонов, а библиотека для этого есть только там.
+                        // отдаём все источники, выбирает Dart: отбраковке неперекрашенной палитры AOSP нужен счёт тонов, библиотека только там
                         "getSystemAccentColor" -> result.success(collectAccentCandidates())
                         "getLaunchAction" -> {
-                            // Возвращает action из Intent если приложение было запущено из уведомления
                             val action = intent?.getStringExtra(EXTRA_LAUNCH_ACTION)
                             result.success(action)
                         }
@@ -619,8 +520,7 @@ class MainActivity : FlutterFragmentActivity() {
                             result.success(null)
                         }
                         "getPendingDeepLink" -> {
-                            // Одноразовая выдача: повторный запрос (resumed после
-                            // пересоздания активности) не должен импортировать ссылку дважды.
+                            // одноразово: после пересоздания активности ссылку импортировали бы дважды
                             result.success(pendingDeepLink)
                             pendingDeepLink = null
                         }
@@ -672,8 +572,7 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                         "xrayUrlTestBatch" -> {
                             val socksPort = call.argument<Int>("socksPort")
-                            // Ядро замера: тем же, каким сервер поедет на самом деле.
-                            // Пустое значение — xray, как было до появления выбора.
+                            // пусто значит xray, как до выбора ядра
                             val core = call.argument<String>("core")
                                 ?: EphemeralXrayPing.CORE_XRAY
                             val testUrl = call.argument<String>("testUrl")
@@ -770,7 +669,7 @@ class MainActivity : FlutterFragmentActivity() {
                 ch.setStreamHandler(object : EventChannel.StreamHandler {
                     override fun onListen(args: Any?, sink: EventChannel.EventSink) {
                         eventSink = sink
-                        // Активность в фоне — цикл не заводим, его поднимет onStart.
+                        // в фоне цикл не заводим, его поднимет onStart
                         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
                             startTelemetryLoop()
                         }
@@ -803,41 +702,25 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Возобновляем периодическую телеметрию, остановленную в onStop.
-        // Dart на resume дополнительно делает refreshStateStream()+syncFromNative().
         if (eventSink != null && telemetryJob == null) startTelemetryLoop()
     }
 
     override fun onStop() {
         super.onStop()
-        // Свернули приложение: Dart-подписка на EventChannel не отменяется, и
-        // периодический цикл молотил бы снапшоты каждые 1.5–2с в фоне впустую.
-        // Событийные обновления статуса (statusListener, broadcast, QS-плитка)
-        // не зависят от цикла и продолжают доходить — синк статуса не страдает.
+        // свернули: подписка Dart не отменяется, и цикл молотил бы снапшоты в фоне. события статуса идут и без него
         telemetryJob?.cancel()
         telemetryJob = null
     }
 
-    /**
-     * Состояние VPN для Dart — одним куском и в одном месте.
-     *
-     * Снимок уезжает двумя путями: сам, событием, и в ответ на опрос (Dart
-     * спрашивает раз в полторы секунды). Пути были собраны порознь, и опрос
-     * не клал в ответ ошибку — после неудачного подключения строка под
-     * кнопкой каждые полторы секунды перескакивала с настоящей причины на
-     * общее «не удалось подключиться» и обратно. Высота шапки при этом
-     * менялась, и список под ней прыгал так, что в сервер было не попасть.
-     * Поэтому карта одна на оба пути: поле, забытое в одном из них, — это
-     * мигание на экране, а не мелочь.
-     */
+    // одна карта на событие и опрос: опрос не клал ошибку, и строка под кнопкой мигала между причиной и общим текстом,
+    // а список под шапкой прыгал. поле, забытое в одном пути, это мигание на экране
     private fun vpnSnapshot(
         statusOverride: String? = null,
         errorOverride: String? = null,
     ): Map<String, Any?> {
         val b = vpnServiceBinder
         if (b == null) {
-            // Сервис ещё не привязан: статус и ошибка лежат в prefs парой, их
-            // и отдаём — иначе статус был бы «ошибка», а причина пустая.
+            // статус и ошибка в prefs парой, иначе ошибка без причины
             return mapOf(
                 "status" to (statusOverride ?: readQsVpnStatus()),
                 "error" to (errorOverride ?: lastStatusError ?: readQsVpnError()),
@@ -875,18 +758,12 @@ class MainActivity : FlutterFragmentActivity() {
         serverName: String?,
         result: MethodChannel.Result,
         coreEngine: String = KeqdisVpnService.CORE_ENGINE_CHAIN,
-        // mihomo занимает то же место в схеме, поэтому путь запуска общий —
-        // различаются backend и имя файла конфига.
-        // Имя разное намеренно: по нему видно, каким ядром писан файл, а
-        // оставшийся от прошлой сессии чужой конфиг не подсунется новому ядру.
+        // имя файла по ядру: оставшийся чужой конфиг не подсунется новому ядру
         backend: String = KeqdisVpnService.VPN_BACKEND_XRAY,
         configFileName: String = "xray_config.json",
         tunnelMode: String = KeqdisVpnService.TUNNEL_MODE_VPN,
     ) {
-        // Разрешение на VPN спрашиваем ТОЛЬКО когда собираемся поднимать
-        // интерфейс. В режиме прокси establish() не вызывается вовсе, а значит
-        // и системный диалог не нужен: требовать его там — просить у человека
-        // право, которым не воспользуешься.
+        // разрешение VPN только когда поднимаем интерфейс: в режиме прокси establish() не зовётся
         if (tunnelMode != KeqdisVpnService.TUNNEL_MODE_PROXY &&
             VpnService.prepare(this) != null
         ) {
@@ -894,8 +771,7 @@ class MainActivity : FlutterFragmentActivity() {
             return
         }
 
-        // Каждому startVpn обязан предшествовать getSocksCredentials: без pending
-        // credentials возвращаем ошибку, а не шлём сервису пустые строки.
+        // без getSocksCredentials ошибка, пустые строки сервису не шлём
         val username = pendingSocksUsername
         val password = pendingSocksPassword
         if (username.isNullOrEmpty() || password.isNullOrEmpty()) {
@@ -904,22 +780,19 @@ class MainActivity : FlutterFragmentActivity() {
             return
         }
 
-        // Запись конфига — в Dispatchers.IO (на main она давала бы фризы),
-        // result.success/error возвращаются в Main thread через mainScope.
+        // запись на IO: на main она фризила
         mainScope.launch {
             val xrayPath = try {
                 withContext(Dispatchers.IO) { writeConfig(xrayConfig, configFileName) }
             } catch (e: IOException) {
-                // Credentials при ошибке IO НЕ сбрасываем: Dart может повторить
-                // startVpn без нового вызова getSocksCredentials.
+                // креды при ошибке IO не сбрасываем: Dart может повторить startVpn
                 result.error("IO_ERROR", "Failed to write config: ${e.message}", null)
                 return@launch
             }
 
             NativeLog.d("KEQDIS", "startVpn: sending credentials to service")
 
-            // Сохраняем порт в SharedPreferences чтобы WorkManager-изолят мог его прочитать
-            // через StorageService.getSocksPort(). Flutter хранит ключи с префиксом "flutter."
+            // порт для WorkManager-изолята (StorageService.getSocksPort), ключи Flutter с префиксом flutter.
             getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
                 .edit()
                 .putInt("flutter.keqdis_socks_port", socksPort)
@@ -937,15 +810,12 @@ class MainActivity : FlutterFragmentActivity() {
                 if (!serverName.isNullOrBlank()) {
                     putExtra(KeqdisVpnService.EXTRA_SERVER_NAME, serverName)
                 }
-                // Локальные переменные, проверенные выше; binder как fallback
-                // не годится — после cleanup() он возвращает "".
+                // binder после cleanup() отдаёт пустые строки, поэтому локальные
                 putExtra(KeqdisVpnService.EXTRA_SOCKS_USERNAME, username)
                 putExtra(KeqdisVpnService.EXTRA_SOCKS_PASSWORD, password)
             })
 
-            // Pending credentials сбрасываем только ПОСЛЕ успешной отправки
-            // Intent: следующий startVpn снова требует getSocksCredentials,
-            // так креды всегда свежие и совпадают с новым xray_config.json.
+            // сбрасываем только после отправки: следующий startVpn снова требует свежие креды
             pendingSocksUsername = null
             pendingSocksPassword = null
 
@@ -954,8 +824,7 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun stopVpn(result: MethodChannel.Result) {
-        // Явная остановка тоже сбрасывает pending credentials: getSocksCredentials
-        // без последующего startVpn оставил бы устаревшие креды.
+        // иначе getSocksCredentials без startVpn оставил бы устаревшие креды
         pendingSocksUsername = null
         pendingSocksPassword = null
         startService(Intent(this, KeqdisVpnService::class.java).apply {
@@ -972,7 +841,7 @@ class MainActivity : FlutterFragmentActivity() {
             return
         }
 
-        // Диалог уже на экране — не заменяем pending result, иначе первый connect() потеряет ответ.
+        // диалог уже на экране: заменим pending result, и первый connect() потеряет ответ
         if (permissionRequestInFlight && pendingPermissionResult != null) {
             result.error(
                 "PERMISSION_IN_PROGRESS",
@@ -1007,19 +876,15 @@ class MainActivity : FlutterFragmentActivity() {
         try {
             saveDocumentLauncher.launch(intent)
         } catch (e: Exception) {
-            // Нет ни одного приложения под ACTION_CREATE_DOCUMENT (урезанные прошивки).
+            // урезанные прошивки без ACTION_CREATE_DOCUMENT
             pendingSaveResult = null
             pendingSaveBytes = null
             result.error("SAVE_UNAVAILABLE", e.message ?: e.javaClass.simpleName, null)
         }
     }
 
-    // file_picker открывает файл в умолчательном "w", а про него в
-    // ContentResolver прямо сказано: обрезать файл провайдер не обязан. Человек
-    // выбирает в диалоге старый бэкап, соглашается заменить, и если новый
-    // короче, за ним остаётся конец старого. Отсюда "wt". Провайдер, не
-    // знающий "wt", получает прежнее "w" — хуже, чем было, не станет, а хвост
-    // после законченного JSON импорт отрезает сам (KeqdisBackup.parse).
+    // file_picker пишет в w, а обрезать файл провайдер не обязан: от старого бэкапа оставался хвост.
+    // провайдер без wt получит w, хвост после JSON отрежет импорт (KeqdisBackup.parse)
     private fun writeDocument(uri: android.net.Uri, bytes: ByteArray) {
         val stream = try {
             contentResolver.openOutputStream(uri, "wt")
@@ -1032,12 +897,10 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // Обновляем intent, чтобы getLaunchAction вернул актуальный extra, когда
-        // приложение уже в фоне и тайл открывает его через openAppForConnect().
+        // иначе getLaunchAction вернёт старый extra, когда тайл открывает уже живое приложение
         setIntent(intent)
         notifyLaunchActionIfNeeded()
-        // Тёплый старт по серверной ссылке: активность жива — пушим ссылку в Dart
-        // сразу; без канала (движок пересоздаётся) откладываем до getPendingDeepLink.
+        // движок пересоздаётся и канала нет: отложим до getPendingDeepLink
         deepLinkFrom(intent)?.let { url ->
             val ch = methodChannel
             if (ch == null) {
@@ -1049,8 +912,6 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun notifyLaunchActionIfNeeded() {
-        // connect_from_notification — уведомление и плитка QS;
-        // disconnect_from_shortcut — ярлык долгого тапа по иконке приложения.
         val action = intent?.getStringExtra(EXTRA_LAUNCH_ACTION) ?: return
         if (action !in LAUNCH_ACTIONS) return
         mainScope.launch {
@@ -1151,7 +1012,7 @@ class MainActivity : FlutterFragmentActivity() {
         batchId: String?,
         result: MethodChannel.Result,
     ) {
-        // Синк живёт на главном потоке, а пробы отвечают из пула.
+        // пробы отвечают из пула, а синк на главном потоке
         val onEach: ((EphemeralXrayPing.BatchResult) -> Unit)? = batchId?.let { id ->
             { item ->
                 mainScope.launch {
@@ -1296,7 +1157,6 @@ class MainActivity : FlutterFragmentActivity() {
                     (System.currentTimeMillis() - start).toInt()
                 }.getOrNull()
             }
-            // result.success вызывается в Main thread благодаря mainScope (Dispatchers.Main)
             result.success(ms)
         }
     }
@@ -1305,8 +1165,6 @@ class MainActivity : FlutterFragmentActivity() {
         mainScope.launch {
             val apps = withContext(Dispatchers.IO) {
                 val pm = packageManager
-                // flags=0: GET_META_DATA для имени/иконки не нужен, их отдаёт
-                // getApplicationLabel/Icon.
                 @Suppress("DEPRECATION")
                 pm.getInstalledApplications(0)
                     .filter { info ->
@@ -1345,10 +1203,7 @@ class MainActivity : FlutterFragmentActivity() {
 
     private fun getStatus(result: MethodChannel.Result) {
         if (vpnServiceBinder == null) {
-            // Binder ещё/уже не привязан — пробуем восстановить привязку, чтобы
-            // следующий опрос отдал живой статус, а не снапшот из prefs.
-            // BIND_AUTO_CREATE заодно создаёт сервис, чей onCreate() чинит
-            // фантомные connecting/connected, пережившие убийство процесса.
+            // BIND_AUTO_CREATE заодно создаёт сервис, а его onCreate() чинит фантомные connecting
             ensureVpnServiceBound()
         }
         result.success(vpnSnapshot())
@@ -1359,8 +1214,6 @@ class MainActivity : FlutterFragmentActivity() {
             val logs = withContext(Dispatchers.IO) {
                 val capped = maxLines.coerceIn(50, 2000)
 
-                // Основной источник — файл логов ядра в filesDir. logcat на Android 13+
-                // для untrusted_app недоступен (SELinux), поэтому файл надёжнее.
                 val fromFile = runCatching {
                     val f = File(filesDir, KeqdisVpnService.CORE_LOG_FILE)
                     if (f.exists() && f.length() > 0L)
@@ -1369,7 +1222,6 @@ class MainActivity : FlutterFragmentActivity() {
                 }.getOrDefault("")
                 if (fromFile.isNotBlank()) return@withContext fromFile
 
-                // Fallback: logcat (работает не на всех устройствах).
                 runCatching {
                     val process = ProcessBuilder("logcat", "-d", "-v", "time", "-s", "KEQDIS", "KEQDIS_XRAY")
                         .redirectErrorStream(true)
@@ -1387,19 +1239,10 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
-    // uid → отображаемое имя приложения. Держим отдельно от списка приложений
-    // для сплит-туннеля: тот грузится целиком и редко, а здесь запросы идут
-    // каждые пару секунд по одному-двум uid.
+    // отдельно от списка приложений сплита: тот грузится целиком и редко, а тут запросы каждые пару секунд
     private val uidLabelCache = HashMap<Int, String>()
 
-    /**
-     * Кто владеет соединением. Работает только у активного VPN-приложения —
-     * ровно наш случай, — и только пока соединение живо: `getConnectionOwnerUid`
-     * ищет его в таблице сокетов системы, для закрытых вернёт INVALID_UID.
-     *
-     * Отвечает списком имён, выровненным по входному: пустая строка — не
-     * определилось (закрылось, Android младше 10, чужой uid без пакетов).
-     */
+    // getConnectionOwnerUid работает только у активного VPN и только для живого соединения. пустая строка: не определилось
     private fun resolveConnectionOwners(
         items: List<Map<String, Any?>>,
         result: MethodChannel.Result,
@@ -1448,8 +1291,7 @@ class MainActivity : FlutterFragmentActivity() {
         return label
     }
 
-    // Звать только из Dispatchers.IO. Пробрасывает IOException — ошибки
-    // записи не глотаются молча.
+    // только с Dispatchers.IO
     @Throws(IOException::class)
     private fun writeConfig(json: String, fileName: String): String {
         val file = File(filesDir, fileName)
@@ -1457,19 +1299,8 @@ class MainActivity : FlutterFragmentActivity() {
         return file.absolutePath
     }
 
-    /**
-     * Порт и `secret` RESTful API работающей mihomo-сессии — для экрана
-     * «Соединения».
-     *
-     * Источник намеренно один: файл конфига, который прямо сейчас исполняет
-     * ядро. Пара придумана в Dart, но синглтон там не переживает пересоздание
-     * Flutter-движка, а из плитки сессию поднимает вообще сервис — Dart о ней
-     * узнаёт уже постфактум. Дублируй мы её в prefs отдельным путём, был бы
-     * второй источник правды и шанс разъехаться; здесь разъезжаться нечему.
-     *
-     * Пустой ответ (port=0) значит «нечего показывать»: сессии нет, она не на
-     * mihomo, или конфиг писан до появления API.
-     */
+    // источник один, конфиг на диске: Dart-синглтон не переживает пересоздание движка, а из плитки сессию поднимает сервис.
+    // port=0 значит показывать нечего
     private fun getMihomoApi(result: MethodChannel.Result) {
         mainScope.launch {
             val payload = withContext(Dispatchers.IO) {
@@ -1483,9 +1314,6 @@ class MainActivity : FlutterFragmentActivity() {
                     val file = File(path)
                     if (!file.isFile) return@runCatching null
 
-                    // Конфиг mihomo мы пишем обычным JSON (YAML 1.2 — его
-                    // надмножество, ядру всё равно), поэтому и читается он
-                    // штатным JSON-парсером.
                     val json = org.json.JSONObject(file.readText(Charsets.UTF_8))
                     val controller = json.optString("external-controller")
                     val secret = json.optString("secret")
@@ -1510,7 +1338,6 @@ class MainActivity : FlutterFragmentActivity() {
             vpnStatusReceiverRegistered = false
         }
 
-        // unbindService без успешной привязки кидает IllegalArgumentException.
         if (serviceBound) {
             unbindService(serviceConnection)
             serviceBound = false

@@ -11,22 +11,15 @@ class _ShareHwidCard extends ConsumerWidget {
     final enabled = settings.shareDeviceHwid;
 
     Future<void> save(bool value) async {
-      // SubscriptionService читает shareDeviceHwid из настроек на каждый
-      // fetch — отдельно уведомлять его не нужно.
       await ref.read(settingsNotifierProvider.notifier).save(settings.copyWith(shareDeviceHwid: value));
     }
 
     final textTheme = Theme.of(context).textTheme;
-    // Включённое состояние — цветом иконки, как у LAN-прокси: рамка вокруг
-    // карточки внутри группы обрезалась бы её же формой.
     final iconAccent =
         enabled ? ExpressiveAccent.tertiary : ExpressiveAccent.secondary;
 
     return ExpressiveGroupTile(
       padding: const EdgeInsets.all(16),
-      // Абзаца под строкой больше нет: он пересказывал ту же строку состояния
-      // под заголовком («HWID уходит с запросами подписки» / «не передаётся»),
-      // только длиннее.
       child: Row(
         children: [
           ExpressiveIconBadge(

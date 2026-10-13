@@ -5,14 +5,7 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.net.Uri
 
-/**
- * ContentProvider для синхронизации статуса VPN между KeqdisVpnService и VpnQuickTileService.
- * 
- * Использование:
- *   1. VPN сервис вызывает: getContentResolver().notifyChange(VpnStatusProvider.STATUS_URI, null)
- *   2. TileService наблюдает за STATUS_URI через ContentObserver
- *   3. При каждом изменении статус читается из SharedPreferences и тайл обновляется
- */
+// через него плитка узнаёт о смене статуса: сервис зовёт notifyChange, у плитки ContentObserver
 class VpnStatusProvider : ContentProvider() {
 
     companion object {
@@ -20,8 +13,7 @@ class VpnStatusProvider : ContentProvider() {
         val STATUS_URI: Uri = Uri.parse("content://$AUTHORITY/status")
     }
 
-    // Провайдер создаётся при старте процесса раньше любого компонента, поэтому
-    // журнал нативной части заводим здесь: его ждут и служба, и плитка.
+    // журнал заводим тут: провайдер создаётся раньше службы и плитки
     override fun onCreate(): Boolean {
         context?.let { NativeLog.init(it) }
         return true

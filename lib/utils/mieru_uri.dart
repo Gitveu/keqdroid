@@ -1,12 +1,5 @@
-/// Разобранная ссылка Mieru (`mierus://`, со «s» на конце — так в формате).
-///
-/// Особенность, из-за которой у неё отдельный файл: одна ссылка описывает
-/// **несколько** серверов. Порт и транспорт приходят парами повторяющихся
-/// параметров (`?port=2999&protocol=TCP&port=3000&protocol=UDP`), и ядро делает
-/// из такой ссылки несколько прокси. У нас «одна ссылка — один сервер», поэтому
-/// на импорте она раскладывается — см. [expand].
-///
-/// Разбор сверен с `common/convert/converter.go` mihomo.
+// одна ссылка описывает несколько серверов (пары port/protocol), на импорте раскладываем.
+// разбор сверен с converter.go mihomo
 class MieruLink {
   const MieruLink({
     required this.host,
@@ -24,13 +17,10 @@ class MieruLink {
   final String username;
   final String password;
 
-  /// Один порт; пусто — значит порт задан диапазоном.
   final int? port;
 
-  /// Диапазон портов (`20000-20050`) — у ядра под него своё поле.
   final String portRange;
 
-  /// `transport` у ядра: TCP или UDP. В ссылке зовётся `protocol`.
   final String transport;
 
   final String multiplexing;
@@ -40,8 +30,6 @@ class MieruLink {
   static bool looksLikeUri(String config) =>
       config.trimLeft().toLowerCase().startsWith('mierus://');
 
-  /// Ссылка с одной парой порт/транспорт. Ссылку с несколькими сюда не
-  /// передают — её сначала разбирает [expand].
   static MieruLink? tryParse(String link) {
     if (!looksLikeUri(link)) return null;
     final Uri uri;
@@ -77,14 +65,7 @@ class MieruLink {
     );
   }
 
-  /// Ссылка на каждый порт, который она описывает.
-  ///
-  /// Не mieru, одна пара или ссылка, которую не удалось прочесть, — вернётся
-  /// она сама: решать про такую не здесь, о неполной паре скажет генератор.
-  ///
-  /// Имя узла собирается как у ядра — `имя:порт/транспорт`, — иначе в списке
-  /// оказалось бы несколько серверов с одним именем и различить их было бы
-  /// нечем.
+  // имя как у ядра, имя:порт/транспорт, иначе серверы не различить
   static List<String> expand(String link) {
     if (!looksLikeUri(link)) return [link];
     final Uri uri;

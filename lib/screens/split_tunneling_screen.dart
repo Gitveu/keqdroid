@@ -54,8 +54,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
   bool _showSystem = false;
   late final AnimationController _fadeCtrl;
 
-  /// Ниже этой высоты окна крупный заголовок не показываем — значение и повод
-  /// те же, что у `ExpressivePage._largeTitleMinHeight`.
   static const double _largeTitleMinHeight = 600;
 
   List<AppInfo> _allApps = [];
@@ -100,14 +98,7 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
     setState(() { _mode = mode; });
   }
 
-  /// Записи, которых нет в списке процессов: добавленные руками или
-  /// программы, которые сейчас не запущены. Каждая — своей строкой в начале.
-  ///
-  /// Запись считается найденной, если совпала с путём или именем живой
-  /// строки ([splitEntryMatches]). Раньше сравнивалась сырая строка, и
-  /// сохранённый `discord.exe` не находил `Discord.exe` системы: каждое
-  /// выбранное приложение приписывалось в начало списка второй строкой — без
-  /// пути и без иконки, и на каждое изменение выбора ещё по одной.
+  // через splitEntryMatches: сырой строкой discord.exe не находил Discord.exe
   List<AppInfo> _mergeCustomApps(List<AppInfo> apps) {
     final split = ref.read(splitTunnelingProvider);
     final custom = <AppInfo>[];
@@ -123,9 +114,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
   void _applyInitialSort(List<AppInfo> apps) {
     final split = ref.read(splitTunnelingProvider);
     final selection = SplitSelection(_checkedSet(split));
-    // Схлопывание — страховка на случай, если дубли придут откуда-то ещё
-    // (список процессов, накопленное состояние прошлых версий): экран не
-    // должен показывать одно приложение дважды ни при каких входных данных.
     final merged = dedupeSplitEntries(_mergeCustomApps(apps));
     bool isChecked(AppInfo a) => selection.covers(a);
     _allApps = [
@@ -183,8 +171,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
   Future<void> _addRussianApps() async {
     if (_isDesktop) return;
 
-    // Всё, что нужно после await, захватываем заранее: экран могут закрыть,
-    // пока идёт долгий скан, и ref/context станут недоступны.
     final l10n = AppLocalizations.of(context)!;
     final messenger = ScaffoldMessenger.of(context);
     final notifier = ref.read(splitTunnelingProvider.notifier);
@@ -193,10 +179,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
       setState(() => _mode = TunnelMode.excludeOnly);
     }
 
-    // 1) Мгновенный проход по уже загруженному списку — галочки и снекбар
-    //    появляются сразу. Полный список (includeSystem=true, с иконками
-    //    каждого пакета) телефон собирает 5–30 секунд — всё это время без
-    //    быстрого прохода не было бы никакой реакции на кнопку.
     final visibleApps =
         ref.read(installedAppsProvider(_showSystem)).value ?? const <AppInfo>[];
     final quickRussian = visibleApps
@@ -205,8 +187,7 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
         .toList();
     var addedTotal = await notifier.addAllExcludes(quickRussian);
 
-    // Полный скан запускаем до проверки mounted: провайдер keepAlive, а
-    // добавляет notifier уровня приложения — доскан доживёт и без экрана.
+    // до проверки mounted: провайдер keepAlive, доскан доживёт и без экрана
     final fullScan = ref.read(installedAppsProvider(true).future);
 
     if (mounted) {
@@ -228,7 +209,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
       }
     }
 
-    // 2) Доскан по полному списку (включая системные/предустановленные).
     List<AppInfo> allApps;
     try {
       allApps = await fullScan;
@@ -242,9 +222,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
     addedTotal += extraAdded;
 
     if (!mounted) return;
-    // Полный список (includeSystem=true, иконки всех пакетов — мегабайты)
-    // нужен был только ради packageName'ов. Если экран его сейчас не
-    // показывает — освобождаем, не дожидаясь таймера autoDispose.
     if (!_showSystem) ref.invalidate(installedAppsProvider(true));
     if (extraAdded > 0) {
       setState(() {
@@ -334,11 +311,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
 
     final l10n = AppLocalizations.of(context)!;
 
-    // Экран собран одной прокруткой, а не шапкой поверх `Column` с `Expanded`.
-    // Так он начинается крупным заголовком, как остальные подэкраны настроек
-    // (см. `ExpressivePage`), режим и предупреждения уезжают вместе с
-    // содержимым, а поиск остаётся прилипшим под шапкой — он нужен на любой
-    // позиции списка в пару сотен строк.
     final showFab = _isDesktop && _mode != TunnelMode.all;
 
     return Scaffold(
@@ -362,10 +334,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
                 builder: (context, background) {
                   final actions =
                       _appBarActions(l10n, checked, appsLoaded: appsLoaded);
-                  // Правило крупного заголовка — то же, что у `ExpressivePage`:
-                  // на невысоком вьюпорте (окно из трея) 152dp шапки съели бы
-                  // половину экрана, а длинный заголовок в узком окне ещё и
-                  // разъехался бы на три строки.
                   return MediaQuery.sizeOf(context).height >= _largeTitleMinHeight
                       ? SliverAppBar.large(
                           title: Text(l10n.splitTunnelingTitle),
@@ -390,9 +358,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
                 sliver: SliverList.list(
                   children: [
                     _ModeSelector(current: _mode, onChanged: _setMode),
-                    // Списки include/exclude читаются только в момент connect() —
-                    // при активном туннеле изменения вступят в силу лишь после
-                    // переподключения, и без подсказки это выглядит как «не работает».
                     if (tunnelActive) ...[
                       const SizedBox(height: ExpressiveSpacing.medium),
                       ExpressiveNotice(
@@ -411,9 +376,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
                   ],
                 ),
               ),
-              // Поиск красится тем же цветом, что и шапка над ним: прилипшая
-              // полоса обязана быть с ней одной поверхностью, иначе под шапкой
-              // едет вторая, другого тона.
               ExpressiveScrolledUnderBuilder(
                 builder: (context, background) => SliverPersistentHeader(
                   pinned: true,
@@ -490,8 +452,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
     required bool appsLoaded,
   }) {
     return [
-      // Показ системных — переключаемая иконка-кнопка M3: включённое состояние
-      // несёт её собственный контейнер, а не подмена цвета иконки вручную.
       IconButton(
         tooltip:
             _showSystem ? l10n.splitHideSystemApps : l10n.splitShowSystemApps,
@@ -531,25 +491,11 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
   }
 }
 
-/// Селектор режимов: три сегмента списка M3E.
-///
-/// Был самодельный переключатель из M2 — общая рамка, две тени и подсветка,
-/// ездящая под подписями через `AnimatedAlign`. Теперь выбор несут те же
-/// средства, что у строк серверов и плиток тем: заливка `secondaryContainer` и
-/// морф формы (внутренние углы 4dp → 16dp у выбранного), причём пружинами из
-/// спеки движения, а не кривой с длительностью.
-///
-/// Почему не [ExpressiveConnectedButtons], штатная замена сегментированной
-/// кнопки: её подписи живут в одну строку с многоточием, а «Все кроме
-/// выбранных» и «Только выбранные» в треть ширины телефона не влезают — от
-/// режима осталось бы «Все кр…». Сегменты списка дают ту же анатомию выбора и
-/// две строки под подпись.
 class _ModeSelector extends StatelessWidget {
   final TunnelMode current;
   final void Function(TunnelMode) onChanged;
   const _ModeSelector({required this.current, required this.onChanged});
 
-  /// Высота сегмента: иконка, зазор и две строки подписи `labelMedium`.
   static const double _height = 78;
 
   @override
@@ -628,16 +574,10 @@ class _ModeSelector extends StatelessWidget {
   }
 }
 
-/// Прилипшая полоса поиска.
-///
-/// Живёт слайвером, а не строкой в `Column`: список длиной в пару сотен строк
-/// без прилипшего поиска заставлял бы прокручивать вверх ради каждого запроса.
 class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
   final TextEditingController controller;
   final String hintText;
 
-  /// Цвет шапки над полосой. Прилипшая полоса обязана быть с ней одной
-  /// поверхностью, иначе под шапкой едет вторая, другого тона.
   final Color background;
 
   const _SearchHeaderDelegate({
@@ -646,8 +586,6 @@ class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.background,
   });
 
-  /// Контейнер поиска по спеке — 56dp; поля сверху и снизу держат его на
-  /// расстоянии от шапки и первой строки списка.
   static const double _barHeight = 56;
   static const double _verticalPadding = ExpressiveSpacing.small;
 
@@ -680,12 +618,6 @@ class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
       old.background != background;
 }
 
-/// Поиск на штатном `SearchBar` M3.
-///
-/// Было текстовое поле с собственной тенью, рамкой в полупрозрачный
-/// `outlineVariant` и радиусом 16 — ни filled, ни outlined, а помесь. У M3
-/// поиск — отдельный компонент со своей анатомией: пилюля, заливка контейнера
-/// и никакой тени.
 class _SearchField extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;
@@ -696,9 +628,7 @@ class _SearchField extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    // Кнопку очистки показываем по содержимому поля, а не по перестройке
-    // экрана: делегат прилипшей шапки пересобирается только при смене своих
-    // полей, и без этой подписки крестик появлялся бы через раз.
+    // крестик по самому полю: делегат прилипшей шапки пересобирается только при смене своих полей
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: controller,
       builder: (context, value, _) => SearchBar(
@@ -741,7 +671,6 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-// список приложений
 class _AppList extends StatelessWidget {
   final List<AppInfo> apps;
   final TunnelMode mode;
@@ -749,8 +678,6 @@ class _AppList extends StatelessWidget {
   final Set<String> excludePackages;
   final void Function(AppInfo) onToggle;
 
-  /// Есть ли над списком расширенный FAB. Если есть — последняя строка должна
-  /// уезжать из-под него, иначе до неё не дотянуться.
   final bool hasFab;
 
   const _AppList({
@@ -762,8 +689,6 @@ class _AppList extends StatelessWidget {
     required this.hasFab,
   });
 
-  /// Отмеченные разбираются один раз на построение списка, а не на каждую из
-  /// сотен строк.
   SplitSelection _selection() => SplitSelection(switch (mode) {
         TunnelMode.all => const <String>{},
         TunnelMode.includeOnly => includePackages,
@@ -800,18 +725,11 @@ class _AppList extends StatelessWidget {
       );
     }
 
-    // Строки — сегменты одного списка, а не отдельные карточки с зазором в
-    // 10px: зазор набирается полями самого сегмента, поэтому шаг списка
-    // остаётся постоянным и его можно отдать `SliverFixedExtentList` — тот не
-    // раскладывает каждую строку ради высоты. На списке в пару сотен
-    // приложений это и есть разница между рывками и ровной прокруткой.
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(
         ExpressiveSpacing.large,
         ExpressiveSpacing.none,
         ExpressiveSpacing.large,
-        // 88 — высота расширенного FAB с его полями: ровно столько нужно, чтобы
-        // последняя строка не пряталась под кнопкой.
         hasFab ? 88 : ExpressiveSpacing.extraLarge,
       ),
       sliver: _AppListBody(
@@ -824,8 +742,6 @@ class _AppList extends StatelessWidget {
   }
 }
 
-/// Тело списка вынесено отдельным виджетом: набор отмеченных считается один
-/// раз на построение, а не в каждом `itemBuilder`.
 class _AppListBody extends ConsumerWidget {
   final List<AppInfo> apps;
   final TunnelMode mode;
@@ -841,13 +757,8 @@ class _AppListBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Кэш иконок берём один раз на список, а не в каждой строке: строка с
-    // собственным `ConsumerStatefulWidget` тащила бы за собой ещё и область
-    // зависимостей Riverpod — на сотнях строк это не бесплатно.
     final iconCache = ref.read(appIconCacheProvider);
-    // Смысловой цвет отметки сознательный: строка одинаково «выбрана» в обоих
-    // режимах, но в одном она идёт в туннель, а в другом мимо него, и
-    // перепутать их дорого.
+    // цвет отметки смысловой: в одном режиме строка идёт в туннель, в другом мимо, и перепутать их дорого
     final markColor = switch (mode) {
       TunnelMode.all => null,
       TunnelMode.includeOnly => AppTheme.green(context),
@@ -856,9 +767,6 @@ class _AppListBody extends ConsumerWidget {
     return SliverFixedExtentList.builder(
       itemExtent: AppListTile.height,
       itemCount: apps.length,
-      // Строка и так завёрнута в свой `RepaintBoundary`, а держать её живой
-      // после ухода с экрана незачем: обе обёртки — это по два лишних виджета
-      // на каждую строку, а их тут пара сотен.
       addAutomaticKeepAlives: false,
       addRepaintBoundaries: false,
       itemBuilder: (context, i) {
@@ -883,7 +791,6 @@ class _AppListBody extends ConsumerWidget {
   }
 }
 
-// флаг ru в круге (иконка в appbar)
 class _RuFlagIcon extends StatelessWidget {
   const _RuFlagIcon();
 
@@ -895,9 +802,9 @@ class _RuFlagIcon extends StatelessWidget {
         dimension: size,
         child: Column(
           children: [
-            Expanded(child: Container(color: const Color(0xFFFFFFFF))), // белый
-            Expanded(child: Container(color: const Color(0xFF0039A6))), // синий
-            Expanded(child: Container(color: const Color(0xFFD52B1E))), // красный
+            Expanded(child: Container(color: const Color(0xFFFFFFFF))),
+            Expanded(child: Container(color: const Color(0xFF0039A6))),
+            Expanded(child: Container(color: const Color(0xFFD52B1E))),
           ],
         ),
       ),

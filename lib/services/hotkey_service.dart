@@ -6,11 +6,6 @@ import 'package:flutter/widgets.dart';
 import '../core/app_logger.dart';
 import '../models/hotkey_config.dart';
 
-/// Хоткеи на десктопе.
-///
-/// На Windows они системные и срабатывают даже когда окно спрятано в трее:
-/// нажатие приходит из натива и роутится в [dispatchAction]. На Linux — только
-/// пока окно в фокусе: глобальные хоткеи под Wayland приложению недоступны.
 class HotkeyService {
   HotkeyService._();
 
@@ -18,26 +13,18 @@ class HotkeyService {
 
   static bool get isSupported => Platform.isWindows || Platform.isLinux;
 
-  /// true — хоткеи системные (работают при скрытом окне).
   static bool get isGlobal => Platform.isWindows;
 
-  /// Обработчик срабатывания; ставит DesktopHomeScreen.
   static void Function(HotkeyAction action)? onPressed;
 
-  /// Пока экран настроек записывает новое сочетание, in-app обработчик
-  /// (Linux) не должен исполнять действия.
   static bool captureMode = false;
 
   static Map<HotkeyAction, HotkeyBinding> _bindings = {};
   static bool _keyHandlerInstalled = false;
 
-  /// Занято ли нажатие сочетанием из настроек: тогда оно принадлежит действию,
-  /// которое назначил человек, а не встроенным клавишам окна.
   static bool isBound(PhysicalKeyboardKey key, HardwareKeyboard hk) =>
       _bindings.values.any((binding) => binding.matches(key, hk));
 
-  /// Разбирает карту из настроек (HotkeyAction.id → токен), отбрасывая
-  /// неизвестные действия и битые токены.
   static Map<HotkeyAction, HotkeyBinding> parseBindings(
     Map<String, String> raw,
   ) {
@@ -50,8 +37,6 @@ class HotkeyService {
     return out;
   }
 
-  /// Применяет привязки. Возвращает id действий, которые не удалось
-  /// зарегистрировать (сочетание занято другим приложением; только Windows).
   static Future<List<String>> apply(
     Map<HotkeyAction, HotkeyBinding> bindings,
   ) async {
@@ -94,14 +79,11 @@ class HotkeyService {
     return const [];
   }
 
-  /// Вызов из VpnNativeBridge при `onHotkeyPressed` с натива (Windows).
   static void dispatchAction(String? actionId) {
     final action = HotkeyAction.fromId(actionId);
     if (action == null) return;
     onPressed?.call(action);
   }
-
-  // ---- Linux: in-app matching ---------------------------------------------
 
   static void _installKeyHandler() {
     if (_keyHandlerInstalled) return;
@@ -120,7 +102,6 @@ class HotkeyService {
     if (captureMode) return false;
     final cb = onPressed;
     if (cb == null || _bindings.isEmpty) return false;
-    // Не перехватываем сочетания, пока пользователь печатает в текстовом поле.
     if (FocusManager.instance.primaryFocus?.context?.widget is EditableText) {
       return false;
     }

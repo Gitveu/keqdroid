@@ -4,8 +4,6 @@ import 'package:keqdroid/l10n/app_localizations.dart';
 
 enum UiErrorKind { permission, network, config, auth, providerConfig, unknown }
 
-/// Конкретный случай ошибки: kind задаёт только заголовок, а для перевода
-/// message/action в explainErrorLocalized нужен точный вариант.
 enum UiErrorCode {
   tunAdmin,
   tunPolkitMissing,
@@ -46,7 +44,7 @@ UiErrorMessage explainError(Object error) {
   final raw = error.toString();
   final msg = raw.toLowerCase();
 
-  // Раньше всех текстовых веток: это разбор по типу, а не по словам.
+  // раньше текстовых веток: разбор по типу
   if (error is FileDialogUnavailableException) {
     return const UiErrorMessage(
       kind: UiErrorKind.config,
@@ -59,8 +57,7 @@ UiErrorMessage explainError(Object error) {
     );
   }
 
-  // Раньше общей ветки про права: на Linux у TUN два отказа, которые чинятся
-  // установкой пакета, а не разрешением в диалоге, и советы у них разные.
+  // раньше общей ветки про права: на Linux два отказа TUN чинятся установкой пакета
   if (msg.contains('pkexec') && msg.contains('not installed')) {
     return const UiErrorMessage(
       kind: UiErrorKind.permission,
@@ -139,8 +136,7 @@ UiErrorMessage explainError(Object error) {
     );
   }
 
-  // Раньше generic-веток: «insecure http» содержит «http», а тексты про
-  // forbidden/401/403 перехватили бы его как чужой случай.
+  // раньше generic-веток: insecure http содержит http
   if (msg.contains('insecure http')) {
     return const UiErrorMessage(
       kind: UiErrorKind.config,
@@ -225,11 +221,7 @@ UiErrorMessage explainError(Object error) {
 
 UiErrorMessage explainErrorLocalized(Object error, AppLocalizations l10n) {
   final base = explainError(error);
-  // Заголовок ключуется по коду, а не по виду ошибки: видов шесть на
-  // одиннадцать кодов, и «Connection failed: auth» вместо «Device Limit
-  // Reached» отнимает у пользователя ту подсказку, ради которой
-  // код и различали. Виды остались за vpnErrorStatusLabel — там короткая
-  // подпись статуса, и общая формулировка уместна.
+  // заголовок по коду, а не по виду: видов шесть на одиннадцать кодов
   final title = switch (base.code) {
     UiErrorCode.tunAdmin => l10n.errorTunAdminTitle,
     UiErrorCode.tunPolkitMissing => l10n.errorPolkitMissingTitle,
@@ -299,8 +291,6 @@ UiErrorMessage explainErrorLocalized(Object error, AppLocalizations l10n) {
         l10n.errorFileDialogMessage,
         l10n.errorFileDialogAction,
       ),
-    // unknown: message — вычищенный текст исходной ошибки (динамический,
-    // перевести нельзя), локализуем только рекомендацию.
     UiErrorCode.unknown => (base.message, l10n.errorUnknownAction),
   };
   return UiErrorMessage(

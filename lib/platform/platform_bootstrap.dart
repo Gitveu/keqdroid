@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import '../services/desktop_background_service.dart';
 import '../services/windows_desktop_service.dart';
 
-/// Platform init before runApp (Windows desktop shell).
 class PlatformBootstrap {
   static Future<void> initialize() async {
     if (Platform.isWindows) {
@@ -24,8 +23,6 @@ class PlatformBootstrap {
     }
   }
 
-  /// Тесты гоняются на Windows, и без подмены раскладку телефона там не
-  /// проверить.
   @visibleForTesting
   static bool? debugIsDesktopOverride;
 
@@ -38,7 +35,5 @@ class PlatformBootstrap {
   @visibleForTesting
   static bool? debugIsTelevisionOverride;
 
-  /// Android TV: управление пультом, камеры нет. Узнаётся один раз до первого
-  /// кадра — режим интерфейса у телевизора не меняется.
   static bool get isTelevision => debugIsTelevisionOverride ?? _isTelevision;
 }

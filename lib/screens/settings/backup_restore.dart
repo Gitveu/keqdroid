@@ -17,9 +17,6 @@ class _BackupRestoreScreenState extends ConsumerState<_BackupRestoreScreen> {
 
   AppLocalizations get l10n => AppLocalizations.of(context)!;
 
-  /// Отсутствие системного диалога объясняем словами и с рекомендацией: имя
-  /// класса исключения человеку не подсказывает, какой пакет он не поставил.
-  /// Остальное показываем как есть — там текст ошибки и есть суть.
   String _failureReason(Object e) => e is FileDialogUnavailableException
       ? friendlyErrorDetailed(e, context)
       : '$e';
@@ -109,9 +106,7 @@ class _BackupRestoreScreenState extends ConsumerState<_BackupRestoreScreen> {
       ref.invalidate(serversProvider);
       ref.invalidate(subscriptionsProvider);
       ref.invalidate(splitTunnelingProvider);
-      // Настройки живут отдельным нотифаером с собственным состоянием: без
-      // сброса импортированная тема и списки маршрутизации доехали бы до диска,
-      // а на экране остались прежними до перезапуска. Маршруты — так же.
+      // без сброса импортированное доехало бы до диска, а на экране осталось прежнее до перезапуска
       ref.invalidate(settingsNotifierProvider);
       ref.invalidate(routesProvider);
 
@@ -138,8 +133,7 @@ class _BackupRestoreScreenState extends ConsumerState<_BackupRestoreScreen> {
     return showModalBottomSheet<Set<BackupSection>>(
       context: context,
       showDragHandle: true,
-      // Без этого шторка не выше 9/16 экрана: на телевизоре (540dp) и у
-      // лежащего телефона кнопка импорта уезжала за нижний край.
+      // без этого шторка не выше 9/16 экрана, и на телевизоре кнопка импорта уезжала за край
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {

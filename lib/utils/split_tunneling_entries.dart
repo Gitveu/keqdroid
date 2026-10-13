@@ -1,26 +1,13 @@
-/// Записи раздельного туннелирования и строки списка программ.
-///
-/// Запись бывает двух видов. С путём — «только этот файл»: так сохраняется
-/// путь, указанный вручную. Без пути — «любая программа с таким именем»: так
-/// сохраняется отмеченное в списке и вписанное именем. Строка списка
-/// отмечена, если с ней совпала любая из двух.
-///
-/// Имена приходят в разном виде: список процессов Windows отдаёт `Discord.exe`
-/// с настоящим регистром, а у давних пользователей сохранён `discord.exe` —
-/// так писала старая версия. Для правил ядра это одно имя
-/// (`processNameMatchVariants` шлёт оба варианта регистра), поэтому и здесь.
+// список процессов Windows отдаёт Discord.exe, а старая версия сохраняла discord.exe
 library;
 
 import '../models/app_info.dart';
 import 'process_name_utils.dart';
 
-/// Ключ имени: регистр снимаем после нормализации — только после неё имена
-/// из разных источников сравнимы.
 String splitNameKey(String raw, {bool? windows}) =>
     normalizeProcessName(raw, windows: windows).toLowerCase();
 
-/// Ключ пути. Регистр снимается только на Windows: там путь к файлу от
-/// регистра не зависит, а на Linux `/opt/App` и `/opt/app` — разные файлы.
+// регистр пути снимаем только на Windows: на Linux /opt/App и /opt/app разные файлы
 String splitPathKey(String raw, {bool? windows}) {
   final onWindows = windowsProcessRules(windows);
   final path = normalizeProcessPath(raw, windows: onWindows);
@@ -30,7 +17,6 @@ String splitPathKey(String raw, {bool? windows}) {
 bool _hasPath(AppInfo app) =>
     app.installPath != null && app.installPath!.isNotEmpty;
 
-/// Совпадает ли сохранённая запись со строкой списка.
 bool splitEntryMatches(String entry, AppInfo app, {bool? windows}) {
   if (entry.trim().isEmpty) return false;
   if (isProcessPathEntry(entry)) {
@@ -42,8 +28,6 @@ bool splitEntryMatches(String entry, AppInfo app, {bool? windows}) {
       splitNameKey(app.packageName, windows: windows);
 }
 
-/// Отмеченные записи, разобранные один раз на построение списка: строк там
-/// сотни, и сверять каждую со всеми записями заново незачем.
 class SplitSelection {
   SplitSelection(Iterable<String> entries, {bool? windows})
       : _windows = windows {
@@ -67,7 +51,6 @@ class SplitSelection {
       _names.contains(splitNameKey(app.packageName, windows: _windows));
 }
 
-/// Строка списка для записи, которой нет среди программ системы.
 AppInfo splitStubForEntry(String entry, {bool? windows}) {
   if (isProcessPathEntry(entry)) {
     final path = normalizeProcessPath(entry, windows: windows);
@@ -80,12 +63,6 @@ AppInfo splitStubForEntry(String entry, {bool? windows}) {
   );
 }
 
-/// Схлопывает повторы строк, сохраняя порядок.
-///
-/// Одно имя с разными путями — разные программы, и обе остаются: ради этого
-/// путь и сохраняется. Строка без пути при живой строке того же имени
-/// уходит: это заглушка, собранная из сохранённого имени, а у живой есть
-/// иконка.
 List<AppInfo> dedupeSplitEntries(List<AppInfo> apps, {bool? windows}) {
   final withPath = <String>{};
   final namesWithPath = <String>{};

@@ -12,10 +12,6 @@ import '../../services/update_service.dart';
 import '../../tunnel/local_port_plan.dart';
 import '../../tunnel/tunnel_state.dart';
 
-/// «Диалог уже показывали в этой сессии» — по версии, а не булев флаг:
-/// ре-раны updateInfoProvider с той же версией не спамят диалогом, но новый
-/// релиз, вышедший пока приложение работает (периодический ре-чек),
-/// предлагается снова.
 class UpdatePrompt {
   UpdatePrompt._();
 
@@ -25,8 +21,6 @@ class UpdatePrompt {
       promptedVersionThisSession = version;
 }
 
-/// Показывать диалог при первой загрузке информации об обновлении,
-/// но не при повторных refresh провайдера.
 bool shouldAutoPromptForUpdate(
   AsyncValue<UpdateInfo?>? prev,
   AsyncValue<UpdateInfo?> next,
@@ -40,13 +34,11 @@ bool shouldAutoPromptForUpdate(
   final prevInfo = prev?.value;
   if (prevInfo?.latestVersion == info.latestVersion) return false;
 
-  // повторный refresh с той же версией — не показываем (диалог уже видели)
   if (prevInfo != null && prev?.isLoading != true) return false;
 
   return true;
 }
 
-/// GitHub release body может содержать HTML-теги, которые flutter_markdown не рендерит.
 String sanitizeReleaseNotes(String raw) {
   var text = raw;
   text = text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
@@ -68,7 +60,6 @@ String sanitizeReleaseNotes(String raw) {
 
 bool _updateDialogOpen = false;
 
-/// Показ диалога обновления (не более одного одновременно).
 Future<void> showUpdateDialog(BuildContext context, UpdateInfo info) async {
   if (_updateDialogOpen) return;
   _updateDialogOpen = true;
@@ -191,8 +182,6 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
         ),
       ),
       actions: [
-        // «Пропустить версию» — осознанный отказ: пишет skip-настройку,
-        // эта версия больше не предлагается автоматически.
         TextButton(
           onPressed: _downloading
               ? null
@@ -205,8 +194,6 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
             style: TextStyle(color: subtitleColor),
           ),
         ),
-        // «Позже» просто закрывает диалог — без записи skip: пользователь ждёт
-        // напоминания, а skip навсегда убирает версию из авто-предложений.
         TextButton(
           onPressed: _downloading
               ? null
@@ -250,21 +237,17 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
       final restarting = await UpdateService.downloadAndInstall(
         widget.info,
         viaLocalProxy: vpn?.status == VpnStatus.connected,
-        // Порт живой сессии: настроенный мог быть занят/изъят системой, и тогда
-        // локальный HTTP-инбаунд слушает подменённый (см. [LocalPortPlan]).
+        // порт сессии: если настроенный был занят, ядро слушает другой
         httpPort: ActiveLocalPorts().httpPortOr(settings.httpPort),
         onProgress: (received, total) {
           if (total > 0 && mounted) {
             setState(() => _progress = received / total);
           }
         },
-        // Desktop restarts (Windows zip, every Linux install but pacman) tear
-        // the VPN down first. Only invoked right before the app exits to
-        // apply — the browser hand-off path returns without calling it.
+        // только перед самым выходом: путь через браузер этот колбэк не зовёт
         beforeRestart: Platform.isWindows || Platform.isLinux
             ? () async {
                 if (mounted) setState(() => _applying = true);
-                // Включённый туннель новый процесс поднимет сам.
                 final status = ref.read(vpnStateProvider).value?.status;
                 if (status == VpnStatus.connected ||
                     status == VpnStatus.connecting) {

@@ -2,27 +2,15 @@ import 'dart:io';
 
 import 'linux_install.dart';
 
-/// In-place update for the Linux AppImage build.
-///
-/// Only meaningful when the app is *running as an AppImage*: the AppImage
-/// runtime exports `APPIMAGE` = absolute path of the `.AppImage` the user
-/// launched. We overwrite that file with the freshly downloaded (and already
-/// SHA-256-verified by [UpdateService]) one and relaunch. deb, rpm and tar.gz
-/// installs have no `APPIMAGE` and update their own way (see [LinuxInstall]).
 class LinuxAppImageUpdater {
   LinuxAppImageUpdater._();
 
-  /// Absolute path of the currently running AppImage, or `null` when the app
-  /// was not launched as one (dev build, extracted tree, deb install).
   static String? currentAppImagePath() {
     final path = Platform.environment['APPIMAGE'];
     if (path == null || path.isEmpty) return null;
     return File(path).existsSync() ? path : null;
   }
 
-  /// Replaces the running AppImage [targetAppImage] with [newAppImage] and
-  /// relaunches it after this process exits. Returns `true` — the app is
-  /// exiting to apply the update (mirrors [WindowsZipUpdater]'s contract).
   static Future<bool> applyInPlace({
     required String newAppImage,
     required String targetAppImage,
@@ -42,8 +30,6 @@ class LinuxAppImageUpdater {
     exit(0);
   }
 
-  // Atomically replaces the AppImage with the downloaded one (same-dir `mv`,
-  // `cp` fallback), keeps the exec bit, and relaunches.
   static const _script = r'''
 NEW="$1"; TARGET="$2"
 log "=== appimage update: new=$NEW target=$TARGET"

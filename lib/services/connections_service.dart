@@ -13,24 +13,13 @@ import 'connections_tracker.dart';
 import 'debug_log_service.dart';
 import 'xray_route_decisions.dart';
 
-/// Снимок активных соединений ядра для дебаг-экрана.
-///
-/// Источник зависит от ядра. На десктопе и у mihomo на Android список отдаёт
-/// clash_api самого ядра — с процессом, доменом, правилом и счётчиками. У xray
-/// на Android такого API нет вовсе, поэтому разбираем его access-лог, тот же
-/// файл, что показывает экран логов.
 class ConnectionsService {
   ConnectionsService._();
 
-  /// Сколько строк лога тянем на Android. 1200 строк ≈ несколько сотен
-  /// соединений: больше незачем, файл кольцуется на 512 КБ.
   static const _androidLogLines = 1200;
 
-  /// Память между опросами: держит живые соединения и сводит одинаковые.
   static final ConnectionsTracker _tracker = ConnectionsTracker();
 
-  /// Другая сессия ядра — накопленное больше не про неё. Дёргает экран, когда
-  /// меняется состояние туннеля.
   static void resetTracker() {
     _tracker.reset();
     _appNames.clear();
@@ -41,23 +30,14 @@ class ConnectionsService {
     return _tracker.merge(raw, sessionToken: _sessionToken(raw));
   }
 
-  /// Что источник отдал прямо сейчас — до свёртки и без памяти о предыдущих
-  /// опросах.
   static Future<ConnectionsSnapshot> _rawSnapshot() async {
     if (Platform.isWindows || Platform.isLinux) {
       final api = await _fromClashApi();
       if (api.source == ConnectionsSource.coreApi) return api;
-      // clash_api нет: движок `chain` (xray + sing-box) его не поднимает, да и
-      // сессия могла уже закончиться. Access-лог xray остаётся — по нему видно
-      // то же самое, только без процессов и байт.
       final log = await _fromAccessLog();
       return log.entries.isEmpty ? api : log;
     }
     if (Platform.isAndroid) {
-      // mihomo держит список сессий сам и отдаёт его по RESTful API — тому
-      // самому clash_api, что и на десктопе. Access-лог для него бесполезен:
-      // формат другой, а парсер написан под xray. Обратный фолбэк оставлен —
-      // API мог не подняться (порт увели), и тогда пустой экран честнее.
       if (MihomoApiSession().isActive) {
         final api = await _fromClashApi();
         if (api.source == ConnectionsSource.coreApi) {
@@ -74,20 +54,11 @@ class ConnectionsService {
     );
   }
 
-  /// Метка сессии для трекера: смена источника или порта clash_api означает
-  /// другое ядро. На Android постоянна — там сессию сбрасывает экран по
-  /// состоянию туннеля ([resetTracker]).
   static String _sessionToken(ConnectionsSnapshot snapshot) =>
       '${snapshot.source.name}:${_activeClashPort() ?? ''}';
 
-  /// true — источник в принципе умеет отдавать владельца соединения: на
-  /// десктопе это процесс из clash_api, на Android — приложение, найденное по
-  /// сокету через систему. Имя всё равно бывает пустым (на Android нужен
-  /// дебаг-режим и живое соединение), и тогда плитка просто его не рисует.
   static bool get supportsProcessNames =>
       Platform.isWindows || Platform.isLinux || Platform.isAndroid;
-
-  // ── desktop: clash_api ────────────────────────────────────────────────────
 
   static int? _activeClashPort() {
     if (Platform.isWindows) return WindowsTunnelBackend.activeInstance?.clashApiPort;
@@ -96,11 +67,6 @@ class ConnectionsService {
     return null;
   }
 
-  /// Токен API. У keqrnel на Windows его нет (API слушает петлю), на Linux
-  /// он свой на каждую сессию; у mihomo он есть всегда:
-  /// на Android петля общая для всех приложений, а разные правила для разных ОС
-  /// означали бы 401 ровно на одной из них. Пустая строка — значит активной
-  /// сессии mihomo нет, и заголовок не нужен.
   static String _activeClashSecret() => Platform.isLinux
       ? LinuxTunnelBackend.activeInstance?.clashApiSecret ?? ''
       : MihomoApiSession().secret;
@@ -125,8 +91,6 @@ class ConnectionsService {
           .timeout(const Duration(seconds: 3));
       final secret = _activeClashSecret();
       if (secret.isNotEmpty) {
-        // Схема из `hub/route/server.go`: заголовок ровно `Bearer <secret>`,
-        // всё остальное — 401.
         req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $secret');
       }
       final resp = await req.close().timeout(const Duration(seconds: 3));
@@ -143,8 +107,6 @@ class ConnectionsService {
           .join()
           .timeout(connectionsBodyTimeout);
       chars = body.length;
-      // Дальше — сверка с логом ядра, а не ожидание ответа: в «медленные» она
-      // попадать не должна.
       poll.stop();
       final json = jsonDecode(body);
       if (json is! Map<String, dynamic>) {
@@ -165,24 +127,14 @@ class ConnectionsService {
           if (entry != null) entries.add(entry);
         }
       }
-      // Свежие сверху: так видно то, что происходит прямо сейчас.
       entries.sort((a, b) {
         final at = a.startedAt, bt = b.startedAt;
         if (at == null || bt == null) return 0;
         return bt.compareTo(at);
       });
 
-      // У mihomo дорешивать нечего: правило в ответе API — уже настоящее, тот
-      // самый `SRC-IP-CIDR`/`GEOSITE`, по которому ушло соединение. Это не
-      // мелочь: имя прокси у нас `proxy`, ровно как тег движка внутри
-      // keqrnel, — прогони мы ответ mihomo через [_resolveEngineVerdicts],
-      // и каждое проксированное соединение поехало бы искать вердикт в
-      // xray-логе, которого при mihomo нет, а найденное правило затёрлось бы
-      // пустым «решает ядро».
-      //
-      // Признак — активная сессия mihomo, а не платформа: то же ядро теперь
-      // работает и на десктопе, и там keqrnel с его двухслойным роутингом уже
-      // не участвует.
+      // у mihomo правило в ответе уже настоящее, а аутбаунд тоже зовётся proxy:
+      // через _resolveEngineVerdicts оно затёрлось бы
       final needsEngineVerdicts = !MihomoApiSession().isActive;
       final resolved =
           needsEngineVerdicts ? _resolveEngineVerdicts(entries) : entries;
@@ -207,16 +159,8 @@ class ConnectionsService {
     }
   }
 
-  /// Тег аутбаунда, за которым в конфиге keqrnel стоит встроенный xray.
-  /// Соединение с этим аутбаундом sing-box не маршрутизировал — он передал его
-  /// движку, и настоящее решение принимает уже тот.
   static const _engineOutboundTag = 'proxy';
 
-  /// Достаёт из лога ядра, куда оно на самом деле отправило соединение.
-  ///
-  /// clash_api видит только слой sing-box, а он в proxy-режиме отдаёт движку
-  /// вообще всё (`route.final: proxy`) — без этого экран рисовал PROXY даже там,
-  /// где правило Direct уводило трафик мимо туннеля.
   static List<ConnectionEntry> _resolveEngineVerdicts(
     List<ConnectionEntry> entries,
   ) {
@@ -251,25 +195,19 @@ class ConnectionsService {
     );
   }
 
-  // Один keep-alive клиент на все опросы: экран обновляется каждые 2 секунды, и
-  // новый HttpClient на каждый снимок — это сокет + закрытие на каждый тик.
   static HttpClient? _httpClient;
 
   static HttpClient get _http => _httpClient ??= HttpClient()
     ..connectionTimeout = const Duration(seconds: 2)
     ..idleTimeout = const Duration(seconds: 15);
 
-  /// Порт clash_api живёт одну сессию ядра — на ошибке клиента не переиспользуем.
-  /// Поле обнуляем до закрытия — иначе рекурсия через catch рвущихся запросов
-  /// (см. DesktopTrafficStats.resetStatsHttp).
+  // поле обнуляем до закрытия, иначе рекурсия через catch рвущихся запросов
   static void _resetHttp() {
     final client = _httpClient;
     _httpClient = null;
     client?.close(force: true);
   }
 
-  /// Одна запись из ответа `GET /connections`. Формат общий для sing-box и
-  /// mihomo, различия — в комментариях по ходу.
   @visibleForTesting
   static ConnectionEntry? entryFromClashJson(Map<String, dynamic> json) {
     final meta = json['metadata'];
@@ -285,16 +223,9 @@ class ConnectionsService {
         ? (json['chains'] as List).map((e) => e.toString()).toList()
         : const <String>[];
 
-    // Одно поле, два формата. sing-box кладёт в `rule` готовую строку вида
-    // "<описание правила> => <действие>" (или "final" для catch-all), mihomo —
-    // только тип правила («GeoSite», «DomainSuffix», «Match»), а его значение
-    // отдельно, в `rulePayload`. Без склейки экран показывал бы «GeoSite» без
-    // единого намёка на то, какой именно список сработал.
     final ruleType = json['rule']?.toString().trim() ?? '';
     final rulePayload = json['rulePayload']?.toString().trim() ?? '';
     final rule = switch (ruleType.toLowerCase()) {
-      // Финальное правило у обоих ядер не несёт информации: под него попадает
-      // всё, что не поймали остальные.
       '' || 'final' || 'match' => '',
       _ => rulePayload.isEmpty ? ruleType : '$ruleType($rulePayload)',
     };
@@ -313,8 +244,7 @@ class ConnectionsService {
           : '${str('sourceIP')}:${str('sourcePort')}',
       process: str('processPath'),
       inbound: str('type'),
-      // chains приходит от внешнего аутбаунда к внутреннему; для «куда ушло»
-      // нужен первый — им и помечаем прокси/директ/блок.
+      // chains идут от внешнего аутбаунда к внутреннему, нужен первый
       outbound: chains.isEmpty ? '' : chains.first,
       rule: rule,
       startedAt: DateTime.tryParse(json['start']?.toString() ?? '')?.toLocal(),
@@ -322,8 +252,6 @@ class ConnectionsService {
       download: (json['download'] as num?)?.toInt(),
     );
   }
-
-  // ── Android: access-лог xray ──────────────────────────────────────────────
 
   static Future<ConnectionsSnapshot> _fromAccessLog() async {
     final text = await DebugLogService.getXrayLogs(maxLines: _androidLogLines);
@@ -339,16 +267,6 @@ class ConnectionsService {
     return _withAndroidAppNamesFromSource(snapshot);
   }
 
-  /// Исходный сокет приложения приезжает прямо в записи: туннель читает само
-  /// ядро, поэтому источником в его логе (и в ответе API у mihomo) стоит адрес
-  /// приложения на TUN, а не наш собственный сокет со стороны SOCKS.
-  ///
-  /// Имена благодаря этому находятся всегда — раньше на xray-пути они зависели
-  /// от дебаг-режима, потому что читались из чужого лога. Поле `process` у
-  /// ядра при этом по-прежнему пустое (`find-process-mode: off`):
-  /// непривилегированному процессу Android не отдаёт ни netlink INET_DIAG, ни
-  /// `/proc/net/*` чужих uid — спрашивать систему может только
-  /// приложение-владелец туннеля. Им и спрашиваем.
   static Future<ConnectionsSnapshot> _withAndroidAppNamesFromSource(
     ConnectionsSnapshot snapshot,
   ) async =>
@@ -358,7 +276,6 @@ class ConnectionsService {
         cache: _appNames,
       );
 
-  /// Обогащение по исходному сокету из самой записи.
   @visibleForTesting
   static Future<ConnectionsSnapshot> withAppNamesFromSource(
     ConnectionsSnapshot snapshot, {
@@ -368,9 +285,6 @@ class ConnectionsService {
     final entries = [...snapshot.entries];
     final indexes = <int>[];
     final requests = <Map<String, Object?>>[];
-    // Хоть одно имя нашлось в кэше — значит спрашивать не о чем не потому, что
-    // спросить нечем. Разница видна на второй же секунде: экран опрашивается по
-    // таймеру, и когда все имена уже в кэше, вопросов к системе нет вовсе.
     var fromCache = false;
     for (var i = 0; i < entries.length; i++) {
       final entry = entries[i];
@@ -380,11 +294,9 @@ class ConnectionsService {
         fromCache = true;
         continue;
       }
-      // Закрытые не спрашиваем: система ищет владельца в живой таблице сокетов.
       if (entry.closed) continue;
       final source = _splitHostPort(entry.source);
       if (source == null) continue;
-      // Спрашиваем по IP: host к этому моменту мог смениться на домен.
       final ip = entry.destIp.isNotEmpty ? entry.destIp : entry.host;
       if (ip.isEmpty) continue;
       indexes.add(i);
@@ -423,7 +335,6 @@ class ConnectionsService {
     );
   }
 
-  /// `1.2.3.4:5678` → пара. Null — строка пустая или без порта.
   static ({String host, int port})? _splitHostPort(String value) {
     final colon = value.lastIndexOf(':');
     if (colon <= 0) return null;
@@ -432,7 +343,6 @@ class ConnectionsService {
     return (host: value.substring(0, colon), port: port);
   }
 
-  /// Копия снимка с пометкой, что владельцев определить нечем.
   static ConnectionsSnapshot _withoutAppNames(ConnectionsSnapshot s) =>
       ConnectionsSnapshot(
         entries: s.entries,
@@ -442,122 +352,70 @@ class ConnectionsService {
         appNamesAvailable: false,
       );
 
-  /// Найденные имена, чтобы не спрашивать систему об одном и том же каждые две
-  /// секунды: экран опрашивается по таймеру, а соединение живёт дольше.
   static final Map<String, String> _appNames = {};
   static const _appNamesLimit = 300;
 
 }
 
-/// Разбор лога xray в список соединений.
-///
-/// Интересны две строки, которые ядро пишет на каждое соединение:
-///
-///   from 127.0.0.1:53182 accepted tcp:www.google.com:443 [socks-in -> proxy]
-///   [Info] app/dispatcher: Hit route rule: [proxy-geosite] so taking detour
-///           [proxy] for [tcp:www.google.com:443]
-///
-/// Первая (access-лог) идёт всегда, вторая — только при уровне логов Info, и
-/// именно она несёт `ruleTag`. Связываем их по назначению: access-строка даёт
-/// источник и инбаунд, строка роутинга — правило.
 class XrayAccessLogParser {
   XrayAccessLogParser._();
 
-  /// `from <src> accepted tcp:host:443 [in -> out]`.
-  ///
-  /// Detour-разделитель у xray разный по смыслу: `->` правило сработало,
-  /// `>>` роутер не выбрал (дефолтный аутбаунд), `==>` тег навязан платформой.
+  // -> правило сработало, >> дефолтный аутбаунд, ==> тег навязан платформой
   static final _access = RegExp(
     r'from\s+(\S+)\s+(accepted|rejected)\s+([a-z0-9]+):(.+?):(\d+)'
     r'(?:\s+\[([^\]]*)\])?',
     caseSensitive: false,
   );
 
-  /// `Hit route rule: [tag] so taking detour [out] for [tcp:host:443]`
-  /// либо `taking detour [out] for [tcp:host:443]` без тега правила.
   static final _detour = RegExp(
     r'(?:Hit route rule:\s*\[([^\]]*)\]\s*so\s*)?taking detour\s*'
     r'\[([^\]]*)\]\s*for\s*\[([a-z0-9]+):(.+?):(\d+)\]',
     caseSensitive: false,
   );
 
-  /// `default route for tcp:host:443` — ни одно правило не совпало.
   static final _defaultRoute = RegExp(
     r'default route for\s+([a-z0-9]+):(.+?):(\d+)',
     caseSensitive: false,
   );
 
-  /// Штамп времени xray: `2026/08/05 12:34:56.789012`. Идёт в UTC: Go на
-  /// Android остаётся без базы часовых поясов.
   static final _timestamp = RegExp(
     r'(\d{4})/(\d{2})/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})',
   );
 
-  /// Префикс `08-09 22:43:40 `, который дописывает наш forkexec.c по
-  /// `localtime_r` — местное время устройства. Года в нём нет, берём из
-  /// штампа xray на той же строке.
   static final _deviceTimestamp = RegExp(
     r'^(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\s',
   );
 
-  /// `[Info] [3159036192] proxy/socks: …` — идентификатор сессии. Именно он
-  /// связывает строки одного соединения: у access-строки его нет, зато есть
-  /// адрес клиента, а у остальных наоборот.
   static final _sessionLine = RegExp(r'\[Info\]\s*\[(\d+)\]\s*(.+)$');
 
-  /// `proxy/socks: TCP Connect request to tcp:216.58.198.162:443` и
-  /// `transport/internet/udp: establishing new connection for udp:8.8.8.8:53`
-  /// — строки socks-инбаунда, где сессия названа вместе с настоящим адресом
-  /// назначения (до подмены доменом). У tun-инбаунда то же несёт [_sessionTun].
   static final _sessionDest = RegExp(
     r'(?:TCP Connect request to|establishing new connection for)\s+'
     r'([a-z0-9]+):(.+?):(\d+)\s*$',
     caseSensitive: false,
   );
 
-  /// `proxy/socks: client UDP connection from udp:127.0.0.1:36948` — адрес
-  /// клиента, тот же, что стоит в access-строке после `from`.
   static final _sessionClient = RegExp(
     r'client UDP connection from\s+(\S+)',
     caseSensitive: false,
   );
 
-  /// `proxy/tun: processing from tcp:172.19.0.1:40100 to tcp:142.250.74.46:443`
-  /// — строка tun-инбаунда, когда туннель читает само ядро. Клиент и настоящее
-  /// назначение в ней вместе, и access-строка находит свою сессию по клиенту,
-  /// то есть точно, для TCP так же, как для UDP. Строк socks-инбаунда в таком
-  /// логе нет вовсе: без этой домен и правило не находились ни у одного
-  /// соединения.
   static final _sessionTun = RegExp(
     r'processing from\s+(\S+)\s+to\s+([a-z0-9]+):(.+?):(\d+)\s*$',
     caseSensitive: false,
   );
 
-  /// `app/dispatcher: sniffed domain: googleads.g.doubleclick.net` — имя,
-  /// вынюханное из SNI. В access-строку оно не попадает никогда: её назначение
-  /// инбаунд записывает раньше, чем сниффер успевает прочитать поток.
+  // в access-строку SNI не попадает: инбаунд пишет назначение раньше сниффера
   static final _sessionSniffed = RegExp(
     r'sniffed domain:\s*(\S+)',
     caseSensitive: false,
   );
 
-  /// `app/proxyman/inbound: connection ends > …` — соединение закрылось.
-  /// Хвост строки это причина закрытия, она не нужна; важен сам факт и
-  /// идентификатор сессии перед ним.
   static final _sessionEnded = RegExp(
     r'connection ends',
     caseSensitive: false,
   );
 
-  /// Решения роутинга по назначению: `network:host:port` → правило и аутбаунд.
-  ///
-  /// Ядро печатает их на каждое соединение (уровень логов Info) и в том числе
-  /// когда работает как встроенный движок без своих инбаундов — тогда это
-  /// вообще единственный источник настоящего вердикта: clash_api sing-box'а
-  /// видит только «отдал движку».
   static Map<String, XrayRouteDecision> parseRouteDecisions(String log) {
-    // Последняя запись выигрывает: соединений к одному хосту много, а правило
-    // для них одно и то же.
     final byTarget = <String, XrayRouteDecision>{};
     for (final line in log.split('\n')) {
       final detour = _detour.firstMatch(line);
@@ -577,8 +435,6 @@ class XrayAccessLogParser {
           fallback.group(2),
           fallback.group(3),
         );
-        // Аутбаунд ядро в этой строке не называет — только «ни одно правило
-        // не совпало»; тег аутбаунда, если он был известен, не затираем.
         byTarget[target] = XrayRouteDecision(
           rule: _defaultRouteMarker,
           outbound: byTarget[target]?.outbound ?? '',
@@ -588,11 +444,6 @@ class XrayAccessLogParser {
     return byTarget;
   }
 
-  /// Строки одного соединения, собранные по идентификатору сессии.
-  ///
-  /// Ядро разносит сведения о соединении по нескольким строкам, и склеить их
-  /// по адресу назначения нельзя: после сниффинга маршрутизация оперирует уже
-  /// доменом, а access-строка так и осталась с IP.
   static Map<String, XraySessionTrace> parseSessions(String log) {
     final sessions = <String, XraySessionTrace>{};
     for (final raw in log.split('\n')) {
@@ -653,13 +504,7 @@ class XrayAccessLogParser {
         if (e.value.outbound.isNotEmpty) e.key: e.value.outbound,
     };
 
-    // Два способа найти сессию по access-строке. Адрес клиента точен (он у
-    // каждого соединения свой), но ядро называет его только для UDP; для TCP
-    // остаётся адрес назначения, а к одному IP:порту соединений бывает много.
-    // Поэтому сессии одного назначения храним списком в порядке лога и
-    // раздаём по одной: k-я access-строка получает k-ю сессию. «Выигрывает
-    // последняя» вешало закрытие последнего соединения на все остальные — живое
-    // соединение к тому же хосту выглядело закрытым.
+    // k-я access-строка получает k-ю сессию: при выигрыше последней закрытие одного соединения вешалось на все
     final sessions = parseSessions(log);
     final byClient = <String, XraySessionTrace>{};
     final byDest = <String, List<XraySessionTrace>>{};
@@ -669,12 +514,10 @@ class XrayAccessLogParser {
         byDest.putIfAbsent(trace.destKey, () => []).add(trace);
       }
     }
-    // Сколько сессий этого назначения уже разобрано.
     final destCursor = <String, int>{};
 
     final lines = log.split('\n');
 
-    // Соединения: по одному на пару источник→назначение, новые сверху.
     final entries = <String, ConnectionEntry>{};
     for (final line in lines) {
       final m = _access.firstMatch(line);
@@ -693,8 +536,6 @@ class XrayAccessLogParser {
       final trace = byClient[source.toLowerCase()] ??
           _nextTraceForDest(byDest[target], target, destCursor);
 
-      // Домен — в заголовок, IP уезжает строкой ниже: по одному IP гугла
-      // ходит десяток разных сервисов, и понять по нему ничего нельзя.
       final domain = trace?.domain ?? '';
       final id = '$source>$network:$host:$port';
       entries[id] = ConnectionEntry(
@@ -719,8 +560,6 @@ class XrayAccessLogParser {
       );
     }
 
-    // Живое наверх, закрытое вниз — внутри групп порядок прежний, свежие
-    // первыми. Лог помнит и вчерашнее, и без этого оно перемешано с текущим.
     final seen = entries.values.toList().reversed;
     final list = [
       ...seen.where((e) => !e.closed),
@@ -729,16 +568,10 @@ class XrayAccessLogParser {
     return ConnectionsSnapshot(
       entries: list,
       source: ConnectionsSource.coreLog,
-      // Строк роутинга нет — значит уровень логов ниже Info, и правило ядро
-      // просто не печатает. Экран должен предложить это исправить, а не молчать.
       ruleInfoAvailable: sawRoutingLines,
     );
   }
 
-  /// Очередная сессия этого назначения: соединений к одному адресу много, и
-  /// каждой access-строке достаётся своя. Когда сессий меньше, чем строк
-  /// (часть уехала из хвоста лога), остаток делит последнюю — правило и домен у
-  /// них общие, а вот закрытие лучше не приписывать чужому соединению.
   static XraySessionTrace? _nextTraceForDest(
     List<XraySessionTrace>? traces,
     String target,
@@ -749,33 +582,23 @@ class XrayAccessLogParser {
     return index < traces.length ? traces[index] : traces.last;
   }
 
-  /// Маркер «правило не совпало, сработало финальное действие».
   static const _defaultRouteMarker = '*';
 
-  /// Ключ решения для одного назначения — как его строит [parseRouteDecisions].
   static String targetKeyFor(String network, String host, int port) =>
       _targetKey(network, host, '$port');
 
-  /// Тег нашего catch-all правила в сгенерированном конфиге, см. config_gen.
-  /// Ядро печатает его как обычное правило, но по смыслу это «не совпало
-  /// ничего, сработало финальное действие».
   static const _finalRuleTag = 'final';
 
-  /// true — правило в записи означает «сработал catch-all».
   static bool isDefaultRoute(String rule) =>
       rule == _defaultRouteMarker || rule == _finalRuleTag;
 
   static String _targetKey(String? network, String? host, String? port) =>
       '${network?.toLowerCase()}:${host?.trim().toLowerCase()}:$port';
 
-  /// `tcp:172.19.0.1:40100` → `172.19.0.1:40100`. Сеть xray приписывает к
-  /// адресу клиента сам (`net.Destination.String`), а система ищет владельца
-  /// соединения по голому адресу: с приставкой имя приложения не находилось
-  /// никогда, хотя сокет жив и туннель наш.
+  // приставку сети xray дописывает сам, а система ищет владельца по голому адресу
   static String _plainAddress(String address) =>
       address.replaceFirst(RegExp(r'^(tcp|udp):', caseSensitive: false), '');
 
-  /// `socks-in -> proxy` / `socks-in >> proxy` / `proxy` (без инбаунда).
   static (String inbound, String outbound) _splitDetour(String raw) {
     if (raw.isEmpty) return ('', '');
     for (final sep in const [' ==> ', ' -> ', ' >> ']) {
@@ -792,9 +615,7 @@ class XrayAccessLogParser {
 
   static DateTime? _parseTimestamp(String line) {
     final xray = _timestamp.firstMatch(line);
-    // Штамп xray — UTC, и показывать его как есть значит врать на часовой
-    // пояс. Префикс от forkexec.c уже в местном времени, берём его, а год —
-    // из штампа рядом, в префиксе года нет.
+    // штамп xray в UTC, префикс от forkexec.c в местном времени, год берём из штампа
     final device = _deviceTimestamp.firstMatch(line);
     try {
       if (device != null) {
@@ -822,37 +643,24 @@ class XrayAccessLogParser {
   }
 }
 
-/// Собранные по идентификатору сессии сведения об одном соединении.
 class XraySessionTrace {
-  /// `network:ip:port` назначения, как его увидел инбаунд — до подмены
-  /// вынюханным доменом.
   String destKey = '';
 
-  /// Адрес клиента (`udp:127.0.0.1:36948`) — им access-строка и сессия
-  /// связываются точно, один к одному. Socks-инбаунд называет его только для
-  /// UDP, tun-инбаунд — всегда.
   String clientKey = '';
 
-  /// Домен из SNI/HTTP Host, если сниффер его достал.
   String domain = '';
 
-  /// Тег сработавшего правила и выбранный аутбаунд.
   String rule = '';
   String outbound = '';
 
-  /// Ядро сообщило о закрытии соединения.
   bool closed = false;
 }
 
 
-/// Решение роутинга ядра для одного назначения.
 class XrayRouteDecision {
   const XrayRouteDecision({required this.rule, required this.outbound});
 
-  /// Тег правила (`ruleTag`), `*` — сработал catch-all, пусто — правило есть,
-  /// но без тега.
   final String rule;
 
-  /// Куда ядро отправило соединение: `proxy` / `direct` / `block`.
   final String outbound;
 }

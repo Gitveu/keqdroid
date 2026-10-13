@@ -18,15 +18,9 @@ import '../utils/mihomo_api_session.dart';
 import 'geo_asset_service.dart';
 import 'windows_desktop_service.dart';
 
-/// Собирает данные для панели «Внутренности».
-///
-/// Версии ядер берутся из самих бинарей ([GoBuildInfo]), а не из зашитых в код
-/// констант: константы врут ровно в тот момент, когда ядро обновили, а строчку
-/// поправить забыли, — а именно в этот момент версия и нужна.
 class AppInternalsService {
   AppInternalsService._();
 
-  /// Как называются движки внутри ядра — в порядке показа.
   static const _engineModules = <String, String>{
     'xtls/xray-core': 'xray-core',
     'sagernet/sing-box': 'sing-box',
@@ -46,7 +40,6 @@ class AppInternalsService {
     );
   }
 
-  /// Прошлые смерти процесса без остальной панели — их показывает и журнал.
   static Future<List<ProcessExit>> processExits() async =>
       _processExits(await VpnNativeBridge.getNativeInternals());
 
@@ -60,18 +53,10 @@ class AppInternalsService {
     ];
   }
 
-  // ── Ядра ────────────────────────────────────────────────────────────────
-
   static Future<List<CoreInfo>>? _coresCache;
 
-  /// Только для тестов: сбросить кэш.
   static void resetCacheForTests() => _coresCache = null;
 
-  /// Разбор ядра — это поиск метки в бинаре на десятки мегабайт (у libxray она
-  /// лежит под самый конец 39 МБ). Файлы едут в сборке и в рантайме не
-  /// меняются, поэтому читаем их один раз на процесс — как [GeoAssetService]
-  /// делает с geo-базами. Пересборка панели (подключились/отключились) после
-  /// этого бесплатна.
   static Future<List<CoreInfo>> _cachedCores(Map<String, Object?> android) =>
       _coresCache ??= _cores(android);
 
@@ -80,12 +65,6 @@ class AppInternalsService {
       final dir = android['nativeLibraryDir'] as String?;
       if (dir == null || dir.isEmpty) return const [];
       return [
-        // На Android движок всегда chain: ядро владеет и протоколами, и
-        // самим TUN-устройством. keqrnel сюда не поставляется.
-        //
-        // Прокси-ядер два, и они взаимозаменяемы: какое из них исполняет
-        // сервер, выбирает пользователь прямо на этом экране
-        // (AppSettings.vpnCore).
         await _core(p.join(dir, 'libxray.so'), 'libxray.so', CoreRole.proxy),
         await _core(p.join(dir, 'libmihomo.so'), 'libmihomo.so', CoreRole.proxy),
       ];
@@ -94,8 +73,6 @@ class AppInternalsService {
       return [
         await _core(await WindowsCorePaths.keqrnelExecutable(), 'keqrnel.exe',
             CoreRole.core),
-        // mihomo — второе ядро, а не довесок: в TUN-режиме оно владеет
-        // адаптером само, и keqrnel в такой сессии не участвует вовсе.
         await _core(await WindowsCorePaths.mihomoExecutable(), 'mihomo.exe',
             CoreRole.core),
       ];
@@ -130,18 +107,12 @@ class AppInternalsService {
     );
   }
 
-  /// Дата правки файла, если она вообще что-то значит.
-  ///
-  /// У библиотек внутри APK её нет: zip-записи несут эпоху формата, и Android
-  /// отдаёт `1981-01-01` для всех ядер разом. Показывать такое — врать с
-  /// точностью до дня; лучше не показывать ничего.
+  // у библиотек внутри APK дата из zip-записи, Android отдаёт 1981-01-01 для всех
   static DateTime? meaningfulDate(DateTime? date) {
     if (date == null) return null;
     return date.year < 2000 ? null : date;
   }
 
-  /// Движки внутри ядра. Себя ядро в список не включает: у libxray модуль и
-  /// есть xray-core, и строка «xray-core внутри xray-core» пользы не несёт.
   static Map<String, String> _engines(GoBuildInfo info) {
     final engines = <String, String>{};
     for (final entry in _engineModules.entries) {
@@ -154,12 +125,6 @@ class AppInternalsService {
     return engines;
   }
 
-  /// Версия модуля в человеческом виде.
-  ///
-  /// `(devel)` — бинарь собран из рабочего дерева, версии у него нет вовсе
-  /// (так собирается keqrnel), возвращаем null. Псевдоверсию Go
-  /// (`v1.260327.1-0.20260728075948-5ca6f4b7d4dc`) ужимаем до версии и
-  /// короткого коммита: полная строка занимает две трети экрана телефона.
   static String? formatVersion(String? raw) {
     final value = raw?.trim();
     if (value == null || value.isEmpty || value == '(devel)') return null;
@@ -170,8 +135,6 @@ class AppInternalsService {
 
   static final _pseudoVersion =
       RegExp(r'^(.*?)-(?:[\w.]+\.)?(\d{14})-([0-9a-f]{12})$');
-
-  // ── Geo-базы ────────────────────────────────────────────────────────────
 
   static Future<List<GeoBaseInfo>> _geoBases() async {
     final dir = await GeoAssetService.geoDir();
@@ -206,8 +169,6 @@ class AppInternalsService {
     );
   }
 
-  // ── Сессия ──────────────────────────────────────────────────────────────
-
   static Future<SessionInfo> _session(
     AppSettings settings,
     VpnState? state,
@@ -215,9 +176,6 @@ class AppInternalsService {
   ) async {
     return SessionInfo(
       status: state?.status ?? VpnStatus.disconnected,
-      // Движок берём у сессии, а не из настройки: ядро выбирают на ходу, и
-      // после переключения панель показывала бы новый выбор поверх туннеля,
-      // который всё ещё исполняет старое ядро.
       engine: Platform.isAndroid
           ? _androidCoreBinary(android)
           : _desktopEngine(settings),
@@ -231,8 +189,6 @@ class AppInternalsService {
           : null,
       clashApiPort: Platform.isWindows
           ? WindowsTunnelBackend.activeInstance?.clashApiPort
-          // На Android API поднимает mihomo — у xray его нет вовсе, и там
-          // строка честно отсутствует, а не показывает чужой порт.
           : Platform.isAndroid
               ? MihomoApiSession().port
               : Platform.isLinux
@@ -241,11 +197,6 @@ class AppInternalsService {
     );
   }
 
-  /// Чем идёт текущая десктопная сессия.
-  ///
-  /// `settings.coreEngine` описывает только связку вокруг xray и про mihomo не
-  /// знает: при живой mihomo-сессии панель показывала бы `keqrnel`, которого в
-  /// ней нет. Спрашиваем поэтому у самой сессии — как и на Android.
   static String _desktopEngine(AppSettings settings) {
     final pids = Platform.isWindows
         ? WindowsTunnelBackend.activeInstance?.activeCorePids
@@ -256,12 +207,6 @@ class AppInternalsService {
     return settings.coreEngine;
   }
 
-  /// Имя бинаря, которым идёт текущая android-сессия.
-  ///
-  /// Оба прокси-ядра запускаются одним и тем же путём и держат один и тот же
-  /// pid-слот в сервисе, поэтому отличить их можно только по тому, что сервис
-  /// сам записал при старте. Пусто (сессии не было) — libxray: это ядро по
-  /// умолчанию.
   static String _androidCoreBinary(Map<String, Object?> android) =>
       android['coreKind'] == 'mihomo' ? 'libmihomo' : 'libxray';
 
@@ -281,8 +226,6 @@ class AppInternalsService {
     return const {};
   }
 
-  // ── Приложение и устройство ─────────────────────────────────────────────
-
   static Future<BuildInfo> _build(Map<String, Object?> android) async {
     String version = '—';
     String buildNumber = '—';
@@ -292,9 +235,7 @@ class AppInternalsService {
       version = info.version;
       buildNumber = info.buildNumber;
       packageName = info.packageName;
-    } catch (_) {
-      // На тестовом биндинге плагина нет — панель обойдётся прочерками.
-    }
+    } catch (_) {}
     return BuildInfo(
       appVersion: version,
       buildNumber: buildNumber,
@@ -320,16 +261,7 @@ class AppInternalsService {
     return Platform.operatingSystemVersion;
   }
 
-  /// Читаемое имя версии Windows.
-  ///
-  /// Сама Windows о себе врёт: у одиннадцатой в реестре по-прежнему записано
-  /// «Windows 10 Pro», и `Platform.operatingSystemVersion` отдаёт это как есть
-  /// — в панели на Windows 11 стояла десятка. Отличает их только номер сборки:
-  /// с 22000 начинается 11. Серверные редакции не трогаем: у них своя нумерация
-  /// имён (2019, 2022, 2025), и «11» там было бы новой ложью.
-  ///
-  /// Заодно уходят кавычки вокруг имени и «10.0» перед сборкой: номер сборки
-  /// говорит то же самое точнее.
+  // реестр Windows 11 по-прежнему пишет Windows 10, отличает только сборка с 22000
   static String prettyWindowsVersion(String raw) {
     final quoted = RegExp(r'"([^"]+)"').firstMatch(raw);
     if (quoted == null) return raw;
@@ -349,24 +281,17 @@ class AppInternalsService {
   }
 
   static String _abi(Map<String, Object?> android) {
-    // На Android берём первую поддерживаемую ABI устройства: она точнее, чем
-    // Abi.current() — показывает, в каком варианте установлен сам APK.
     final abis = (android['abis'] as List?)?.cast<Object?>();
     if (abis != null && abis.isNotEmpty) return abis.first.toString();
     return Abi.current().toString();
   }
 
-  /// Только номер версии Dart: `Platform.version` — это ещё и дата сборки SDK
-  /// с хешем, целиком в строку панели оно не влезает.
   static String dartVersion(String platformVersion) {
     final space = platformVersion.indexOf(' ');
     return space > 0 ? platformVersion.substring(0, space) : platformVersion;
   }
 
-  /// Отчёт для буфера обмена — то, что уходит в чат поддержки.
-  ///
-  /// Намеренно не локализован: адресат такого текста читает его как техданные,
-  /// и «Версия приложения» на фарси помогает ему меньше, чем `app`.
+  // не локализован намеренно: отчёт читают как техданные
   static String report(AppInternals data) {
     final out = StringBuffer()
       ..writeln('# keqdroid internals')
@@ -420,8 +345,6 @@ class AppInternalsService {
       out.writeln('pid ${pid.key}: ${pid.value}');
     }
 
-    // Ради этой секции отчёт и просят после «туннель умер в фоне»: кто убил
-    // процесс и был ли в тот момент включён VPN.
     if (data.processExits.isNotEmpty) {
       out
         ..writeln()
@@ -431,7 +354,6 @@ class AppInternalsService {
     return out.toString();
   }
 
-  /// Смерти процесса по строке на каждую — для отчёта и для журнала.
   static String exitLines(List<ProcessExit> exits) {
     final out = StringBuffer();
     for (final exit in exits) {
@@ -444,8 +366,6 @@ class AppInternalsService {
     return out.toString();
   }
 
-  /// Местное время до секунды, без зоны: отчёт читают рядом с логом ядра,
-  /// а там время того же вида.
   static String _reportTime(DateTime time) {
     final t = time.toLocal();
     String two(int v) => v.toString().padLeft(2, '0');

@@ -1,21 +1,9 @@
 import '../models/app_settings.dart';
 import 'geo_asset_index.dart';
 
-/// Результат чистки: настройки для генераторов конфига и то, что выкинули.
 typedef GeoSanitizeResult = ({AppSettings settings, List<String> dropped});
 
-/// Убирает из списков маршрутизации `geoip:`/`geosite:` токены, которых нет в
-/// поставляемых базах.
-///
-/// Один такой токен (`geosite:sberbank`, `geoip:telegram` — их нет в сборке
-/// v2fly) роняет весь конфиг xray на разборе: ядро выходит сразу, SOCKS-инбаунд
-/// не поднимается, и пользователь видит «Xray SOCKS5 port 2080 not ready» без
-/// намёка на настоящую причину. Одна опечатка в списке не должна лишать связи,
-/// поэтому неизвестное правило просто не доезжает до ядра.
-///
-/// Результат уходит только в генераторы конфига — сохранённые настройки не
-/// трогаем, иначе правило молча исчезло бы из UI (а с другой geo-базой оно
-/// может быть вполне рабочим).
+// только для генераторов: сохранённые настройки не трогаем, с другой базой правило может работать
 GeoSanitizeResult stripUnknownGeoTokens(
   AppSettings settings,
   GeoAssetIndex index,
@@ -37,8 +25,6 @@ GeoSanitizeResult stripUnknownGeoTokens(
   );
 }
 
-/// То же, что [stripUnknownGeoTokens], для одного текста записей — у маршрутов
-/// на другие серверы списки свои, не в полях настроек.
 ({String text, List<String> dropped}) stripUnknownGeoTokensText(
   String raw,
   GeoAssetIndex index,
@@ -55,12 +41,6 @@ GeoSanitizeResult stripUnknownGeoTokens(
   return (text: kept.join(', '), dropped: dropped);
 }
 
-/// geo-токены из текстового списка правил, которых нет в поставляемых базах.
-///
-/// Тот же критерий, по которому [stripUnknownGeoTokens] выкидывает правило перед
-/// стартом ядра — но для UI: пользователь должен видеть, что `geoip:telegram`
-/// (в v2fly его нет) не сработает, а не гадать, почему «ТГ не учитывается».
-/// Порядок сохраняем, дубликаты убираем.
 List<String> unknownGeoTokens(String raw, GeoAssetIndex index) {
   if (index.isEmpty) return const [];
   final seen = <String>{};
@@ -74,9 +54,6 @@ List<String> unknownGeoTokens(String raw, GeoAssetIndex index) {
   return unknown;
 }
 
-/// true для всего, что не `geoip:`/`geosite:`, и для тех кодов, которые есть в
-/// базе. Понимает синтаксис xray: отрицание (`geoip:!ru`) и атрибут
-/// (`geosite:google@ads`) — проверяем сам код.
 bool isKnownGeoToken(String token, GeoAssetIndex index) {
   final lower = token.trim().toLowerCase();
   final isGeoip = lower.startsWith('geoip:');
@@ -90,7 +67,7 @@ bool isKnownGeoToken(String token, GeoAssetIndex index) {
   if (code.isEmpty) return false;
 
   final known = isGeoip ? index.geoipCodes : index.geositeCodes;
-  // База не прочиталась — не нам решать, что этот код неверный.
+  // база не прочиталась, не нам решать, что код неверный
   if (known.isEmpty) return true;
   return known.contains(code);
 }

@@ -6,23 +6,13 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/app_logger.dart';
 
-/// Запускает настройщик; null — такой программы в системе нет.
 typedef SettingsTool = Future<ProcessResult?> Function(
   String executable,
   List<String> args,
 );
 
-/// Системный прокси на Linux.
-///
-/// Настройки GNOME пишутся в любой среде: их читают Firefox (на каждом запросе,
-/// nsUnixSystemProxySettings) и GTK-программы где угодно, а Chromium — в
-/// GNOME-семействе. Настройки KDE — только в сессии KDE. Так же делает Throne.
-/// В XFCE, LXQt, Hyprland, Sway и i3 общего хранилища нет вовсе: Chromium там
-/// берёт прокси из переменных окружения при своём запуске
-/// (proxy_config_service_linux.cc), и снаружи до него не дотянуться.
-///
-/// Чужой прокси не затираем. Перед включением то, что стояло, ложится в файл,
-/// выключение возвращает его, а запуск после падения доделывает возврат.
+// настройки GNOME читают Firefox и GTK в любой среде, KDE только в своей сессии,
+// а в XFCE, Hyprland и подобных Chromium берёт прокси из окружения при запуске
 class LinuxSystemProxy {
   LinuxSystemProxy({
     required this.run,
@@ -30,7 +20,6 @@ class LinuxSystemProxy {
     required this.desktop,
   });
 
-  /// Для приложения: настоящие программы и файл рядом с настройками.
   static Future<LinuxSystemProxy> system() async {
     final dir = await getApplicationSupportDirectory();
     return LinuxSystemProxy(
@@ -43,13 +32,11 @@ class LinuxSystemProxy {
   final SettingsTool run;
   final File backupFile;
 
-  /// `XDG_CURRENT_DESKTOP`: список через двоеточие (`KDE`, `ubuntu:GNOME`).
   final String desktop;
 
   static const _host = '127.0.0.1';
 
-  /// По этому списку исключений прокси, оставленный упавшей версией без
-  /// файла-снимка, узнаётся как наш: руками такой ровно никто не пишет.
+  // по этому списку исключений узнаётся наш прокси от упавшей версии без снимка
   static const _ignoreHosts = "['localhost', '127.0.0.0/8', '::1']";
 
   static const _gnomeKeys = [
@@ -73,11 +60,8 @@ class LinuxSystemProxy {
 
   bool get _isKde => desktop.split(':').contains('KDE');
 
-  /// true — хоть одна среда приняла настройки.
   Future<bool> enable({required int httpPort, required int socksPort}) async {
-    // Снимок до первого изменения. Уже лежащий снимок — от прошлой сессии,
-    // которую не выключили (падение): в нём настоящие пользовательские
-    // настройки, а сейчас в системе наши — их запоминать нельзя.
+    // снимок уже лежит, значит прошлая сессия упала: в нём настоящие настройки, текущие наши
     if (!backupFile.existsSync()) {
       final gnome = await _readGnome();
       final kde = _isKde ? await _readKde() : null;
@@ -101,8 +85,7 @@ class LinuxSystemProxy {
     }
 
     if (_isKde) {
-      // Хост и порт через пробел — так пишет сама KDE, Chromium читает оба
-      // вида.
+      // хост и порт через пробел, как пишет сама KDE
       final kdeApplied = await _writeKde({
         'httpProxy': 'http://$_host $httpPort',
         'httpsProxy': 'http://$_host $httpPort',
@@ -115,8 +98,6 @@ class LinuxSystemProxy {
     return applied;
   }
 
-  /// Возвращает то, что стояло до [enable]. Без снимка трогает только прокси,
-  /// узнанный как наш, — от версий, которые снимков не делали.
   Future<void> disable() async {
     final backup = _readBackup();
     if (backup == null) {
@@ -166,7 +147,6 @@ class LinuxSystemProxy {
     }
   }
 
-  /// Пока сессия шла, человек мог поставить прокси сам — тогда он его.
   Future<bool> _gnomeStillOurs() async =>
       await _gsettingsGet('org.gnome.system.proxy', 'mode') == "'manual'" &&
       await _gsettingsGet('org.gnome.system.proxy.http', 'host') == "'$_host'";
@@ -214,7 +194,6 @@ class LinuxSystemProxy {
     return null;
   }
 
-  /// Пустое значение — ключа не было: удаляем, а не пишем пустую строку.
   Future<bool> _writeKde(Map<String, String> values) async {
     for (final tool in ['kwriteconfig6', 'kwriteconfig5']) {
       var ok = true;
@@ -231,8 +210,7 @@ class LinuxSystemProxy {
         ok = ok && r.exitCode == 0;
       }
       if (!found) continue;
-      // Без этого сигнала KIO-программы перечитают настройки только при
-      // перезапуске; Chromium и так следит за файлом.
+      // без сигнала KIO-программы перечитают настройки только после перезапуска
       await run('dbus-send', [
         '--type=signal',
         '/KIO/Scheduler',

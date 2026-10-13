@@ -2,14 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
 
-/// Карточка с цветной полоской по левому краю — ей помечают исход/категорию
-/// строки списка (например вердикт роутинга на экране «Соединения»).
-///
-/// Полоска здесь именно ребёнок, а не левая сторона рамки, и это принципиально:
-/// `BoxDecoration` с `Border`, у которого стороны разного цвета, и одновременно
-/// с `borderRadius` во Flutter не рисуется — `Border.paint` бросает прямо в
-/// paint-фазе. Исключение ловится на уровне render object'а, поэтому приложение
-/// не падает: молча пропадает содержимое карточки, а список выглядит пустым.
+// полоска ребёнком: Border с разными цветами сторон и borderRadius бросает в paint,
+// и карточка молча пропадает
 class AccentEdgeCard extends StatelessWidget {
   const AccentEdgeCard({
     super.key,
@@ -20,7 +14,6 @@ class AccentEdgeCard extends StatelessWidget {
     this.edgeWidth = 3,
   });
 
-  /// Цвет полоски-маркера.
   final Color edgeColor;
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -36,10 +29,7 @@ class AccentEdgeCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(color: AppTheme.divider(context)),
       ),
-      // Stack, а не Row со stretch: карточка живёт в ListView, где высота
-      // приходит неограниченной, а stretch раздаёт детям tightFor(maxHeight) —
-      // то есть бесконечную высоту. Здесь размер задаёт непозиционированный
-      // ребёнок, а полоска просто растягивается по нему.
+      // Stack: в ListView высота не ограничена, и Row со stretch получил бы бесконечность
       child: Stack(
         children: [
           Padding(

@@ -1,16 +1,5 @@
 part of '../subscriptions_tab.dart';
 
-/// Редактор оформления карточки подписки.
-///
-/// Отдельная шторка, а не ещё один блок в редакторе подписки: там правят, что
-/// за подписка (имя, адрес, чем клиент представляется панели), здесь — как она
-/// выглядит. Смешанные в одной форме, эти две вещи давали шторку, где половина
-/// полей про сеть, а половина про картинки.
-///
-/// Правки применяются сразу и без кнопки «Сохранить»: оформление оценивают
-/// глазами на самой карточке, а не подтверждают. Отсюда же и `ConsumerWidget` с
-/// `watch` — шторка показывает то же состояние, что уже уехало в хранилище, а
-/// не свою локальную копию, которая разошлась бы с карточкой под ней.
 Future<void> _showCardLookSheet(BuildContext context, Subscription sub) {
   return showModalBottomSheet<void>(
     context: context,
@@ -20,8 +9,7 @@ Future<void> _showCardLookSheet(BuildContext context, Subscription sub) {
   );
 }
 
-/// Подписка по id из провайдера. Fallback нужен на один кадр после удаления:
-/// шторка ещё жива, а записи уже нет.
+// на кадр после удаления шторка ещё жива, а записи уже нет
 Subscription _subscriptionOr(WidgetRef ref, String id, Subscription fallback) {
   final list = ref.watch(subscriptionsProvider).value;
   if (list == null) return fallback;
@@ -74,9 +62,6 @@ class _CardLookSheet extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Образец не уезжает вместе с содержимым: переключатели состава
-            // стоят в самом низу списка, и прокрученный вместе с ними образец
-            // показывал бы результат тогда, когда его уже не видно.
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
               child: Column(
@@ -115,10 +100,6 @@ class _CardLookSheet extends ConsumerWidget {
               if (cardTheme.hasImage) ...[
                 const SizedBox(height: 16),
                 _SheetSectionTitle(l10n.subscriptionCardVeilTitle),
-                // Выбор одного из взаимоисключающих вариантов — это связанная
-                // группа кнопок, а не набор чипов. `ChoiceChip` в M3 живёт для
-                // фильтров, где выбранных может быть несколько, и выбранный там
-                // помечается галочкой — она же съедала ширину у подписи.
                 ExpressiveConnectedButtons<CardVeil>(
                   segments: [
                     for (final veil in CardVeil.values)
@@ -133,8 +114,6 @@ class _CardLookSheet extends ConsumerWidget {
               ],
               const SizedBox(height: 16),
               _SheetSectionTitle(l10n.subscriptionCardContentTitle),
-              // Пресет — набор целиком, снимать его нечем; поэтому здесь
-              // группа с одним выбранным, а не чипы с галочкой.
               ExpressiveConnectedButtons<SubscriptionCardPreset>(
                 segments: [
                   for (final preset in SubscriptionCardPreset.selectable)
@@ -169,9 +148,6 @@ class _CardLookSheet extends ConsumerWidget {
               const SizedBox(height: 4),
               _SheetHint(l10n.subscriptionCardContentHint),
               const SizedBox(height: 16),
-              // Не элемент карточки, а элемент списка серверов — поэтому ниже
-              // пресетов и со своей подписью: пресет «минимальная карточка»
-              // про эту плашку ничего не знает и знать не должен.
               SwitchListTile(
                 contentPadding: const EdgeInsets.only(left: 4, right: 0),
                 dense: true,
@@ -198,19 +174,7 @@ class _CardLookSheet extends ConsumerWidget {
   }
 }
 
-/// Образец — настоящая карточка подписки, а не её изображение.
-///
-/// Нарисованный отдельно образец отвечает только на заложенные в него вопросы:
-/// первая версия показывала подложку с двумя строками и на «выключил трафик —
-/// что изменится?» не отвечала никак. Дорисовывать по блоку на каждую настройку
-/// значит завести вторую вёрстку карточки, которая разойдётся с первой на
-/// ближайшей правке.
-///
-/// Поэтому строится тот же [_SubItem] с той же подпиской. Отсюда три обёртки:
-/// [IgnorePointer] — образец показывает, а не работает; [ExcludeSemantics] —
-/// иначе скринридер читает карточку дважды; своя [ProviderScope] — карточка в
-/// списке может быть свёрнута, а свёрнутая прячет то, что здесь и
-/// переключают.
+// своя ProviderScope: в списке карточка может быть свёрнута и прятать то, что тут переключают
 class _CardPreview extends StatelessWidget {
   final Subscription sub;
 
@@ -236,7 +200,6 @@ class _CardPreview extends StatelessWidget {
   }
 }
 
-/// Ничего не свёрнуто — только для образца.
 class _ExpandedCards extends CollapsedSubscriptionCardsNotifier {
   @override
   Map<String, bool> build() => const <String, bool>{};

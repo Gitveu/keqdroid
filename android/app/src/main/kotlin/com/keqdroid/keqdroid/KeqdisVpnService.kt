@@ -42,43 +42,31 @@ class KeqdisVpnService : VpnService() {
         const val EXTRA_SOCKS_PASSWORD = "socks_password"
         const val EXTRA_SERVER_NAME    = "server_name"
         const val EXTRA_VPN_BACKEND    = "vpn_backend"
-        // Строка в лог ядра: откуда взялась сессия, которую поднял не человек.
+        // строка в лог ядра: откуда сессия, которую поднял не человек
         const val EXTRA_LOG_NOTE       = "log_note"
         const val VPN_BACKEND_XRAY     = "xray"
         const val VPN_BACKEND_MIHOMO   = "mihomo"
 
-        // Какое ядро исполняет конфиг. Уходит в NativeHelper.startCore: у xray и
-        // mihomo разный argv и разный способ показать базы geo.
         const val CORE_KIND_XRAY       = "xray"
         const val CORE_KIND_MIHOMO     = "mihomo"
-        // Ядро (только для backend xray): chain — libxray.so; keqrnel — единое
-        // ядро libkeqrnel.so (sing-box host + встроенный xray) как drop-in.
+        // движок остался со времён keqrnel: на Android он всегда chain, поле живёт ради старых записей плитки
         const val EXTRA_CORE_ENGINE    = "core_engine"
         const val CORE_ENGINE_CHAIN    = "chain"
         const val CORE_ENGINE_KEQRNEL  = "keqrnel"
-        // Режим сессии: поднимать системный VPN или только локальный прокси.
-        //
-        // В режиме прокси сервис остаётся foreground-сервисом (тип specialUse,
-        // не vpn — см. манифест), но VpnService.establish() не вызывается вовсе:
-        // нет ни интерфейса, ни диалога разрешения. Ядро просто
-        // слушает 127.0.0.1, а loopback на Android общий для всех приложений,
-        // так что настроить на него можно кого угодно.
+        // в режиме прокси establish() не зовётся: ни интерфейса, ни диалога разрешения.
+        // ядро слушает 127.0.0.1, а loopback на Android общий для всех приложений
         const val EXTRA_TUNNEL_MODE    = "tunnel_mode"
         const val TUNNEL_MODE_VPN      = "tun"
         const val TUNNEL_MODE_PROXY    = "proxy"
-        // Файл логов ядра в filesDir; читается getXrayLogs (надёжнее logcat на Android 13+).
         const val CORE_LOG_FILE        = "core_logs.txt"
 
-        /// Вторая строка вердикта монитора: объясняет, почему выше по файлу
-        /// тишина. Без неё пустой хвост лога читается как «логи не пишутся».
+        // без второй строки пустой хвост лога читается как логи не пишутся
         const val CORE_GONE_HINT =
             "a process killed from outside gets no chance to write a farewell, " +
                 "so silence above this line is the symptom, not a missing log; " +
                 "the usual killers are the child process limits of Android 12+ " +
                 "and vendor battery savers"
-        // Вердикт mihomo о собственном туннеле — единственный способ узнать,
-        // взял ли он наш дескриптор (см. awaitMihomoTun). Строки из
-        // listener/listener.go: ReCreateTun.
+        // только так узнать, взял ли mihomo наш дескриптор. строки из listener/listener.go: ReCreateTun
         const val MIHOMO_TUN_READY     = "[TUN] Tun adapter listening at:"
         const val MIHOMO_TUN_FAILED    = "Start TUN listening error:"
         const val NOTIFICATION_ID      = 1337
@@ -87,38 +75,20 @@ class KeqdisVpnService : VpnService() {
         const val TUN_ADDRESS          = "172.19.0.1"
         const val TUN_PREFIX           = 30
         const val TUN_MTU              = 1400
-        /// DNS-адрес, который отдаём системе: второй хост нашей же /30 —
-        /// слушать на нём некому, и это ровно то, что нужно (см. addDnsServer
-        /// в buildTunInterface). Запрос всё равно уйдёт в tun0, а там его ждёт
-        /// перехват по порту 53: у xray это правило `dns-out`/`dns-out-tun`
-        /// (config_gen), у mihomo — `dns-hijack` его tun-инбаунда, который на
-        /// Android существует с тех пор, как ядро забирает дескриптор у
-        /// VpnService и держит туннель само. Держать в паре с `_androidTunDns`
-        /// на стороне Dart.
+        // второй хост нашей /30, слушать на нём некому: запрос всё равно уйдёт в tun0 и попадёт в перехват 53.
+        // держать в паре с _androidTunDns в Dart
         const val TUN_DNS_ADDRESS      = "172.19.0.2"
 
-        // Broadcast action для кнопок уведомления
         const val BROADCAST_ACTION_CONNECT    = "com.keqdis.vpn.NOTIF_CONNECT"
         const val BROADCAST_ACTION_DISCONNECT = "com.keqdis.vpn.NOTIF_DISCONNECT"
 
-        // Broadcast action for QS tile updates
         const val BROADCAST_VPN_STATUS_CHANGED = "com.keqdis.vpn.STATUS_CHANGED"
 
-        // SharedPreferences keys used by Quick Settings tile.
         const val PREFS_QS = "keqdis_vpn_prefs"
         const val KEY_QS_STATUS = "qs_status"
 
-        /// Тот же статус, но В ПАМЯТИ ПРОЦЕССА, а не на диске.
-        ///
-        /// Записанный в prefs статус переживает смерть процесса, и это его
-        /// свойство ломает плитку: систему (особенно OEM-прошивки вроде MIUI)
-        /// никто не обязывает дать сервису доработать до `onDestroy`, поэтому
-        /// после убийства приложения в `qs_status` остаётся «connected», хотя
-        /// туннеля нет. Плитка верила записи и на нажатие слала ACTION_STOP —
-        /// человек видел, что плитка дёрнулась и ничего не произошло.
-        ///
-        /// Это поле начинается с «disconnected» при каждом запуске процесса,
-        /// поэтому расхождение с prefs и означает ровно «запись протухла».
+        // в памяти процесса: запись в prefs переживает его смерть, и после убийства приложения там оставался connected.
+        // плитка верила записи и на нажатие слала стоп. поле с каждым запуском начинается с disconnected
         @JvmStatic
         @Volatile
         var liveStatus: String = "disconnected"
@@ -129,38 +99,20 @@ class KeqdisVpnService : VpnService() {
         const val KEY_QS_LAST_SOCKS_PASSWORD = "qs_last_socks_password"
         const val KEY_QS_LAST_SOCKS_PORT = "qs_last_socks_port"
         const val KEY_QS_LAST_BACKEND = "qs_last_backend"
-        // Движок ядра последнего старта (chain/keqrnel) — плитка должна
-        // переподключаться тем же движком, что и записанный configPath.
         const val KEY_QS_LAST_CORE_ENGINE = "qs_last_core_engine"
         const val KEY_QS_LAST_CORE_KIND   = "qs_last_core_kind"
-        // Режим последнего старта: плитка обязана переподключаться тем же, иначе
-        // из «только прокси» она молча поднимала бы полноценный VPN.
+        // плитка обязана переподключаться тем же режимом, иначе из только прокси поднимала бы полноценный VPN
         const val KEY_QS_LAST_TUNNEL_MODE = "qs_last_tunnel_mode"
         const val KEY_QS_LAST_SERVER_NAME = "qs_last_server_name"
         const val KEY_QS_LAST_EXCLUDE_PACKAGES = "qs_last_exclude_packages"
         const val KEY_QS_LAST_INCLUDE_PACKAGES = "qs_last_include_packages"
 
-        /// Должна ли сессия жить — по нему сервис, поднятый системой после
-        /// смерти процесса, решает, переподключаться ли (см. restoreSession).
-        ///
-        /// Статус для этого не годится: новый процесс чинит его в onCreate до
-        /// того, как придёт onStartCommand, и к этому моменту там уже
-        /// «disconnected» при любой прошлой жизни.
+        // статус тут не годится: новый процесс чинит его в onCreate раньше onStartCommand
         const val KEY_QS_SESSION_WANTED = "qs_session_wanted"
 
-        /// Прошивка, на которой плитке не дали поднять сервис напрямую (см.
-        /// VpnQuickTileService.directStartBlocked).
         const val KEY_QS_DIRECT_START_BLOCKED_ON = "qs_direct_start_blocked_on"
 
-        /**
-         * START-команда на прошлый сервер — тем же ядром, режимом и файлом.
-         *
-         * Снапшот пишет только сам сервис при старте, поэтому до первого
-         * подключения из приложения его нет. Null и тогда, когда файл конфига
-         * пропал (путь в prefs переживает очистку данных, и ядро бы не
-         * поднялось), и когда прошлым был AmneziaWG: он жил в своём ядре, и
-         * такую запись поднимает только приложение, через mihomo.
-         */
+        // null, если файл конфига пропал (путь в prefs переживает очистку данных) или запись от старого AWG-ядра
         fun snapshotStartIntent(context: Context): Intent? {
             val prefs = context.getSharedPreferences(PREFS_QS, Context.MODE_PRIVATE)
             val backend = prefs.getString(KEY_QS_LAST_BACKEND, VPN_BACKEND_XRAY) ?: VPN_BACKEND_XRAY
@@ -178,12 +130,9 @@ class KeqdisVpnService : VpnService() {
             return Intent(context, KeqdisVpnService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_VPN_BACKEND, backend)
-                // На Android движок всегда chain (libxray) — keqrnel вырезан.
-                // Явно, чтобы сохранённый старыми версиями keqrnel не всплыл.
+                // chain явно: иначе всплыл бы keqrnel, сохранённый старыми версиями
                 putExtra(EXTRA_CORE_ENGINE, CORE_ENGINE_CHAIN)
-                // Режим — по той же причине, что и ядро: иначе из «только
-                // прокси» поднимался бы полноценный VPN, на который может не
-                // оказаться и разрешения.
+                // режим тоже явно: иначе из только прокси поднимался бы VPN, на который может не быть разрешения
                 putExtra(
                     EXTRA_TUNNEL_MODE,
                     prefs.getString(KEY_QS_LAST_TUNNEL_MODE, TUNNEL_MODE_VPN) ?: TUNNEL_MODE_VPN,
@@ -198,33 +147,22 @@ class KeqdisVpnService : VpnService() {
             }
         }
 
-        /// Поднимает ли команда системный VPN — только ему нужно согласие.
         fun startsTunnel(intent: Intent): Boolean =
             intent.getStringExtra(EXTRA_TUNNEL_MODE) != TUNNEL_MODE_PROXY
 
-        /// Сколько ждать после смены сети, прежде чем рвать соединения ядра.
-        ///
-        /// Подъём Wi-Fi приходит не одним событием: сначала onAvailable, потом
-        /// валидация, потом смена capabilities — и каждое из них может увести
-        /// default network. Сбрасывать на каждое значило бы рвать сессию по три
-        /// раза подряд; замерено, что до устойчивого состояния проходит ~2 с.
+        // подъём Wi-Fi это три события подряд, и каждое может увести default network. до устойчивого состояния около 2 с
         private const val HANDOVER_DEBOUNCE_MS = 2_000L
 
-        /// Когда перестать поднимать ядро, убитое под живой сессией (см. reviveCore).
-        ///
-        /// Ядро, прожившее дольше CORE_QUICK_DEATH_MS, поднимаем всегда, сколько
-        /// бы раз его ни убивали. Если же оно трижды подряд умирает почти сразу
-        /// после подъёма, оно сломано само, и круг перезапусков только прятал бы
-        /// это за «подключено».
+        // ядро, прожившее дольше 30 с, поднимаем всегда. трижды подряд умершее сразу сломано само,
+        // круг перезапусков прятал бы это за подключено
         private const val CORE_QUICK_DEATH_MS = 30_000L
         private const val CORE_MAX_QUICK_DEATHS = 3
 
-        /// Раз во сколько секунд сессии снимать слепок памяти (см. logMemory).
         private const val MEMORY_SNAPSHOT_TICKS = 600
         private const val MEMORY_GROWTH_ALARM = 256L * 1024 * 1024
     }
 
-    // Credentials приходят через Intent от MainActivity — так они гарантированно совпадают с теми что были записаны в Xray конфиг
+    // креды приходят от MainActivity, так они совпадают с записанными в конфиг ядра
     @Volatile var socksUsername: String    = ""
     @Volatile var socksPassword: String    = ""
 
@@ -238,7 +176,6 @@ class KeqdisVpnService : VpnService() {
     @Volatile private var lastExcludePackages: List<String> = emptyList()
     @Volatile private var lastIncludePackages: List<String> = emptyList()
     @Volatile private var xrayPid:            Int                   = -1
-    // Когда поднято текущее ядро и сколько раз подряд оно умерло быстро — см. reviveCore.
     @Volatile private var coreStartedAt:      Long                  = 0L
     @Volatile private var quickCoreDeaths:    Int                   = 0
     @Volatile private var tunInterface:       ParcelFileDescriptor? = null
@@ -246,23 +183,16 @@ class KeqdisVpnService : VpnService() {
     @Volatile private var cleanupDone:       Boolean              = false
     @Volatile private var activeSocksPort:   Int                  = 2080
 
-    // Слежение за физической сетью под туннелем — см. startNetworkWatch().
     @Volatile private var networkCallback: ConnectivityManager.NetworkCallback? = null
-    // Живые НЕ-VPN сети в порядке появления: последняя и несёт трафик. Держим
-    // список, а не одну сеть, потому что весь вопрос ровно в том, осталась ли
-    // рядом с новой сетью работоспособной старая (см. onPhysicalNetworkUp).
+    // список, а не одна сеть: весь вопрос в том, жива ли рядом с новой старая
     private val liveNetworks = LinkedHashSet<Network>()
     @Volatile private var watchStartedAt = 0L
     @Volatile private var handoverJob: Job? = null
 
-    // Сериализует start/stop/teardown: без этого быстрое перещёлкивание плитки в
-    // шторке запускало новый старт поверх ещё идущего cleanup() предыдущего стопа —
-    // они дрались за xrayPid/tunInterface и SOCKS-порт, старт падал в
-    // ERROR и приложение приходилось перезапускать. Под мьютексом операции идут
-    // строго по очереди, и стоп дожидается cleanup() ДО того, как стартует следующий.
+    // без него быстрое перещёлкивание плитки пускало старт поверх ещё идущего cleanup() стопа,
+    // и они дрались за pid, TUN и SOCKS-порт
     private val opMutex = Mutex()
-    // startId последней команды (для stopSelf(startId): сервис не убьётся, если уже
-    // прилетела более новая команда — например, старт в очереди за стопом).
+    // stopSelf(startId) не убьёт сервис, если уже пришла более новая команда
     @Volatile private var latestStartId = 0
 
     private val serviceScope = CoroutineScope(
@@ -277,10 +207,7 @@ class KeqdisVpnService : VpnService() {
     private val uploadSpeed   = AtomicLong(0)
     private val downloadSpeed = AtomicLong(0)
 
-    // BroadcastReceiver для обработки нажатий на кнопки уведомления
     private var notificationActionReceiver: BroadcastReceiver? = null
-
-    // ── Binder ──────────────────────────────────────────────────────────────
 
     inner class LocalBinder : Binder() {
         fun getStatus()          = status
@@ -292,36 +219,22 @@ class KeqdisVpnService : VpnService() {
         fun getTotalUpload()     = uploadTotal.get()
         fun getTotalDownload()   = downloadTotal.get()
         fun getDurationSeconds() = if (startTime > 0) (System.currentTimeMillis() - startTime) / 1000L else 0L
-        // PID форкнутых ядер для панели «Внутренности»; -1 — процесс не запущен.
         fun getXrayPid()         = xrayPid
-        // Чем исполняется ТЕКУЩАЯ сессия. Панель «Внутренности» не вправе
-        // выводить это из настройки: выбор ядра меняют на ходу, а работает всё
-        // равно то, с которым подключились.
+        // текущая сессия, а не настройка: ядро меняют на ходу, а работает то, с которым подключились
         fun getCoreKind()        = lastCoreKind
     }
     private val binder = LocalBinder()
 
     override fun onBind(intent: Intent?): IBinder? {
-        // Системный биндинг VPN (action android.net.VpnService) обязан получить
-        // внутренний binder из super.onBind(), иначе onRevoke() не доставляется:
-        // когда VPN перехватывает другое приложение/система, сервис навсегда
-        // остаётся в RUNNING, а приложение/тайл показывают «подключено» при
-        // мёртвом туннеле. LocalBinder — только для нашей Activity.
+        // системному биндингу нужен super.onBind(), иначе onRevoke() не придёт,
+        // и при перехвате VPN другим приложением сервис навсегда останется в RUNNING
         return if (intent?.action == VpnService.SERVICE_INTERFACE) super.onBind(intent) else binder
     }
 
-    // ── Lifecycle ────────────────────────────────────────────────────────────
-
     override fun onCreate() {
         super.onCreate()
-        // Самолечение фантомного статуса: процесс могли убить (force stop, OEM,
-        // свайп из recents), не дав сервису записать финальный статус — в prefs
-        // остаётся connecting/connected. Тайл от этого виснет (STATE_UNAVAILABLE
-        // не нажимается), а приложение на холодном старте до привязки binder'а
-        // показывает призрачное «подключается/подключено» без телеметрии.
-        // Новый инстанс сервиса всегда стартует STOPPED — приводим prefs и
-        // рассылку в соответствие. Реальному старту не мешает: ACTION_START
-        // придёт в onStartCommand сразу после и выставит connecting.
+        // новый экземпляр сервиса всегда STOPPED: процесс могли убить, не дав записать финальный статус,
+        // и тайл висел бы в connecting. настоящему старту не мешает, ACTION_START придёт следом
         val stale = getSharedPreferences(PREFS_QS, Context.MODE_PRIVATE)
             .getString(KEY_QS_STATUS, "disconnected")
             ?.lowercase()
@@ -333,16 +246,12 @@ class KeqdisVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         latestStartId = startId
-        // Без команды сервис приходит, когда система подняла его заново после
-        // смерти процесса (START_STICKY, см. startSession), а с action
-        // VpnService — когда его включает системный «Постоянный VPN»
-        // (Vpn.startAlwaysOnVpn). Dart в обоих случаях не запущен, и собрать
-        // конфиг некому, поэтому подключаемся по снапшоту, как плитка.
+        // без команды это перезапуск системой после смерти процесса (START_STICKY), с action VpnService это Постоянный VPN.
+        // Dart не запущен, конфиг собрать некому, поэтому по снапшоту, как плитка
         if (intent == null || intent.action == VpnService.SERVICE_INTERFACE) {
             return runCatching { restoreSession(startId, alwaysOn = intent != null) }
                 .getOrElse {
-                    // Упавший здесь процесс система подняла бы снова, и тем же
-                    // путём, — круг перезапусков вместо одной неудачи.
+                    // упавший здесь процесс система подняла бы снова тем же путём, по кругу
                     NativeLog.e("KEQDIS", "restore failed: ${it.message}", it)
                     stopSelf(startId)
                     START_NOT_STICKY
@@ -353,8 +262,7 @@ class KeqdisVpnService : VpnService() {
                 if (status == VpnRunStatus.RUNNING || status == VpnRunStatus.STARTING) {
                     serviceScope.launch { stopVpn(startId) }
                 } else if (status == VpnRunStatus.STOPPED || status == VpnRunStatus.ERROR) {
-                    // Сам сервис подключение не собирает (конфиг генерирует Dart) —
-                    // открываем приложение, Flutter подхватит по launch action.
+                    // конфиг собирает Dart, поэтому открываем приложение
                     val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
                     launchIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     launchIntent?.putExtra("action", "connect_from_notification")
@@ -370,18 +278,10 @@ class KeqdisVpnService : VpnService() {
         return START_NOT_STICKY
     }
 
-    /**
-     * Поднять сессию без команды — после перезапуска системой или по
-     * «Постоянному VPN».
-     *
-     * После перезапуска переподключаемся, только если прошлая сессия должна
-     * была жить ([KEY_QS_SESSION_WANTED]): иначе поднялось бы то, что человек
-     * выключил сам. «Постоянный VPN» включают в настройках системы, и его
-     * просьбу выполняем всегда.
-     */
+    // после перезапуска поднимаем, только если сессия должна была жить, иначе поднялось бы выключенное человеком.
+    // Постоянный VPN выполняем всегда
     private fun restoreSession(startId: Int, alwaysOn: Boolean): Int {
-        // Пока туннель поднимается, система шлёт запуск ещё раз (см.
-        // комментарий в Vpn.startAlwaysOnVpn) — живую сессию не трогаем.
+        // пока туннель поднимается, система шлёт запуск ещё раз (Vpn.startAlwaysOnVpn)
         if (status == VpnRunStatus.RUNNING || status == VpnRunStatus.STARTING) return START_STICKY
 
         val wanted = getSharedPreferences(PREFS_QS, Context.MODE_PRIVATE)
@@ -395,8 +295,7 @@ class KeqdisVpnService : VpnService() {
         val start = snapshotStartIntent(this)
         val refusal = when {
             start == null -> "there is no server to reconnect to, connect from the app once"
-            // Режим прокси интерфейса не поднимает, а «Постоянный VPN» ждёт
-            // именно его: система так и висела бы в «подключается».
+            // Постоянный VPN ждёт интерфейс, и система висела бы в подключается
             alwaysOn && !startsTunnel(start) ->
                 "the last session was a local proxy, and always-on VPN needs a tunnel"
             startsTunnel(start) && VpnService.prepare(this) != null ->
@@ -411,9 +310,7 @@ class KeqdisVpnService : VpnService() {
             return START_NOT_STICKY
         }
 
-        // Сессия, поднятая без человека, говорит в логе, откуда взялась, — а
-        // после убийства ещё и кем оно было: это и есть ответ на «почему
-        // отключилось».
+        // сессия без человека пишет в лог, откуда взялась: это ответ на почему отключилось
         val note = if (alwaysOn) {
             "started by the system always-on VPN setting"
         } else {
@@ -446,26 +343,14 @@ class KeqdisVpnService : VpnService() {
         socksUsername = user
         socksPassword = pass
 
-        // Движок ядра. Сохраняем его в QS-prefs вместе с configPath: файл
-        // конфига привязан к движку (keqrnel пишет sing-box-формат, chain —
-        // сырой xray). Плитка переподключается по этому же файлу, поэтому
-        // обязана использовать ТОТ ЖЕ движок — иначе libxray не распарсит
-        // sing-box-конфиг ("Listen on specific ip without port") и порт не поднимется.
         val coreEngine = intent.getStringExtra(EXTRA_CORE_ENGINE) ?: CORE_ENGINE_CHAIN
         lastCoreEngine = coreEngine
 
-        // Ядро выводим из backend'а и запоминаем ТАМ ЖЕ, где configPath:
-        // файл конфига привязан к ядру (mihomo пишем в YAML, xray — в
-        // json), и плитка обязана переподключаться тем же ядром. Иначе
-        // повторим старый баг «плитка → ERROR»: libxray не разберёт
-        // конфиг mihomo и SOCKS-порт не поднимется.
+        // ядро запоминаем рядом с configPath: конфиг mihomo libxray не разберёт, и плитка падала в ERROR
         val coreKind =
             if (backend == VPN_BACKEND_MIHOMO) CORE_KIND_MIHOMO else CORE_KIND_XRAY
         lastCoreKind = coreKind
 
-        // Режим — по той же причине, что движок и ядро: плитка стартует
-        // по сохранённому, и «только прокси» не должен превращаться в
-        // полноценный VPN от одного нажатия по плитке.
         val tunnelMode =
             if (intent.getStringExtra(EXTRA_TUNNEL_MODE) == TUNNEL_MODE_PROXY) {
                 TUNNEL_MODE_PROXY
@@ -504,10 +389,8 @@ class KeqdisVpnService : VpnService() {
                 buildControlNotification("Connecting…", isConnected = false, isTransitioning = true)
             )
         } catch (e: Exception) {
-            // После перезапуска системой право на foreground даёт исключение
-            // для VPN-приложений (REASON_OP_ACTIVATE_VPN в ActiveServices), и
-            // прошивка вправе его не признать. Необработанный отказ уронил бы
-            // процесс, а система взялась бы поднимать его снова.
+            // после перезапуска системой foreground разрешает исключение REASON_OP_ACTIVATE_VPN, и прошивка вправе его не признать.
+            // необработанный отказ уронил бы процесс, и система поднимала бы его снова
             NativeLog.e("KEQDIS", "startForeground refused: $e")
             appendCoreLog("the system did not let the VPN run in the foreground: ${e.message}")
             unregisterNotificationReceiver()
@@ -515,13 +398,8 @@ class KeqdisVpnService : VpnService() {
             return START_NOT_STICKY
         }
 
-        // «Сервис жив и взялся за старт» — этого ждёт плитка
-        // (VpnQuickTileService.verifyStarted), чтобы отличить запрет
-        // системы от обычной задержки. Полный setStatus() здесь звать
-        // нельзя: STARTING в status принимается за дубль-старт, и
-        // startVpnWithXray молча вышел бы, не подключившись.
-        // Только с холодного: повторный ACTION_START поверх живой сессии
-        // откатил бы плитку с «подключено» на «подключается».
+        // этого ждёт плитка (verifyStarted), чтобы отличить запрет системы от задержки. setStatus() нельзя:
+        // STARTING в status принимается за дубль-старт. только с холодного, иначе плитка откатилась бы с подключено
         if (status == VpnRunStatus.STOPPED || status == VpnRunStatus.ERROR) {
             liveStatus = "connecting"
         }
@@ -535,10 +413,8 @@ class KeqdisVpnService : VpnService() {
                 )
             }
         }
-        // Процесс, убитый системой или прошивкой, Android поднимает заново и
-        // зовёт onStartCommand без команды — сессия восстанавливается сама
-        // (restoreSession). С NOT_STICKY туннель после такого убийства
-        // пропадал до ручного подключения.
+        // убитый процесс Android поднимет и позовёт без команды, сессия восстановится сама.
+        // с NOT_STICKY туннель пропадал до ручного подключения
         return START_STICKY
     }
 
@@ -554,12 +430,8 @@ class KeqdisVpnService : VpnService() {
     override fun onRevoke() { serviceScope.launch { stopVpn() }; super.onRevoke() }
 
     override fun onDestroy() {
-        // Полный cleanup() здесь не зовём: runBlocking на main thread с долгой
-        // очисткой — это ANR, а после штатного stopVpn() cleanupDone и так
-        // станет true через несколько мс. Ветка ниже — только для убийства
-        // сервиса без stopVpn() (force kill).
+        // полный cleanup() тут был бы runBlocking на main thread, то есть ANR. ветка только для убийства без stopVpn()
         if (!cleanupDone) {
-            // быстрая очистка PID, без wait на процессы
             runCatching {
                 if (xrayPid > 0) {
                     try { android.os.Process.killProcess(xrayPid) } catch (_: Exception) {}
@@ -572,19 +444,15 @@ class KeqdisVpnService : VpnService() {
         super.onDestroy()
     }
 
-    // ── Start / Stop ─────────────────────────────────────────────────────────
+    // коннект мог зависнуть навсегда (стоп держит opMutex, establish() не вернулся), и в уведомлении висело Connecting без исхода
 
-    // Вотчдог старта: onStartCommand уже показал «Connecting…», а сам коннект может
-    // зависнуть навсегда (застрявший стоп держит opMutex, establish() не вернулся,
-    // форк ядра повис) — у пользователя оставался «вечный Connecting…» в уведомлении
-    // без какого-либо исхода. По таймауту честно показываем ошибку и глушим сервис.
     private suspend fun startGuarded(startId: Int, block: suspend () -> Unit) {
         try {
             kotlinx.coroutines.withTimeout(45_000L) { block() }
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
             NativeLog.e("KEQDIS", "start watchdog fired: connect attempt hung")
             setStatus(VpnRunStatus.ERROR, "Connection attempt timed out")
-            // best-effort вне мьютекса: возможно, завис именно его владелец
+            // вне мьютекса: возможно, завис его владелец
             runCatching { cleanup() }
             showControlNotification(
                 "Connection timed out",
@@ -609,18 +477,14 @@ class KeqdisVpnService : VpnService() {
         tunnelMode: String = TUNNEL_MODE_VPN,
         logNote: String? = null,
     ) = opMutex.withLock {
-        // Под opMutex: предыдущий стоп уже завершил cleanup(), порт/процессы свободны.
         if (status == VpnRunStatus.RUNNING || status == VpnRunStatus.STARTING) {
-            // Дубль-старт: не оставляем уведомление застрявшим на «Connecting…» —
-            // если сессия уже жива, вернём ему актуальное «Connected».
             if (status == VpnRunStatus.RUNNING) {
                 showControlNotification("Connected", isConnected = true, isTransitioning = false)
             }
             return@withLock
         }
         setStatus(VpnRunStatus.STARTING)
-        // Под opMutex, как и сброс в stopVpn: при смене сервера стоп и старт
-        // идут подряд, и записанным должно остаться то, что было последним.
+        // под opMutex: при смене сервера стоп и старт идут подряд, записанным должно остаться последнее
         rememberSessionWanted(true)
         quickCoreDeaths = 0
         try {
@@ -628,24 +492,10 @@ class KeqdisVpnService : VpnService() {
                 throw IllegalStateException("SOCKS5 credentials are empty — Intent was malformed")
             }
 
-            // На Android всегда libxray.so (chain): keqrnel-обёртка ломает сплит-
-            // роутинг (см. AndroidTunnelBackend), и libkeqrnel.so в jniLibs нет.
-            // coreEngine оставлен в сигнатурах для совместимости, но игнорируется —
-            // даже старый сохранённый engine=keqrnel не должен искать отсутствующий бинарь.
-            //
-            // mihomo занимает в схеме ровно то же место: туннель держит само
-            // ядро, локальный SOCKS остаётся для самого приложения. Отличаются
-            // только бинарь и argv (см. NativeHelper.startCore).
-            // Ядра от прошлой жизни приложения — до старта нового.
-            //
-            // Без этого новое ядро не займёт SOCKS-порт: его держит старое, и
-            // локальный прокси приложения уводит запросы в чужую сессию с
-            // чужими credentials — в логе `rejected username/password`, на
-            // экране «подключено» и мёртвая сеть. Проверка isPortOpen ниже
-            // такое не ловит: порт-то открыт.
+            // сначала ядра от прошлой жизни приложения: старое держит SOCKS-порт, и прокси приложения уходит в чужую сессию
+            // с чужими кредами (rejected username/password). isPortOpen ниже этого не ловит, порт-то открыт
             if (NativeHelper.killOrphans() > 0) {
-                // SIGKILL асинхронен: слушающий сокет освобождается не в тот же
-                // миг, а новое ядро полезет за портом сразу.
+                // SIGKILL асинхронен, сокет освобождается не сразу
                 var waitedFree = 0
                 while (isPortOpen("127.0.0.1", socksPort) && waitedFree < 2000) {
                     delay(100); waitedFree += 100
@@ -653,20 +503,12 @@ class KeqdisVpnService : VpnService() {
             }
 
             val isMihomo = coreKind == CORE_KIND_MIHOMO
-            // Только локальный прокси: интерфейса нет, значит нет ни
-            // дескриптора для ядра, ни ожидания его tun-листенера. Ядро
-            // поднимает свои инбаунды на 127.0.0.1 — этого достаточно.
             val proxyOnly = tunnelMode == TUNNEL_MODE_PROXY
-            // Держит ли туннель сам xray. Спрашиваем конфиг, а не настройку:
-            // конфиг и есть то, по чему ядро будет себя вести, и он же лежит на
-            // диске для реконнекта из плитки — второй источник правды разъехался
-            // бы ровно так же, как когда-то движок в плитке.
+            // спрашиваем конфиг, а не настройку: по нему ядро себя ведёт, и он же лежит на диске для плитки,
+            // а настройка могла смениться между сборкой конфига и реконнектом
             val xrayOwnsTun = !isMihomo && !proxyOnly && xrayConfigHasTun(xrayConfigPath)
 
-            // Туннель держит ядро — любое из двух, — и поэтому интерфейс обязан
-            // существовать РАНЬШЕ него: номер дескриптора нужен уже на старте.
-            // mihomo получает его дописанным в конфиг, xray — переменной
-            // окружения. Разница на этом и заканчивается.
+            // интерфейс раньше ядра: номер дескриптора нужен на старте. mihomo получает его в конфиге, xray в окружении
             if (isMihomo && !proxyOnly) {
                 val tun = buildTunInterface(excludePkgs, includePkgs)
                 tunInterface = tun
@@ -699,12 +541,8 @@ class KeqdisVpnService : VpnService() {
                     tunFd = tunRawFd,
                 )
             } else {
-                // Режим VPN, а tun-инбаунда в конфиге нет — значит на диске
-                // лежит конфиг от версии, которая ещё носила отдельный
-                // пересыльщик пакетов. Так бывает при реконнекте из плитки
-                // сразу после обновления. Поднимать ядро в таком виде нельзя:
-                // интерфейс встанет, а читать из него будет некому — и это
-                // выглядело бы как «подключено, интернета нет».
+                // VPN без tun-инбаунда значит на диске конфиг старой версии (плитка сразу после обновления):
+                // интерфейс встанет, а читать его будет некому
                 if (!proxyOnly) {
                     throw IllegalStateException(
                         "Config predates the in-core tunnel — reconnect from the app once"
@@ -716,28 +554,18 @@ class KeqdisVpnService : VpnService() {
                     coreKind,
                 )
             }
-            // После startXray: он начинает лог сессии с чистого листа.
+            // после startXray: он начинает лог с чистого листа
             logNote?.let { appendCoreLog(it) }
 
-            // ждём пока ядро поднимет SOCKS5 порт
-            //
-            // Признак годится и для mihomo с собственным туннелем: локальные
-            // инбаунды у него в том же конфиге и поднимаются тем же стартом, а
-            // отдельного «tun готов» ядро наружу не сообщает.
             val coreName = if (isMihomo) "mihomo" else "Xray"
             var waited = 0
             while (!isPortOpen("127.0.0.1", socksPort) && waited < 10000) {
-                // Ядро, умершее уже после старта, раньше стоило десяти секунд
-                // ожидания и жалобы на порт — при том, что причину оно само
-                // написало в лог и ушло. Смерть видна по /proc: процесс наш
-                // только по pid (после двойного fork он внук), и ждать его
-                // через waitpid некому.
+                // смерть ядра видна по /proc: после двойного fork оно нам внук, waitpid звать некому.
+                // раньше она стоила десяти секунд ожидания порта
                 val pid = xrayPid
                 if (pid > 0 && !File("/proc/$pid").exists())
                     throw IllegalStateException("$coreName exited on startup${coreLogTail()}")
-                // Шаг мелкий: порт на 127.0.0.1 либо отвечает отказом сразу,
-                // либо принимает, так что вся цена проверки — сама пауза, а
-                // она целиком уходит в ожидание пользователя.
+                // шаг мелкий: пауза целиком уходит в ожидание человека
                 delay(100); waited += 100
             }
             if (!isPortOpen("127.0.0.1", socksPort))
@@ -745,26 +573,18 @@ class KeqdisVpnService : VpnService() {
                     "$coreName SOCKS5 port $socksPort not ready${coreLogTail()}"
                 )
 
-            // Открытый SOCKS-порт у mihomo НЕ означает, что туннель взлетел:
-            // инбаунды поднимаются раньше tun-листенера (`updateListeners` идёт
-            // до `updateTun`), а его падение ядро переживает — пишет ошибку,
-            // гасит `tun.enable` и работает дальше. Снаружи всё выглядит
-            // здоровым: порт слушается, прокси набирается, статус «подключено»,
-            // и только пакеты из tun не читает никто.
+            // открытый порт у mihomo не значит, что туннель взлетел: tun-листенер поднимается позже,
+            // а его падение ядро переживает молча, и снаружи подключено без трафика
             if (isMihomo && !proxyOnly) awaitMihomoTun()
 
             if (proxyOnly) {
-                // Порт всё равно объявляем активным: на него смотрят экран
-                // «Внутренности» и переподключение из плитки.
+                // порт объявляем и без туннеля: на него смотрят Внутренности и плитка
                 activeSocksPort = socksPort
             }
 
             startTime = System.currentTimeMillis()
             setStatus(VpnRunStatus.RUNNING)
-            // Текст уведомления называет режим: в режиме прокси системного
-            // «ключика» VPN в статусбаре нет, и без подписи непонятно, работает
-            // ли вообще что-нибудь — а адрес рядом избавляет от похода в
-            // настройки за ним.
+            // в режиме прокси ключика VPN в статусбаре нет, без подписи непонятно, работает ли что-то
             showControlNotification(
                 if (proxyOnly) "Proxy · 127.0.0.1:$socksPort" else "Connected",
                 isConnected = true,
@@ -775,8 +595,7 @@ class KeqdisVpnService : VpnService() {
 
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) {
-                // отмена вотчдогом (или скоупом): чистим под мьютексом и пробрасываем —
-                // уведомление об исходе выставит startGuarded
+                // отмена вотчдогом: чистим и пробрасываем, исход покажет startGuarded
                 runCatching { cleanup() }
                 throw e
             }
@@ -786,30 +605,21 @@ class KeqdisVpnService : VpnService() {
             showControlNotification(e.message ?: "Error", isConnected = false, isTransitioning = false)
             stopForeground(true)
             unregisterNotificationReceiver()
-            // stopSelf(startId): не убьём сервис, если уже пришёл более новый старт.
             stopSelf(startId)
         }
     }
 
     private suspend fun stopVpn(startId: Int? = null) = opMutex.withLock {
-        // Выключили — и после смерти процесса поднимать нечего.
         rememberSessionWanted(false)
         if (status == VpnRunStatus.STOPPED) {
-            // Уже остановлен — но prefs могли пережить убийство процесса со
-            // старым connected/connecting: пересинхронизируем статус (prefs +
-            // broadcast + ContentObserver), чтобы тайл и приложение отлипли.
+            // prefs могли пережить убийство процесса с connected, пересинхронизируем, чтобы тайл отлип
             setStatus(VpnRunStatus.STOPPED)
-            // Даём сервису шанс завершиться, если это была отдельная
-            // stop-команда и более новой не прилетело.
             if (startId != null) stopSelf(startId) else stopSelf()
             return@withLock
         }
 
-        // Статус → STOPPED до cleanup, чтобы плитка обновилась мгновенно,
-        // а не после многосекундного убийства процессов.
+        // STOPPED до cleanup: плитка обновится сразу, а не после многосекундного убийства процессов
         setStatus(VpnRunStatus.STOPPED)
-        // Отложенный сброс после смены сети сюда доехать уже не должен: ядро он
-        // не поднимет (статус не RUNNING), но и держать корутину незачем.
         handoverJob?.cancel()
         handoverJob = null
         showControlNotification("Disconnected", isConnected = false, isTransitioning = false)
@@ -818,9 +628,7 @@ class KeqdisVpnService : VpnService() {
         }
         unregisterNotificationReceiver()
 
-        // cleanup() ВНУТРИ мьютекса (await), чтобы следующий старт не начался,
-        // пока не убито старое ядро и не закрыт TUN: cleanup в
-        // отдельной корутине гонялся бы с новым стартом и подвешивал его.
+        // cleanup() внутри мьютекса: в отдельной корутине он гонялся бы с новым стартом
         try {
             cleanup()
         } catch (e: Exception) {
@@ -852,54 +660,16 @@ class KeqdisVpnService : VpnService() {
         ownerServer?.close()
         ownerServer = null
 
-        // socksUsername/socksPassword здесь НЕ сбрасываем: они живут до
-        // следующего ACTION_START (с его новыми credentials) — так корректно
-        // дозавершается уже запущенное ядро, а binder может вернуть
-        // актуальные значения для диагностики.
+        // креды не сбрасываем: с ними дозавершается запущенное ядро, живут до следующего старта
         startTime = 0L
         uploadTotal.set(0); downloadTotal.set(0)
         uploadSpeed.set(0); downloadSpeed.set(0)
     }
 
-    // ── Смена физической сети ────────────────────────────────────────────────
+    // открытые соединения ядра после подъёма Wi-Fi оставались на LTE 78 с (Pixel 6a, 30.08.2026), а это вдесятеро медленнее.
+    // само ядро не узнает: у xray монитора сети нет, у mihomo он только с auto-route, а netlink с Android 14 закрыт.
+    // registerDefaultNetworkCallback в VPN-приложении отдаёт наш же туннель, поэтому NOT_VPN и порядок событий
 
-    /// Следит за тем, по какой сети ездит туннель, и чинит переезд на новую.
-    ///
-    /// Само по себе переключение Wi-Fi↔LTE система переживает: default network
-    /// у неё меняется за пару секунд, и НОВЫЕ соединения ядра сразу идут по
-    /// новой сети. Проблема в уже открытых — они остаются на старой, пока не
-    /// закроются сами, а закрываются они не быстро.
-    ///
-    /// Замерено на Pixel 6a (30.08.2026): после подъёма Wi-Fi сокеты ядра к
-    /// серверу оставались на LTE 78 секунд (5 → 4 на t+18s → 1 на t+58s → 0 на
-    /// t+78s). Всё это время трафик едет по мобильной сети — на том же канале
-    /// 0.18–0.24 МБ/с против 1.7–2.0 МБ/с по Wi-Fi, то есть примерно вдесятеро
-    /// медленнее при живом быстром Wi-Fi.
-    ///
-    /// Обратный переезд так не болеет: Wi-Fi исчезает вместе с интерфейсом,
-    /// сокеты гибнут с ним, и ядро переподключается мгновенно. Мобильная сеть
-    /// же остаётся CONNECTED всегда, поэтому старый путь не умирает — он просто
-    /// становится медленным, и порвать его некому. Отсюда асимметрия «туда
-    /// сразу, обратно долго», с которой всё и началось.
-    ///
-    /// Само ядро об этом узнать не может: у xray монитора сети нет вовсе, а у
-    /// mihomo он есть, но включается только вместе с `auto-route`/
-    /// `auto-detect-interface`, а те на Android обязаны быть выключены (netlink
-    /// запрещён с Android 14). Значит рвать соединения
-    /// приходится снаружи.
-    /// Следим ЗА ФИЗИЧЕСКИМИ сетями, а не за «default» — на этом первый заход
-    /// и сломался.
-    ///
-    /// `registerDefaultNetworkCallback` в VPN-приложении отдаёт нашу же
-    /// VPN-сеть: владелец туннеля видит её своей default, хотя его uid из
-    /// туннеля и исключён. А VPN-сеть при переезде Wi-Fi↔LTE не меняется — тот
-    /// же netId живёт всю сессию, — так что колбэк молчал ровно тогда, когда
-    /// был нужен. В дампе это выглядело как `UnderlyingNetworks: [145]` у сети
-    /// 145, то есть туннель подложкой самому себе.
-    ///
-    /// Поэтому запрос с `NOT_VPN`: он приносит события по КАЖДОЙ физической
-    /// сети, а какая из них сейчас несёт трафик, выводим из порядка событий —
-    /// см. [liveNetworks].
     private fun startNetworkWatch() {
         if (networkCallback != null) return
         val cm = getSystemService(ConnectivityManager::class.java) ?: return
@@ -917,10 +687,7 @@ class KeqdisVpnService : VpnService() {
             .onFailure { NativeLog.w("KEQDIS", "network watch: register failed: ${it.message}") }
     }
 
-    /// Снять слежение. Отложенный сброс здесь НЕ отменяется: сюда приходят в
-    /// том числе из самого сброса (cleanup при сорванном рестарте), и отмена
-    /// была бы отменой текущей корутины на середине обработки ошибки. Досидеть
-    /// свой delay безопасно — сброс первым делом смотрит на статус.
+    // отложенный сброс тут не отменяем: сюда приходят и из самого сброса, отмена прервала бы текущую корутину
     private fun stopNetworkWatch() {
         networkCallback?.let { cb ->
             runCatching {
@@ -932,12 +699,7 @@ class KeqdisVpnService : VpnService() {
         watchStartedAt = 0L
     }
 
-    /// Появилась физическая сеть.
-    ///
-    /// Переездом считаем только тот случай, когда РЯДОМ уже была другая живая
-    /// сеть: значит старая никуда не делась, соединения на ней живы, и рвать их
-    /// придётся нам. Если других нет — это первая сеть или возврат
-    /// единственной, и рвать нечего.
+    // переезд только когда рядом уже была живая сеть: старая никуда не делась, и её соединения рвать нам
     private fun onPhysicalNetworkUp(network: Network) {
         val hadOther = synchronized(liveNetworks) {
             val other = liveNetworks.any { it != network }
@@ -946,8 +708,7 @@ class KeqdisVpnService : VpnService() {
         }
         applyHuaweiUnderlying(network)
         if (!hadOther) return
-        // Регистрация приносит все живые сети пачкой — на старте сессии это
-        // выглядит как переезд, хотя ничего не переезжало.
+        // регистрация приносит все живые сети пачкой, на старте это похоже на переезд
         if (System.currentTimeMillis() - watchStartedAt < HANDOVER_DEBOUNCE_MS) return
 
         NativeLog.i("KEQDIS", "handover: network $network came up next to a live one")
@@ -958,8 +719,7 @@ class KeqdisVpnService : VpnService() {
         }
     }
 
-    /// Сеть ушла — сокеты ушли с ней, рвать нечего. Только забываем её, иначе
-    /// её возвращение не будет считаться переездом.
+    // сокеты ушли вместе с сетью. забываем её, иначе её возвращение не будет переездом
     private fun onPhysicalNetworkDown(network: Network) {
         val remaining = synchronized(liveNetworks) {
             liveNetworks.remove(network)
@@ -968,24 +728,8 @@ class KeqdisVpnService : VpnService() {
         remaining?.let { applyHuaweiUnderlying(it) }
     }
 
-    /// Заставить ядро бросить соединения, оставшиеся на прошлой сети.
-    ///
-    /// У mihomo для этого есть RESTful API, и это дёшево: `DELETE /connections`
-    /// закрывает сессии, не трогая ни ядро, ни туннель — статус даже не мигнёт.
-    ///
-    /// У xray API тоже есть (и богатое), но команды «закрой активные
-    /// соединения» в нём нет, а соседние на эту роль не годятся — проверено на
-    /// живом ядре, не по документации:
-    ///
-    ///  * `api rmo` удаляет аутбаунд из менеджера, но уже установленные
-    ///    соединения через него продолжают работать: upstream-сокет оставался
-    ///    ESTABLISHED и через 10 секунд после удаления. Новые при этом падают —
-    ///    то есть один `rmo` только ломает связь, ничего не переселяя;
-    ///  * `api sib` (block by source IP) добавляет правило роутинга, а правила
-    ///    решают судьбу НОВОГО соединения: живой сокет пережил и его.
-    ///
-    /// Поэтому у xray остаётся перезапуск процесса ядра: секунда простоя против
-    /// полутора минут на медленном канале.
+    // у mihomo DELETE /connections, статус даже не мигнёт. у xray такой команды нет: rmo и sib проверены на живом ядре,
+    // установленные соединения переживают оба. поэтому у xray перезапуск: секунда простоя против полутора минут
     private suspend fun resetCoreConnections() {
         if (status != VpnRunStatus.RUNNING) return
 
@@ -993,8 +737,7 @@ class KeqdisVpnService : VpnService() {
             if (closeMihomoConnections()) {
                 NativeLog.i("KEQDIS", "handover: mihomo connections closed via API")
             } else {
-                // Не повод перезапускать ядро: соединения рассосутся сами, а
-                // сорванный рестарт стоит дороже медленной минуты.
+                // сорванный рестарт дороже медленной минуты
                 NativeLog.w("KEQDIS", "handover: mihomo API did not answer, leaving connections as is")
             }
             return
@@ -1003,7 +746,6 @@ class KeqdisVpnService : VpnService() {
         restartCoreAfterHandover()
     }
 
-    /// `DELETE /connections` у mihomo. false — API недоступен или отказал.
     private suspend fun closeMihomoConnections(): Boolean = withContext(Dispatchers.IO) {
         val creds = mihomoApiCredentials() ?: return@withContext false
         val (port, secret) = creds
@@ -1019,11 +761,7 @@ class KeqdisVpnService : VpnService() {
         }.getOrDefault(false)
     }
 
-    /// Порт и `secret` API из конфига, который прямо сейчас исполняет ядро.
-    ///
-    /// Источник тот же, что у `MainActivity.getMihomoApi`, и намеренно
-    /// единственный: пару придумывает Dart, но сессию из плитки поднимает
-    /// сервис — второй путь означал бы второй источник правды.
+    // источник тот же, что у MainActivity.getMihomoApi, и единственный: сессию из плитки поднимает сервис
     private fun mihomoApiCredentials(): Pair<Int, String>? = runCatching {
         val path = lastXrayConfigPath ?: return@runCatching null
         val file = File(path)
@@ -1034,7 +772,6 @@ class KeqdisVpnService : VpnService() {
         if (port <= 0 || secret.isEmpty()) null else port to secret
     }.getOrNull()
 
-    /// Сброс соединений xray после смены сети: убить ядро и поднять его на месте.
     private suspend fun restartCoreAfterHandover() = opMutex.withLock {
         if (status != VpnRunStatus.RUNNING) return@withLock
         val config = lastXrayConfigPath ?: return@withLock
@@ -1042,9 +779,7 @@ class KeqdisVpnService : VpnService() {
         if (previousPid <= 0) return@withLock
 
         try {
-            // Обнулить ДО убийства обязательно: монитор процесса (см. startXray)
-            // сверяет свой pid с xrayPid и на совпадении принял бы наш
-            // перезапуск за смерть ядра — и полез бы поднимать его второй раз.
+            // обнулить до убийства: монитор сверяет pid с xrayPid и принял бы перезапуск за смерть ядра
             xrayPid = -1
             runCatching { android.os.Process.killProcess(previousPid) }
             withTimeoutOrNull(3000) {
@@ -1054,9 +789,7 @@ class KeqdisVpnService : VpnService() {
             NativeLog.i("KEQDIS", "handover: core restarted pid=$xrayPid")
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            // Дальше сессия всё равно нежизнеспособна: ядра нет, из туннеля
-            // читать некому. Ведём себя ровно как монитор при падении ядра,
-            // чтобы приложение и плитка увидели честный исход.
+            // дальше сессия нежизнеспособна, ведём себя как монитор при падении ядра
             NativeLog.e("KEQDIS", "handover: core restart failed: ${e.message}", e)
             setStatus(VpnRunStatus.ERROR, "Core restart after network change failed")
             cleanup()
@@ -1066,33 +799,19 @@ class KeqdisVpnService : VpnService() {
         }
     }
 
-    /// Поднять ядро заново на живой сессии: тот же конфиг, тот же порт, тот же TUN.
-    /// Прежнее ядро к этому моменту уже мертво; зовут под opMutex.
-    ///
-    /// Интерфейс не трогаем вовсе — иначе система показала бы разрыв VPN, а
-    /// его здесь нет. Но интерфейса мало: дескриптор жил в убитом процессе, и
-    /// новому ядру его надо отдать заново.
+    // интерфейс не трогаем, иначе система покажет разрыв VPN. дескриптор жил в убитом процессе, новому ядру отдаём заново
     private suspend fun relaunchCore(config: String) {
         val port = activeSocksPort
-        // SIGKILL асинхронен: слушающий сокет освобождается не в тот же миг.
         var waitedFree = 0
         while (isPortOpen("127.0.0.1", port) && waitedFree < 2000) {
             delay(100); waitedFree += 100
         }
 
-        // Без дескриптора ядро считает туннелем нулевой fd — собственный
-        // stdin. Ничего не падает: интерфейс поднят, порт слушается, статус
-        // «подключено», и только из туннеля никто не читает. Поймано на
-        // устройстве — после смены сети связь пропадала молча и насовсем.
-        //
-        // Владелец спрашивается у конфига, а не у настройки: конфиг и есть
-        // то, по чему ядро себя ведёт, и он же переживает перезапуск
-        // сервиса. У mihomo номер дескриптора вписан в конфиг ещё на старте
-        // (injectTunFd), и он прежний: интерфейс не пересоздавался.
+        // без дескриптора ядро считает туннелем fd 0, свой stdin: порт слушается, подключено, а из туннеля не читает никто.
+        // у mihomo номер уже в конфиге с injectTunFd, интерфейс прежний
         val isMihomo = lastCoreKind == CORE_KIND_MIHOMO
         val tunFd = tunInterface?.takeIf { isMihomo || xrayConfigHasTun(config) }?.fd ?: -1
-        // Лог не обнуляется, и вердикт mihomo о туннеле от прошлого ядра в нём
-        // ещё лежит — смотрим только то, что допишет новое.
+        // лог не обнулялся, вердикт прошлого ядра в нём лежит, смотрим только новое
         val logFrom = File(filesDir, CORE_LOG_FILE).length()
         xrayPid = startXray(
             getBinaryPath(if (isMihomo) "libmihomo.so" else "libxray.so"),
@@ -1112,36 +831,18 @@ class KeqdisVpnService : VpnService() {
         if (isMihomo && tunFd >= 0) awaitMihomoTun(from = logFrom)
     }
 
-    // ── TUN interface ────────────────────────────────────────────────────────
-
     private fun buildTunInterface(exc: List<String>, inc: List<String>): ParcelFileDescriptor {
         val b = Builder()
             .setMtu(TUN_MTU)
             .addAddress(TUN_ADDRESS, TUN_PREFIX)
             .addRoute("0.0.0.0", 0)
-            // Адрес-пустышка из своей же /30, а НЕ публичный резолвер.
-            //
-            // С `8.8.8.8` весь системный DNS уходил мимо нашего перехвата:
-            // Private DNS в дефолтном режиме «Автоматически» пробует у DNS-сервера
-            // сети порт 853, у 8.8.8.8 DoT есть — валидация проходит, и дальше
-            // резолвер шлёт DoT на `8.8.8.8:853`. Правило перехвата ловит порт 53
-            // (см. dns-out в config_gen), 853 в него не попадает и уезжает в
-            // `final` как обычный трафик. Мимо перехвата уходят ОБА источника
-            // настроек разом: и dns-блок из настроек приложения, и авторский dns
-            // готового конфига — а каждый резолв платит TLS-хендшейком через
-            // туннель (замерено: 70–120 мс только на TCP до сервера).
-            //
-            // У 172.19.0.2 (второй хост той же /30, наш конец — TUN_ADDRESS)
-            // отвечать на 853 некому, валидация DoT проваливается, и система
-            // остаётся на обычном UDP-53 — том самом, который перехват ждёт.
+            // пустышка из нашей /30, не публичный резолвер. с 8.8.8.8 Private DNS в режиме Автоматически находил DoT на 853,
+            // а перехват ловит только 53, и весь системный DNS уходил мимо. здесь на 853 отвечать некому
             .addDnsServer(TUN_DNS_ADDRESS)
             .setSession("KEQDIS")
             .setBlocking(false)
 
-        // Без этого VPN приложения с target Android 10+ система считает лимитной
-        // сетью даже поверх домашнего Wi-Fi, и всё, что ждёт безлимитную («только
-        // по Wi-Fi»), при включённом туннеле её не видит. false — признак берётся
-        // у сети под туннелем.
+        // без этого VPN с target 10+ считается лимитной сетью даже на домашнем Wi-Fi. false: признак берётся у сети под туннелем
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) b.setMetered(false)
 
         applyAppFilter(b, inc, exc)
@@ -1164,16 +865,10 @@ class KeqdisVpnService : VpnService() {
     }
 
 
-    /// inc/exc split-tunnel app filter.
-    ///
-    /// Собственный пакет обязан идти мимо туннеля: ядро работает под нашим uid,
-    /// его исходящие сокеты не protect()-ятся и зациклились бы. Поэтому трафик
-    /// самого приложения ездит через локальный прокси ядра.
+    // свой пакет мимо туннеля: ядро работает под нашим uid, без protect() его сокеты зациклились бы
     private fun applyAppFilter(b: Builder, inc: List<String>, exc: List<String>) {
         if (inc.isNotEmpty()) {
-            // Считаем, сколько пакетов реально добавилось: NameNotFoundException
-            // нельзя просто глотать — если невалидны ВСЕ пакеты, establish()
-            // на Huawei/Honor возвращает null.
+            // считаем добавленные: если невалидны все, establish() на Huawei/Honor возвращает null
             var addedInc = 0
             inc.forEach { pkg ->
                 try {
@@ -1199,7 +894,7 @@ class KeqdisVpnService : VpnService() {
         }
     }
 
-    /// Huawei/Honor: setUnderlyingNetworks нужен для establish() со split tunneling.
+    // Huawei/Honor: без setUnderlyingNetworks establish() со сплитом не работает
     private fun applyHuaweiUnderlying(b: Builder) {
         if (!needsExplicitUnderlying()) return
         val manufacturer = Build.MANUFACTURER.uppercase()
@@ -1221,13 +916,8 @@ class KeqdisVpnService : VpnService() {
         return manufacturer == "HUAWEI" || manufacturer == "HONOR"
     }
 
-    /// Переезд подложки на уже поднятом туннеле — продолжение того же костыля.
-    ///
-    /// Везде, кроме Huawei/Honor, подложку НЕ трогаем вовсе: система считает её
-    /// сама и делает это правильно, а наш вызов её только ломает — именно так
-    /// туннель и стал подложкой самому себе (см. startNetworkWatch). Там же,
-    /// где мы её задали руками при establish(), обновлять обязаны тоже руками:
-    /// иначе первая сеть сессии залипает навсегда.
+    // везде, кроме Huawei/Honor, подложку не трогаем: наш вызов её только ломает, так туннель и стал подложкой себе.
+    // где задали руками, обновляем руками, иначе первая сеть сессии залипает
     private fun applyHuaweiUnderlying(network: Network) {
         if (!needsExplicitUnderlying()) return
         if (tunInterface == null) return   // режим прокси: establish() не звался
@@ -1235,22 +925,9 @@ class KeqdisVpnService : VpnService() {
             .onFailure { NativeLog.w("KEQDIS", "handover: setUnderlyingNetworks failed: ${it.message}") }
     }
 
-    // ── Xray ─────────────────────────────────────────────────────────────────
+    // для случая, когда ядро исчезло молча: убитый процесс прощания не пишет, а logcat на Android 13+ приложению закрыт.
+    // метка времени как у core_log_line в forkexec.c, файл там открыт с O_APPEND, дописывать параллельно можно
 
-    /**
-     * Дописывает в лог ядра строку от самого приложения.
-     *
-     * Нужна ровно для одного случая: ядро исчезло, а в логе от него ничего не
-     * осталось. Убитый снаружи процесс прощального сообщения не пишет, само
-     * событие «pid пропал» видит только служба, и печатала она его в logcat —
-     * который untrusted_app на Android 13+ не читает (SELinux, см. getXrayLogs).
-     * Снаружи это выглядело как «туннель отвалился в фоне, а в логах пусто»:
-     * жалоба, которую нечем ни подтвердить, ни опровергнуть.
-     *
-     * Метка времени — та же, что у native-писателя (core_log_line в
-     * forkexec.c), иначе строка читается чужой среди строк ядра. Файл открыт
-     * там с O_APPEND, так что дописывать в него параллельно безопасно.
-     */
     private fun appendCoreLog(vararg lines: String) {
         runCatching {
             val stamp = java.text.SimpleDateFormat("MM-dd HH:mm:ss ", java.util.Locale.US)
@@ -1260,13 +937,7 @@ class KeqdisVpnService : VpnService() {
         }
     }
 
-    /**
-     * Последние строки core_logs.txt для текста ошибки. Само по себе «port not
-     * ready» ничего не говорит: ядро чаще всего уже вышло с внятной жалобой на
-     * конфиг (например, на geosite:-код, которого нет в базе), а logcat на
-     * Android 13+ untrusted_app недоступен. Ограничиваем длину — строка едет в
-     * уведомление и в блок ошибки на экране подключения.
-     */
+    // port not ready ничего не говорит, ядро обычно уже вышло с жалобой на конфиг. длина ограничена: строка едет в уведомление
     private fun coreLogTail(maxLines: Int = 6, maxChars: Int = 600): String =
         runCatching {
             val file = File(filesDir, CORE_LOG_FILE)
@@ -1279,32 +950,15 @@ class KeqdisVpnService : VpnService() {
             if (tail.isBlank()) "" else "\n$tail"
         }.getOrDefault("")
 
-    /// Лог ядра начиная с байта [from]. Файл кольцуется усечением в ноль (см.
-    /// core_log_line в forkexec.c): если он стал короче метки, новое в нём всё.
+    // файл обнуляется по размеру: если он стал короче метки, новое в нём всё
     private fun coreLogSince(file: File, from: Long): String {
         val bytes = file.readBytes()
         val start = if (from in 0..bytes.size.toLong()) from.toInt() else 0
         return String(bytes, start, bytes.size - start, Charsets.UTF_8)
     }
 
-    /**
-     * Ждёт, пока mihomo действительно возьмёт наш дескриптор.
-     *
-     * Отдельного «tun готов» ядро наружу не отдаёт, поэтому смотрим лог, и
-     * сразу на оба исхода: `[TUN] Tun adapter listening at:` при успехе,
-     * `Start TUN listening error:` при отказе. Ошибка ценна сама по себе —
-     * причина в ней уже названа, и пользователю уезжает она, а не «не
-     * работает».
-     *
-     * Успех — строка уровня info, и в файл лога при выбранном warning она не
-     * попадает. Поэтому её считает читатель вывода до порога
-     * (NativeHelper.tunReadyCount), а сессия всегда пишет не тише info
-     * (raiseMihomoLogLevel). Вышедшее время по-прежнему не отказ: значит,
-     * ядро пишет лог мимо нас, и доказательств отказа нет.
-     *
-     * [from] — с какого байта лога смотреть: перезапуск на живой сессии лог
-     * не обнуляет (см. relaunchCore).
-     */
+    // смотрим лог на оба исхода: ошибка ценна, причина в ней уже названа.
+    // вышедшее время не отказ: значит, ядро пишет лог мимо нас
     private suspend fun awaitMihomoTun(timeoutMs: Int = 4000, from: Long = 0L) {
         val file = File(filesDir, CORE_LOG_FILE)
         var waited = 0
@@ -1326,14 +980,6 @@ class KeqdisVpnService : VpnService() {
         NativeLog.i("KEQDIS", "mihomo tun: no verdict in the log, continuing")
     }
 
-    /**
-     * Есть ли в конфиге xray инбаунд, который сам читает пакеты из туннеля.
-     *
-     * Признак берём из конфига, а не из настройки приложения: ядро ведёт себя
-     * по конфигу, и он же переживает перезапуск сервиса. Настройка могла бы
-     * успеть измениться между сборкой конфига и реконнектом из плитки — тогда
-     * мы решили бы, что туннель держит кто-то другой.
-     */
     private fun xrayConfigHasTun(configPath: String): Boolean = runCatching {
         val inbounds = org.json.JSONObject(File(configPath).readText())
             .optJSONArray("inbounds") ?: return false
@@ -1346,15 +992,7 @@ class KeqdisVpnService : VpnService() {
         false
     }
 
-    /**
-     * Проставляет tun-инбаунду xray тот же MTU, что стоит на интерфейсе.
-     *
-     * Причина та же, что и у mihomo (см. ниже): у fd-устройства ядру неоткуда
-     * спросить MTU, оно возьмёт своё умолчание, а расхождение с интерфейсом —
-     * это пакеты, законные для netstack и отброшенные ядром ОС при записи в
-     * tun. Дескриптор сюда не пишем: xray читает его только из переменной
-     * окружения, места в конфиге под него нет вовсе.
-     */
+    // MTU fd-устройства ядру спросить неоткуда, а расхождение с интерфейсом это пакеты, которые ядро ОС отбросит при записи в tun
     private fun injectXrayTunMtu(configPath: String) {
         val file = File(configPath)
         val root = org.json.JSONObject(file.readText())
@@ -1372,21 +1010,8 @@ class KeqdisVpnService : VpnService() {
         }
         throw IllegalStateException("xray config has no tun inbound")
     }
-    /**
-     * Дописывает в готовый конфиг mihomo номер дескриптора TUN и MTU.
-     *
-     * Обе величины принадлежат этой стороне и только ей: интерфейс поднимает
-     * сервис, дескриптор существует лишь в этом процессе, а [TUN_MTU] —
-     * константа сервиса. Держать их копию в Dart значило бы завести второй
-     * источник правды для числа, которое ОБЯЗАНО совпадать: у fd-устройства
-     * ядро не может спросить MTU у системы и берёт своё умолчание, а
-     * расхождение с интерфейсом — это пакеты, которые netstack считает
-     * допустимыми, а ядро ОС на записи в tun отбрасывает (ровно та же
-     * ловушка).
-     *
-     * Конфиг переписывается на месте: экран «Соединения» и реконнект из плитки
-     * читают координаты API из того же файла.
-     */
+    // дескриптор и MTU знает только сервис, копия в Dart была бы вторым источником для числа, которое обязано совпасть.
+    // переписываем на месте: экран Соединения и плитка читают API из этого же файла
     private fun injectTunFd(configPath: String, tunFd: Int) {
         val file = File(configPath)
         val root = org.json.JSONObject(file.readText())
@@ -1402,25 +1027,8 @@ class KeqdisVpnService : VpnService() {
         NativeLog.i("KEQDIS", "mihomo tun: fd=$tunFd mtu=$TUN_MTU")
     }
 
-    /**
-     * Снимает escape-последовательность `\/`, которую вставляет `org.json`.
-     *
-     * Конфиг мы пишем обычным JSON, а разбирает его ядро YAML-парсером
-     * (`gopkg.in/yaml.v3`) — YAML 1.2 надмножество JSON, и до сих пор это
-     * работало. Но `JSONStringer` в Android экранирует ещё и косую черту:
-     * `"https://1.1.1.1/dns-query"` превращается в `"https:\/\/1.1.1.1\/…"`.
-     * Для JSON это законно, а таблица escape-ов go-yaml (`scannerc.go`) знает
-     * `\t \n \r \f \" \\ \uXXXX`, но НЕ `\/` — и разбор обрывается на первом же
-     * слэше: `Parse config error: yaml: found unknown escape character`. Ядро не
-     * стартует вовсе, а снаружи это выглядит как долгое подключение и падение,
-     * потому что мы всё это время ждём SOCKS-порт, которого не будет.
-     *
-     * Слэшей в конфиге полно всегда: адреса DoH, CIDR-правила, пути транспортов.
-     * Поэтому ломается ЛЮБОЙ конфиг, а не какой-то особенный.
-     *
-     * Идём по строке с учётом самих escape-ов: `\\` копируем парой, чтобы
-     * следующий за ней слэш не сошёл за экранированный.
-     */
+    // JSONStringer экранирует слэш, а такого escape go-yaml не знает (scannerc.go): yaml: found unknown escape character.
+    // слэши есть в любом конфиге, поэтому ломался любой. \\ копируем парой, чтобы следующий слэш не сошёл за экранированный
     private fun yamlSafeJson(json: String): String {
         if (!json.contains("\\/")) return json
         val out = StringBuilder(json.length)
@@ -1439,15 +1047,8 @@ class KeqdisVpnService : VpnService() {
         return out.toString()
     }
 
-    /// Поднять заново ядро, убитое под живой сессией. Зовёт монитор процесса
-    /// под opMutex; false — не стали или не смогли, и сессию надо закрывать.
-    ///
-    /// Ядро живёт отдельным процессом, и система вправе убить его, не трогая
-    /// сервис: с Android 12 она ограничивает дочерние процессы приложений и
-    /// находит их по cgroup приложения, так что двойной fork от этого не
-    /// прячет. Раньше такая смерть закрывала всю сессию, и туннель в фоне
-    /// просто пропадал. Интерфейс же при этом цел, поэтому ядро поднимаем на
-    /// нём: приложения видят секунду тишины, а не разрыв VPN.
+    // система вправе убить ядро, не трогая сервис: с Android 12 дочерние процессы ищутся по cgroup.
+    // интерфейс при этом цел, поэтому ядро поднимаем на нём, и приложения видят секунду тишины, а не разрыв VPN
     private suspend fun reviveCore(deadPid: Int): Boolean {
         val config = lastXrayConfigPath ?: return false
         val lived = android.os.SystemClock.elapsedRealtime() - coreStartedAt
@@ -1469,20 +1070,8 @@ class KeqdisVpnService : VpnService() {
         }
     }
 
-    /**
-     * Конфиг, с которым ядро сессии запускается на самом деле.
-     *
-     * Отказ дозвона до своего сервера xray 26.x пишет только на уровне info
-     * (исходящий обработчик логирует свою ошибку через LogInfo), а по этим
-     * строкам автовыбор узнаёт, что сервер отвечает отказом: тишины в ответ в
-     * этом случае нет, есть сброс соединения. Поэтому xray сессии работает не
-     * тише info, а строки ниже уровня, выбранного человеком, режет читатель
-     * вывода — в лог и logcat они не попадают, их видит только счётчик.
-     *
-     * Копия рядом, а не правка на месте: плитка и оживление ядра стартуют с
-     * того же файла, и поднятый уровень на диске выдал бы себя за выбор
-     * человека.
-     */
+    // до info ради счётчика отказов. копия рядом: плитка и оживление стартуют с исходного файла,
+    // и поднятый уровень выдал бы себя за выбор человека
     private fun sessionConfigFor(config: String, coreKind: String): String {
         if (coreKind == CORE_KIND_MIHOMO) return raiseMihomoLogLevel(config)
         val levels = listOf("debug", "info", "warning", "error", "none")
@@ -1495,7 +1084,7 @@ class KeqdisVpnService : VpnService() {
             val source = File(config)
             val json = org.json.JSONObject(source.readText())
             val log = json.optJSONObject("log") ?: org.json.JSONObject().also { json.put("log", it) }
-            // Без поля xray пишет с warning — так его и читаем.
+            // без поля xray пишет с warning
             val chosen = levels.indexOf(log.optString("loglevel", "warning").lowercase())
                 .let { if (it < 0) levels.indexOf("warning") else it }
             if (chosen <= info) {
@@ -1508,23 +1097,14 @@ class KeqdisVpnService : VpnService() {
             NativeHelper.setCoreLogLevel(chosen)
             run.absolutePath
         } catch (e: Exception) {
-            // Не разобрали — запускаем как есть: без счётчика отказов, но с
-            // тем уровнем, что заказан.
+            // не разобрали: как есть, без счётчика отказов
             NativeLog.w("KEQDIS", "session log level left as is: ${e.message}")
             NativeHelper.setCoreLogLevel(0)
             config
         }
     }
 
-    /**
-     * То же для mihomo, со своей причиной: строку «TUN поднялся» он пишет
-     * уровнем info, и при выбранном warning каждое подключение ждало её до
-     * таймаута — четыре лишние секунды (awaitMihomoTun). Заодно его отказы
-     * дозвона видны и тем, кто выбрал error.
-     *
-     * Наш конфиг — JSON, готовый Clash от провайдера — YAML. Без поля mihomo
-     * и так пишет с info.
-     */
+    // mihomo строку TUN поднялся пишет на info, и при warning подключение ждало её четыре секунды. без поля он и так на info
     private fun raiseMihomoLogLevel(config: String): String {
         val levels = listOf("debug", "info", "warning", "error", "silent")
         return try {
@@ -1549,8 +1129,7 @@ class KeqdisVpnService : VpnService() {
         }
     }
 
-    /// Показания NativeHelper.tunReadyCount на старте текущего ядра: вердикт
-    /// «TUN поднялся» ищется только среди того, что написало оно.
+    // вердикт ищем только среди того, что написало текущее ядро
     private var tunReadyFrom = 0L
 
     private fun startXray(
@@ -1560,13 +1139,9 @@ class KeqdisVpnService : VpnService() {
         tunFd: Int = -1,
         freshLog: Boolean = true,
     ): Int {
-        // NativeHelper.startCore: fork+execv из nativeLibraryDir, дублирует вывод ядра
-        // в logcat (KEQDIS_XRAY) и в файл CORE_LOG_FILE (его читает getXrayLogs).
-        // Возвращает: pid > 0 — успех, -1 binary not found, -2 config not found, -4 crashed immediately
+        // -1 нет бинаря, -2 нет конфига, -4 умер сразу
         XrayGeoAssets.ensure(this, filesDir)
-        // Свежий лог ядра на каждую сессию (ping пишет в свой файл/никуда — не мешает).
-        // Перезапуск внутри сессии его не трогает: строки перед перезапуском и
-        // объясняют, зачем он понадобился.
+        // свежий лог на каждую сессию. перезапуск внутри сессии его не трогает: строки до него объясняют, зачем он был
         if (freshLog) runCatching { File(filesDir, CORE_LOG_FILE).writeText("") }
         tunReadyFrom = NativeHelper.tunReadyCount()
         val owner = if (tunFd >= 0) {
@@ -1584,19 +1159,17 @@ class KeqdisVpnService : VpnService() {
         when {
             pid == -1 -> throw IllegalStateException("Xray binary not found: $binary")
             pid == -2 -> throw IllegalStateException("Xray config not found: $config")
-            // Логом, а не отсылкой к logcat: untrusted_app его на Android 13+
-            // не читает, и «смотрите logcat» для пользователя пустой звук.
+            // логом, а не отсылкой к logcat: его на Android 13+ не прочесть
             pid == -4 -> throw IllegalStateException(
                 "${if (coreKind == CORE_KIND_MIHOMO) "mihomo" else "Xray"} " +
                     "exited on startup${coreLogTail()}"
             )
             pid <= 0  -> throw IllegalStateException("fork() for Xray failed (pid=$pid)")
-            else -> {} // valid pid
+            else -> {}
         }
         NativeLog.i("KEQDIS", "Xray started pid=$pid")
         coreStartedAt = android.os.SystemClock.elapsedRealtime()
 
-        // Запускаем мониторинг процесса Xray
         val monitorPid = pid
         serviceScope.launch(Dispatchers.IO) {
             try {
@@ -1609,7 +1182,7 @@ class KeqdisVpnService : VpnService() {
                             "core process $pid is gone, and the app did not stop it",
                             CORE_GONE_HINT,
                         )
-                        xrayPid = -1  // уже мёртв — не пытаемся убить повторно в cleanup()
+                        xrayPid = -1  // уже мёртв, повторно в cleanup() не убиваем
                         if (status == VpnRunStatus.RUNNING && reviveCore(pid)) return@withLock
                         NativeLog.w("KEQDIS", "[xray] triggering full cleanup after unexpected exit")
                         setStatus(VpnRunStatus.ERROR, "Xray exited unexpectedly")
@@ -1617,16 +1190,13 @@ class KeqdisVpnService : VpnService() {
                         cleanupDone = true
                         withContext(Dispatchers.Main) { stopForeground(STOP_FOREGROUND_REMOVE) }
                         unregisterNotificationReceiver()
-                        // Без stopSelf(): сервис остаётся в ERROR и переиспользуется
-                        // следующим стартом из плитки.
+                        // без stopSelf(): сервис в ERROR переиспользуется следующим стартом из плитки
                     }
                 }
             } catch (_: Exception) {}
         }
         return pid
     }
-
-    // ── Stats loop ────────────────────────────────────────────────────────────
 
     private fun startStatsLoop() {
         serviceScope.launch {
@@ -1638,7 +1208,7 @@ class KeqdisVpnService : VpnService() {
 
             while (status == VpnRunStatus.RUNNING || status == VpnRunStatus.STARTING) {
                 delay(1000)
-                // Пятая секунда — отправная точка сессии, дальше раз в десять минут.
+                // пятая секунда как отправная точка, дальше раз в десять минут
                 if (tick % MEMORY_SNAPSHOT_TICKS == 5) logMemory()
                 val rx = android.net.TrafficStats.getUidRxBytes(uid).coerceAtLeast(0)
                 val tx = android.net.TrafficStats.getUidTxBytes(uid).coerceAtLeast(0)
@@ -1653,18 +1223,10 @@ class KeqdisVpnService : VpnService() {
 
                 prevRx = rx; prevTx = tx
 
-                // Живая активность в нативном уведомлении: Dart-уведомление со
-                // скоростями живёт только пока жив Flutter, а этот foreground —
-                // всегда. Без обновлений оно застывало на «Connected», и было «не
-                // понятно, отвалился серв или нет». notify() вместо startForeground:
-                // сервис уже foreground с этим ID, апдейт текста так дешевле.
-                // isInteractive: при погашенном экране уведомление никто не видит —
-                // не дёргаем NotificationManager (IPC + RemoteViews) 30 раз в минуту
-                // всю ночь; после включения экрана текст освежится ближайшим тиком.
+                // Dart-уведомление со скоростями живёт, пока жив Flutter, а это всегда: без обновлений застывало на Connected.
+                // при погашенном экране не обновляем, 30 IPC в минуту всю ночь ни к чему
                 tick++
                 if (status == VpnRunStatus.RUNNING && tick % 2 == 0 && pm.isInteractive) {
-                    // Пользователь мог оффнуть аптайм и/или скорость в уведомлении
-                    // (настройки в Appearance) — собираем строку из включённых частей.
                     val prefs = readNotifBodyPrefs()
                     val parts = ArrayList<String>(3)
                     if (prefs.showUptime) {
@@ -1686,20 +1248,10 @@ class KeqdisVpnService : VpnService() {
         }
     }
 
-    // Прошлый слепок и следующий порог размера — см. logMemory.
     private var lastMemoryPss = 0L
     private var nextMemoryThreshold = 1024L * 1024 * 1024
 
-    /**
-     * Слепок памяти процесса в native.log.
-     *
-     * Процесс уже разрастался до 2,3 ГБ при работающем VPN (запись системы:
-     * LOW_MEMORY, importance 125), и чем — не понять без чисел по времени:
-     * Java, нативная куча, графика Flutter, потоки, открытые файлы и отдельно
-     * ядро, которое живёт своим процессом и в PSS приложения не входит.
-     * Скачок больше MEMORY_GROWTH_ALARM и пройденный порог (1, 2, 4 ГБ) идут
-     * предупреждением — их видно фильтром «Только проблемы».
-     */
+    // процесс уже разрастался до 2,3 ГБ при VPN, и чем, без чисел по времени не понять. ядро живёт своим процессом и в PSS не входит
     private fun logMemory() {
         runCatching {
             val info = android.os.Debug.MemoryInfo().also { android.os.Debug.getMemoryInfo(it) }
@@ -1728,7 +1280,7 @@ class KeqdisVpnService : VpnService() {
         }.onFailure { NativeLog.d("KEQDIS", "memory snapshot failed: ${it.message}") }
     }
 
-    /// Число из `/proc/<pid>/status`: у VmRSS — килобайты, у Threads — штуки.
+    // у VmRSS килобайты, у Threads штуки
     private fun procStatusValue(pid: String, key: String): Long? = runCatching {
         File("/proc/$pid/status").useLines { lines ->
             lines.firstOrNull { it.startsWith("$key:") }
@@ -1758,15 +1310,10 @@ class KeqdisVpnService : VpnService() {
         }
     }
 
-    // Что показывать в строке уведомления (аптайм / скорость) — настройки из
-    // приложения. Flutter хранит AppSettings как JSON-строку в
-    // FlutterSharedPreferences с префиксом "flutter.". Читаем прямо оттуда —
-    // работает для всех путей старта (Dart, плитка, кнопка уведомления), без
-    // прокидывания extra через Intent.
+    // читаем прямо из FlutterSharedPreferences (JSON AppSettings под flutter.): так работает любой путь старта без extra в Intent
     private data class NotifBodyPrefs(val showUptime: Boolean, val showSpeed: Boolean)
 
-    // Дебаг-режим приложения. Он гейтит подробный лог ядра: тот пишет
-    // строку на каждое соединение, и держать это включённым всегда незачем.
+    // подробный лог пишет строку на каждое соединение, держать его всегда незачем
     private fun readDebugMode(): Boolean {
         return try {
             val raw = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
@@ -1791,13 +1338,8 @@ class KeqdisVpnService : VpnService() {
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
     private fun getBinaryPath(name: String): String {
-        // Запускаем .so напрямую из nativeLibraryDir (/data/app/.../lib/arm64/,
-        // у 32-битного APK — lib/arm/).
-        // Файлы там имеют SELinux-метку apk_data_file — execv разрешён.
-        // codeCacheDir и filesDir — app_data_file — execv заблокирован SELinux на Android 10+.
+        // исполнять можно только из nativeLibraryDir (apk_data_file), в filesDir и codeCacheDir execv на Android 10+ запрещён SELinux
         val bin = File(applicationInfo.nativeLibraryDir, name)
         if (!bin.exists()) throw IllegalStateException("$name not found in ${applicationInfo.nativeLibraryDir}")
         NativeLog.i("KEQDIS", "Using binary: ${bin.absolutePath}")
@@ -1817,21 +1359,15 @@ class KeqdisVpnService : VpnService() {
             VpnRunStatus.RUNNING  -> "connected"
             VpnRunStatus.ERROR    -> "error"
         }
-        // Тот же статус в памяти процесса — см. [liveStatus].
         liveStatus = statusStr
-        // И в запись системы о смерти процесса, если он умрёт с этим статусом.
         ProcessExits.noteVpnStatus(this, statusStr)
-        // Сессию, оборвавшуюся ошибкой, после смерти процесса не поднимаем:
-        // ошибка вернулась бы вместе с ней, и перезапуски пошли бы по кругу.
+        // оборвавшуюся ошибкой после смерти процесса не поднимаем: ошибка вернулась бы с ней, и перезапуски пошли бы по кругу
         if (s == VpnRunStatus.ERROR) rememberSessionWanted(false)
 
-        // Log transitions to final states for QS tile debugging
         if (s == VpnRunStatus.STOPPED || s == VpnRunStatus.RUNNING || s == VpnRunStatus.ERROR) {
             NativeLog.i("KEQDIS_QS", "setStatus: $s → statusStr=$statusStr")
         }
 
-        // Persist status for Quick Settings tile (and other Android-only consumers).
-        // We intentionally keep it separate from FlutterSharedPreferences.
         runCatching {
             getSharedPreferences(PREFS_QS, Context.MODE_PRIVATE)
                 .edit()
@@ -1840,8 +1376,7 @@ class KeqdisVpnService : VpnService() {
                 .apply()
         }
 
-        // Notify ContentProvider to update Quick Settings tile via ContentObserver.
-        // This is more reliable than requestListeningState() which only works when QS is open.
+        // ContentObserver надёжнее requestListeningState(): тот работает, только пока открыта шторка
         runCatching {
             contentResolver.notifyChange(VpnStatusProvider.STATUS_URI, null)
         }.onFailure { e ->
@@ -1850,7 +1385,6 @@ class KeqdisVpnService : VpnService() {
 
         statusListener?.invoke(statusStr, e)
 
-        // Broadcast status change for QS tile update
         runCatching {
             sendBroadcast(Intent().apply {
                 action = BROADCAST_VPN_STATUS_CHANGED
@@ -1889,8 +1423,6 @@ class KeqdisVpnService : VpnService() {
             .notify(NOTIFICATION_ID, buildNotification(text))
     }
 
-    // ── Уведомление с кнопками управления ─────────────────────────────────────
-
     private fun buildControlNotification(
         text: String,
         isConnected: Boolean,
@@ -1910,7 +1442,6 @@ class KeqdisVpnService : VpnService() {
             )
         }
 
-        // Intent для открытия приложения
         val contentIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java).apply {
@@ -1919,11 +1450,7 @@ class KeqdisVpnService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Заголовок — только сервер: статус живёт во второй строке (Connected /
-        // Connecting… / Disconnected / текст ошибки), и «VPN Connected · сервер»
-        // над «Connected» дублировал её. Заодно уходит старая ловушка, когда
-        // «VPN Disconnected · сервер» стояло над «Connecting…» и читалось как
-        // противоречие.
+        // в заголовке только сервер: статус во второй строке, и VPN Connected над Connected его дублировал
         val title = currentServerName?.takeIf { it.isNotBlank() } ?: "VPN"
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID_CONTROL)
@@ -1939,10 +1466,8 @@ class KeqdisVpnService : VpnService() {
             .setShowWhen(false)
             .setOnlyAlertOnce(true)
 
-        // Добавляем кнопки действий только если не в процессе переключения
         if (!isTransitioning) {
             if (isConnected) {
-                // Кнопка "Отключить"
                 val disconnectIntent = Intent(BROADCAST_ACTION_DISCONNECT).apply {
                     setPackage(packageName)
                 }
@@ -1957,7 +1482,6 @@ class KeqdisVpnService : VpnService() {
                     disconnectPending
                 )
             } else {
-                // Кнопка "Подключить"
                 val connectIntent = if (
                     !lastXrayConfigPath.isNullOrBlank() &&
                     socksUsername.isNotBlank() &&
@@ -1965,8 +1489,7 @@ class KeqdisVpnService : VpnService() {
                 ) {
                     Intent(this, KeqdisVpnService::class.java).apply {
                         action = ACTION_START
-                        // Тем же ядром, что и в прошлой сессии: конфиг на диске
-                        // написан под него, чужое ядро его не разберёт.
+                        // тем же ядром: конфиг на диске написан под него
                         putExtra(
                             EXTRA_VPN_BACKEND,
                             if (lastCoreKind == CORE_KIND_MIHOMO) VPN_BACKEND_MIHOMO
@@ -1984,7 +1507,6 @@ class KeqdisVpnService : VpnService() {
                         }
                     }
                 } else {
-                    // Fallback для самого первого запуска после cold start.
                     Intent(this, KeqdisVpnService::class.java).apply {
                         action = ACTION_TOGGLE
                     }
@@ -2005,9 +1527,6 @@ class KeqdisVpnService : VpnService() {
         return builder.build()
     }
 
-    // Обновляет foreground-уведомление сервиса. Использует startForeground() вместо
-    // NotificationManager.notify() — это единственный корректный способ обновить
-    // уведомление foreground-сервиса без race condition на Android 12+.
     private fun showControlNotification(
         text: String,
         isConnected: Boolean,
@@ -2024,7 +1543,6 @@ class KeqdisVpnService : VpnService() {
                 when (intent?.action) {
                     BROADCAST_ACTION_CONNECT -> {
                         NativeLog.i("KEQDIS", "[notification] Connect pressed")
-                        // Открываем приложение для подключения
                         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
                         launchIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         launchIntent?.putExtra("action", "connect_from_notification")

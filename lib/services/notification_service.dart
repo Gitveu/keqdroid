@@ -1,6 +1,3 @@
-// vpn-уведомление в шторке с кнопками connect/disconnect.
-// init() в main() после BackgroundService.init(), дальше updateStatus() по смене состояния.
-
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -17,9 +14,6 @@ class NotificationService {
   static const _channelName = 'VPN Control';
   static const _notifId     = 1338;
 
-  // Отдельный канал для подписок: у VPN-канала importance low и без звука
-  // (он для тихого статуса в шторке), а «подписка истекла» пользователь должен
-  // увидеть — иначе клиент так и молчит про окончание срока.
   static const _subsChannelId   = 'keqdis_subscriptions';
   static const _subsChannelName = 'Subscriptions';
   static const _subsNotifIdBase = 2400;
@@ -27,7 +21,6 @@ class NotificationService {
   FlutterLocalNotificationsPlugin? _plugin;
   bool _initialized = false;
 
-  /// init, один раз после BackgroundService.init()
   static Future<void> init() async {
     final ns = instance;
     if (ns._initialized) return;
@@ -42,13 +35,11 @@ class NotificationService {
     ns._plugin = plugin;
     ns._initialized = true;
 
-    // разрешение на Android 13+
     final android = plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await android?.requestNotificationsPermission();
   }
 
-  /// шторка со статусом vpn
   static Future<void> showNotification({
     required VpnState state,
     String? serverName,
@@ -63,7 +54,6 @@ class NotificationService {
 
     final (title, body, isConnected) = _buildContent(state, serverName);
 
-    // берём стандартную mipmap иконку
     final androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,
@@ -73,7 +63,6 @@ class NotificationService {
       icon: '@mipmap/ic_launcher',
       ongoing: isConnected,
       autoCancel: !isConnected,
-      // нужно для кнопок-действий
       playSound: false,
       enableVibration: false,
       showWhen: false,
@@ -95,21 +84,12 @@ class NotificationService {
     await showNotification(state: state, serverName: serverName);
   }
 
-  /// Разовое уведомление «подписка истекла».
-  ///
-  /// Панель после окончания срока обычно продолжает отдавать те же серверы (или
-  /// просто перестаёт обновлять список), и без этого клиент не сообщал ничего —
-  /// пользователь узнавал об окончании только когда серверы отваливались.
-  /// [subscriptionId] задаёт id уведомления, чтобы разные подписки не
-  /// перезаписывали друг друга.
   static Future<void> showSubscriptionExpired({
     required String subscriptionId,
     required String title,
     required String body,
   }) async {
     final ns = instance;
-    // На десктопе init() не зовётся вовсе (уведомления только на Android) —
-    // это не ошибка, там про истечение говорит баннер в списке подписок.
     if (!ns._initialized || ns._plugin == null) return;
 
     final details = AndroidNotificationDetails(
@@ -124,8 +104,6 @@ class NotificationService {
     );
 
     await ns._plugin!.show(
-      // hashCode подписки в диапазон id: стабильно для одной подписки и
-      // различается между ними.
       id: _subsNotifIdBase + (subscriptionId.hashCode.abs() % 100),
       title: title,
       body: body,
@@ -133,14 +111,12 @@ class NotificationService {
     );
   }
 
-  /// убрать из шторки
   static Future<void> hideNotification() async {
     final ns = instance;
     if (!ns._initialized || ns._plugin == null) return;
     await ns._plugin!.cancel(id: _notifId);
   }
 
-  /// Отменяет уведомление и освобождает ресурсы.
   static Future<void> dispose() async {
     final ns = instance;
     if (!ns._initialized || ns._plugin == null) return;
@@ -148,8 +124,6 @@ class NotificationService {
     ns._initialized = false;
     ns._plugin = null;
   }
-
-  // private
 
   static (String title, String body, bool isConnected) _buildContent(
     VpnState state,
@@ -225,7 +199,7 @@ class NotificationService {
                          state.status == VpnStatus.disconnecting;
 
     if (isConnecting) {
-      return []; // во время переключения кнопки не показываем
+      return [];
     }
 
     if (isConnected) {
@@ -255,19 +229,15 @@ class NotificationService {
       'Notification tap: action=$actionId payload=$payload',
     );
 
-    // обработка кнопок из уведомления
     if (actionId == 'action_connect') {
       _handleConnect();
     } else if (actionId == 'action_disconnect') {
       _handleDisconnect();
     }
-    // тап по самому уведомлению открывает приложение (contentIntent на android)
   }
 
   static Future<void> _handleConnect() async {
     try {
-      // Request native side to toggle/start VPN. MainActivity handles this
-      // via MethodChannel and will forward as an Intent to KeqdisVpnService.
       const channel = MethodChannel('keqdis_vpn_channel');
       await channel.invokeMethod('toggleVpn');
       AppLogger.instance.debug('VPN connect action from notification');

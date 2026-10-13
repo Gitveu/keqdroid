@@ -1,13 +1,5 @@
 part of '../servers_tab.dart';
 
-/// Главная кнопка подключения.
-///
-/// Здесь три вещи, без которых M3 Expressive не читается. State layer и рипл:
-/// раньше был [GestureDetector] поверх [AnimatedContainer], и нажатие ничем не
-/// отзывалось. Морфинг формы при нажатии — круг поджимается в скруглённый
-/// квадрат и пружиной возвращается, это подпись всего языка. И единая фаза
-/// состояния: цвета фона, обводки и свечения едут по одной шкале
-/// idle → connecting → connected, поэтому переход всегда согласован.
 class _ConnectButton extends StatefulWidget {
   final bool isConnected;
   final bool isConnecting;
@@ -23,51 +15,23 @@ class _ConnectButton extends StatefulWidget {
   State<_ConnectButton> createState() => _ConnectButtonState();
 }
 
-/// Тикеров у кнопки три, а не один: свой на нажатие плюс два внутри
-/// [ShapeMorphCycle] (морфинг фигуры и независимое вращение). С
-/// `SingleTickerProviderStateMixin` это падало ассертом при первом же создании
-/// цикла — то есть в debug фигур на кнопке не было вовсе, а в release ассерт
-/// вырезан, и вместо падения ломался `TickerMode`: со скрытого экрана
-/// продолжал тикать только последний созданный тикер.
+// тикеров три (нажатие и два в ShapeMorphCycle), с SingleTickerProviderStateMixin падает ассерт
 class _ConnectButtonState extends State<_ConnectButton>
     with TickerProviderStateMixin {
-  /// `XLargeIconButtonTokens.ContainerHeight`.
   static const double _size = 136;
 
-  /// Углы включённого состояния — осознанное отступление от спеки.
-  ///
-  /// Таблица углов кнопок-иконок даёт для размера XL квадратную форму в 28dp, и
-  /// раньше стояло ровно оно. Формально верно, на глаз — нет: на стороне в
-  /// 136dp это пятая часть, и включённая кнопка читается просто квадратом. На
-  /// сорока восьми она остаётся отличимой от круга (в этом весь смысл смены
-  /// формы), но перестаёт быть углом.
-  ///
-  /// 48 — не произвольное число, а `extraExtraLarge` нашей шкалы форм: шаг,
-  /// заведённый как раз под «геройские» элементы, а кнопка подключения ровно
-  /// такой и есть — единственный объект такого размера во всём приложении.
   static const double _selectedCorner = ExpressiveShape.extraExtraLarge;
 
-  /// Нажатая форма. Спека сжимает XL с 28 до 16, то есть примерно на 40%; та же
-  /// доля от сорока восьми — двадцать восемь. Так нажатие остаётся заметным и
-  /// на круге, и на включённой форме.
   static const double _pressedCorner = ExpressiveShape.extraLarge;
 
-  /// `XLargeIconButtonTokens.IconSize`.
   static const double _iconSize = 40;
 
-  /// Unbounded — пружина M3E обязана перелетать за цель, иначе возврат формы
-  /// выглядит как обычный ease.
+  // unbounded: пружина должна перелетать за цель
   late final AnimationController _press = AnimationController.unbounded(
     vsync: this,
     value: 0,
   );
 
-  /// Живёт только пока идёт подключение: на это время форма кнопки и есть
-  /// индикатор загрузки.
-  ///
-  /// Фигура внутри статичного круга противоречила замыслу M3E — движение
-  /// показывает индикатор, а рамка вокруг него стоит на месте и это движение
-  /// гасит. Поэтому морфится сам элемент, а не картинка в нём.
   ShapeMorphCycle? _cycle;
 
   @override
@@ -81,10 +45,7 @@ class _ConnectButtonState extends State<_ConnectButton>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isConnecting != widget.isConnecting ||
         oldWidget.isConnected != widget.isConnected) {
-      // Страховка от залипшего нажатия: системный диалог разрешения VPN
-      // забирает окно, и `onTapUp`/`onTapCancel` до нас могут не дойти — кнопка
-      // осталась бы поджатой и квадратной до следующего касания. К этому
-      // моменту действие уже сработало, отпускать её в любом случае пора.
+      // диалог разрешения VPN забирает окно, и onTapUp может не прийти
       _setPressed(false);
     }
     _syncCycle();
@@ -96,19 +57,11 @@ class _ConnectButtonState extends State<_ConnectButton>
       if (running == null) {
         _cycle = ShapeMorphCycle(vsync: this);
       } else if (running.isSettling) {
-        // Подключение возобновилось, пока фигура доезжала до круга. На первом
-        // подключении это штатный ход событий: система показывает диалог
-        // разрешения VPN, статус на это время уходит из «подключается» и
-        // возвращается только после согласия. Раньше `??=` подхватывал уже
-        // доводящийся цикл, тот добегал до конца и обнулял себя — фигур на
-        // кнопке не появлялось вовсе, оставалась статичная иконка.
+        // во время диалога разрешения VPN статус выходит из connecting, поэтому возобновляем тот же цикл
         running.resume();
       }
       return;
     }
-    // Подключение кончилось — не обрываем цикл на произвольной форме, а даём
-    // фигуре доехать до круга и только потом убираем её. Иначе клевер скачком
-    // превращался в иконку.
     final cycle = _cycle;
     if (cycle == null || cycle.isSettling) return;
     cycle.settle(
@@ -118,9 +71,7 @@ class _ConnectButtonState extends State<_ConnectButton>
           return;
         }
         setState(() => _cycle = null);
-        // Освобождаем не сразу: AnimatedSwitcher ещё доигрывает исчезновение
-        // старого кадра, а тот подписан на этот же цикл. Убить его в этот
-        // момент значит дёргать мёртвый ChangeNotifier из живого билдера.
+        // AnimatedSwitcher ещё доигрывает старый кадр, подписанный на этот цикл
         Future.delayed(ExpressiveMotion.durationFast, cycle.dispose);
       },
     );
@@ -137,27 +88,16 @@ class _ConnectButtonState extends State<_ConnectButton>
     ExpressiveMotion.springTo(
       _press,
       pressed ? 1 : 0,
-      // Вниз — быстро и без отскока (палец ещё на экране), обратно — обычной
-      // пространственной пружиной, чтобы отскок было видно.
       spring: pressed
           ? ExpressiveMotion.effectsFast
           : ExpressiveMotion.spatialDefault,
     );
   }
 
-  /// Выбранность toggle-кнопки: 0 — не выбрана, 1 — выбрана.
-  ///
-  /// Промежуточной ступени для «подключается» здесь нет и быть не должно: у
-  /// toggle-кнопки ровно два состояния, а ожидание — это не третье состояние
-  /// компонента, а работа индикатора внутри. Раньше здесь стояло 0.5, и
-  /// кнопка застревала в форме и цвете, которых в спеке нет.
   double get _phase => widget.isConnected ? 1 : 0;
 
   @override
   Widget build(BuildContext context) {
-    // На телевизоре фокус пульта заливает кнопку (см. TvFocusHighlight), и
-    // цвета значка берутся уже под её темой — поэтому всё строится внутри.
-    // Заливка обёртки круглая: и выбранная, и нажатая форма её накрывают.
     return TvFocusHighlight(
       radius: BorderRadius.circular(_size / 2),
       child: Builder(builder: _buildButton),
@@ -167,15 +107,6 @@ class _ConnectButtonState extends State<_ConnectButton>
   Widget _buildButton(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final focusFill = TvFocusHighlight.containerOf(context);
-    // Стиль — filled, по FilledIconButtonTokens: не выбрана SurfaceContainer,
-    // выбрана Primary.
-    //
-    // Тональный вариант отсюда убран намеренно. Он опирается на `Secondary`, а
-    // эта роль генерируется из того же исходного цвета с сильно пониженной
-    // насыщенностью — на синей системной теме она уезжает в лавандовый. То
-    // есть кнопка переставала быть синей не из-за ошибки, а по устройству
-    // палитры: «вторичный» в M3 это не «тот же цвет потише», а отдельный тон.
-    // Раз тема системная и синяя, кнопка обязана оставаться в семье `Primary`.
     final unselectedBg = scheme.surfaceContainer;
     final selectedBg = scheme.primary;
 
@@ -193,31 +124,18 @@ class _ConnectButtonState extends State<_ConnectButton>
             final shape = _shape(t, phase);
 
             return Transform.scale(
-              // Лёгкое поджатие вместе с морфом: у M3E нажатие уменьшает
-              // площадь, а не только скругление.
               scale: 1 - 0.04 * t,
               child: DecoratedBox(
-                // Форма без тени: у icon button нет высоты — ни в одном из
-                // четырёх стилей. Тень (а до неё цветное сияние) была нашей
-                // добавкой и делала из кнопки FAB, которым она не является.
                 decoration: ShapeDecoration(shape: shape),
                 child: Material(
                   color: bg,
-                  // Обводки тоже нет: она есть только у outlined-стиля и там
-                  // равна 3dp. У filled-кнопки её быть не должно.
                   shape: shape,
-                  // Material сама доводит форму и цвет за 200 мс. Мы меняем их
-                  // покадрово, поэтому её неявная анимация только тормозила бы
-                  // морф, перезапускаясь на каждом кадре.
+                  // форму меняем покадрово, неявная анимация Material перезапускалась бы на каждом кадре
                   animationDuration: Duration.zero,
-                  // Клип не нужен: рипл обрезает по customBorder сам, а лишний
-                  // antiAlias-клип платился бы на каждом кадре дыхания.
                   child: InkWell(
                     onTap: widget.onTap == null
                         ? null
                         : () {
-                            // Главное действие приложения — заметная отдача,
-                            // а не лёгкий щелчок выбора.
                             AppHaptics.impact();
                             widget.onTap!();
                           },
@@ -237,25 +155,11 @@ class _ConnectButtonState extends State<_ConnectButton>
           },
         );
       },
-      // Иконка от фазы не зависит — держим её вне обоих билдеров, чтобы не
-      // пересобирать поддерево AnimatedSwitcher на каждом кадре.
       child: _icon(context),
     );
   }
 
-  /// Фигура внутри кнопки, пока идёт подключение.
-  ///
-  /// Это «contained loading indicator» из M3E, только крупный: круглая подложка
-  /// (сама кнопка) и фигура внутри неё. Пропорция взята из спеки — 38 из 48, то
-  /// есть [ShapeLoadingIndicator.activeScale]. Морфящаяся кнопка без подложки,
-  /// которая была здесь до этого, замыслу компонента не отвечает: у него
-  /// подложка есть, и она же даёт фигуре контраст на пёстром фоне.
-  /// [cycle] передаётся аргументом, а не читается из поля.
-  ///
-  /// Иначе получается отложенная мина: AnimatedSwitcher доигрывает исчезновение
-  /// старого кадра уже после того, как поле обнулили, и `_cycle!` в его
-  /// билдере падал бы на null. Исключение в build гасит render object молча —
-  /// на экране это выглядело как мигание в момент подключения.
+  // cycle аргументом: AnimatedSwitcher доигрывает старый кадр после обнуления поля, и _cycle! упал бы молча
   Widget _morphFigure(BuildContext context, ShapeMorphCycle cycle) =>
       RepaintBoundary(
         key: const ValueKey('morph'),
@@ -268,27 +172,12 @@ class _ConnectButtonState extends State<_ConnectButton>
               progress: cycle.progress,
               degrees: cycle.degrees,
               scale: ShapeLoadingIndicator.activeScale,
-              // Цвет выбранной кнопки, а не «содержимое поверх контейнера».
-              //
-              // Роль `on*Container` существует ради контраста с фоном и оттого
-              // всегда почти чёрная — для подписи это правильно, а для фигуры
-              // в пол-кнопки давало тяжёлое пятно. Здесь фигура показывает, во
-              // что кнопка вот-вот превратится, поэтому берёт её цвет.
               color: Theme.of(context).colorScheme.primary,
             ),
           ),
         ),
       );
 
-  /// Форма кнопки по правилам toggle icon button из M3 Expressive.
-  ///
-  /// Форма меняется дважды и по разным поводам. При выборе: у невыбранной
-  /// кнопки покоящаяся форма круглая, у выбранной скруглённо-квадратная — это
-  /// штатный индикатор состояния, он читается боковым зрением и не зависит от
-  /// цвета. При нажатии обе формы сходятся к одной и той же, поэтому press
-  /// применяется поверх покоящейся, а не вместо неё.
-  ///
-  /// [selected] — доля перехода в выбранное состояние, [press] — в нажатое.
   ShapeBorder _shape(
     double press,
     double selected, {
@@ -313,12 +202,8 @@ class _ConnectButtonState extends State<_ConnectButton>
   }
 
   Widget _icon(BuildContext context) {
-    // Не `isConnecting`, а наличие цикла: после успеха он ещё живёт, пока
-    // фигура доезжает до круга (см. _syncCycle).
     final cycle = _cycle;
     final scheme = Theme.of(context).colorScheme;
-    // В фокусе пульта значок на инверсной заливке — полным цветом, как
-    // содержимое кнопок Material for TV: приглушённый терялся на главной кнопке.
     final idleIcon = TvFocusHighlight.containerOf(context) != null
         ? scheme.onSurface
         : scheme.onSurfaceVariant;
@@ -335,17 +220,12 @@ class _ConnectButtonState extends State<_ConnectButton>
       ),
       child: cycle != null
           ? _morphFigure(context, cycle)
-          // Outlined когда не выбрано, filled когда выбрано — прямая
-          // рекомендация спеки для toggle-кнопок. Раньше обе иконки были
-          // filled, и состояние держалось на одном цвете.
           : Icon(
               widget.isConnected
                   ? Icons.pause_rounded
                   : Icons.play_arrow_outlined,
               key: ValueKey(widget.isConnected ? 'pause' : 'play'),
               size: _iconSize,
-              // FilledIconButtonTokens: не выбрана — OnSurfaceVariant,
-              // выбрана — OnPrimary.
               color: widget.isConnected ? scheme.onPrimary : idleIcon,
             ),
     );

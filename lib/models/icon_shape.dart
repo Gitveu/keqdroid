@@ -2,20 +2,7 @@ import 'package:androidx_graphics_shapes/material_shapes.dart';
 import 'package:androidx_graphics_shapes/shapes.dart';
 import 'package:flutter/material.dart';
 
-/// Форма кружка под иконкой — как выбор формы иконок в Pixel Launcher.
-///
-/// Смысл тот же, что у системной настройки: форма — самая заметная черта почерка
-/// интерфейса, и одна и та же палитра с круглыми и со скруглённо-квадратными
-/// значками читается как два разных приложения. Менять её должен пользователь.
-///
-/// Контуры берутся из [MaterialShapes] — это перенос `androidx.graphics.shapes`,
-/// тот же набор, из которого фигуры берёт Android. Раньше здесь была своя
-/// тригонометрия: радиус, гуляющий синусоидой. Выходило «примерно клевер», зато
-/// каждая фигура требовала подбора двух чисел на глаз, а «почему клевер мельче
-/// круга» приходилось решать заново для каждой.
-///
-/// Значения — контракт хранилища: id уезжает в настройки, переименование сбросит
-/// выбор на круг.
+// id лежат в настройках, переименование сбросит выбор на круг
 enum IconShape {
   circle('circle'),
   square('square'),
@@ -41,7 +28,6 @@ enum IconShape {
     return IconShape.circle;
   }
 
-  /// Контур из официального набора.
   RoundedPolygon get polygon => switch (this) {
         IconShape.circle => MaterialShapes.circle,
         IconShape.square => MaterialShapes.square,
@@ -57,10 +43,5 @@ enum IconShape {
         IconShape.pebble => MaterialShapes.softBurst,
       };
 
-  /// Форма для контейнера диаметром [size].
-  ///
-  /// Размер параметром больше не нужен — фигуры нормализованы и растягиваются
-  /// под любой прямоугольник сами, — но подпись оставлена: её ждут все места
-  /// вызова, а лишний аргумент дешевле, чем правка десятка файлов.
   ShapeBorder border(double size) => RoundedPolygonBorder(polygon: polygon);
 }

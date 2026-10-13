@@ -4,8 +4,6 @@ import 'package:keqdroid/shared/ui/app_theme.dart';
 import 'package:keqdroid/shared/ui/expressive.dart';
 import 'package:keqdroid/shared/ui/haptics.dart';
 
-/// Разделы приложения — одни и те же у нижней панели и у рейки
-/// (`nav_rail.dart`): разойтись составом или значками им нельзя.
 List<({IconData icon, String label, bool badge})> appNavDestinations(
   AppLocalizations l10n, {
   required bool showConnectedBadge,
@@ -16,17 +14,8 @@ List<({IconData icon, String label, bool badge})> appNavDestinations(
       (icon: Icons.settings_rounded, label: l10n.navSettings, badge: false),
     ];
 
-/// Нижняя навигация в горизонтальной раскладке M3 Expressive: иконка и подпись
-/// стоят в один ряд внутри пилюли-индикатора, а не подпись под иконкой.
-///
-/// Своя реализация вместо [NavigationBar] нужна ровно из-за этой раскладки —
-/// во Flutter 3.44 у навбара есть только вертикальная. Всё остальное берём по
-/// анатомии M3: пилюля-индикатор, state layer с рипплом по её форме, цель
-/// нажатия не меньше 48 логических пикселей, переход выбора — пружиной.
-///
-/// Анимация живёт здесь, а не в самих пунктах, и это принципиально: доля ряда
-/// под пункт считается из той же величины, что и его отступы. Когда доля падала
-/// мгновенно (по булеву `selected`), а отступы ещё ехали, пункт переполнял ряд.
+// своя реализация: у NavigationBar во Flutter 3.44 подпись только под иконкой.
+// анимация здесь, а не в пунктах: доля ряда считается из той же величины, что отступы
 class AppBottomNav extends StatefulWidget {
   final int index;
   final bool showConnectedBadge;
@@ -47,8 +36,7 @@ class _AppBottomNavState extends State<AppBottomNav>
     with TickerProviderStateMixin {
   static const int _count = 3;
 
-  /// Unbounded — пружина M3E недодемпфирована и обязана перелетать за цель,
-  /// иначе движение вырождается обратно в обычный ease.
+  // unbounded: пружина должна перелетать за цель
   late final List<AnimationController> _ctrls = List.generate(
     _count,
     (i) => AnimationController.unbounded(
@@ -113,8 +101,6 @@ class _AppBottomNavState extends State<AppBottomNav>
                         t: _ctrls[i].value,
                         maxLabelWidth: budgets[i],
                         onTap: () {
-                          // Повторный тап по своей же вкладке ничего не меняет —
-                          // и отдаваться ему нечем.
                           if (i != widget.index) AppHaptics.selection();
                           widget.onTap(i);
                         },
@@ -129,13 +115,7 @@ class _AppBottomNavState extends State<AppBottomNav>
     );
   }
 
-  /// Сколько места остаётся каждой подписи.
-  ///
-  /// Считаем явно, а не через `Flexible`: доля Flex ничего не знает про
-  /// минимальный размер пункта, и в узком окне 48 px иконки с отступами не
-  /// влезали в свои 42 — ряд переполнялся. Здесь неснимаемая часть пунктов
-  /// вычитается первой, а остаток делится пропорционально раскрытию, поэтому
-  /// сумма ширин по построению не превышает доступную.
+  // явно, а не Flexible: доля Flex не знает минимума пункта, и узкий ряд переполнялся
   static List<double> _labelBudgets(List<double> ts, double maxWidth) {
     var fixed = 0.0;
     var openSum = 0.0;
@@ -157,11 +137,8 @@ class _NavItem extends StatelessWidget {
   final bool selected;
   final bool badge;
 
-  /// 0 — свёрнут до иконки, 1 — раскрыт с подписью. Может перелетать за 1:
-  /// это пружина, и перелёт нужен геометрии.
   final double t;
 
-  /// Потолок ширины подписи, посчитанный родителем из остатка ряда.
   final double maxLabelWidth;
   final VoidCallback onTap;
 
@@ -179,8 +156,6 @@ class _NavItem extends StatelessWidget {
   static const double _padMin = 12;
   static const double _padGrowth = 8;
 
-  /// Часть ширины, которая не ужимается ни при каких обстоятельствах: иконка и
-  /// горизонтальные отступы. Родитель вычитает её из ряда до дележа остатка.
   static double fixedWidth(double t) =>
       _iconSize + 2 * (_padMin + _padGrowth * t.clamp(0.0, 1.0));
 
@@ -189,8 +164,6 @@ class _NavItem extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final shape = ExpressiveShape.border(ExpressiveShape.full);
-    // Перелёт пружины полезен геометрии, но не цвету и не ширине подписи: там
-    // он читается как дефект.
     final tc = t.clamp(0.0, 1.0);
 
     return Semantics(
@@ -201,8 +174,7 @@ class _NavItem extends StatelessWidget {
         color: Color.lerp(Colors.transparent, cs.secondaryContainer, tc),
         shape: shape,
         clipBehavior: Clip.antiAlias,
-        // Цвет пилюли мы ведём пружиной покадрово — неявная 200-миллисекундная
-        // анимация Material тянулась бы следом и отставала от отступов.
+        // цвет ведём пружиной покадрово, неявная анимация Material отставала бы
         animationDuration: Duration.zero,
         child: InkWell(
           onTap: onTap,
@@ -220,20 +192,13 @@ class _NavItem extends StatelessWidget {
                   badge: badge,
                   color: Color.lerp(cs.onSurfaceVariant, cs.onSurface, tc)!,
                 ),
-                // Подпись выезжает из-под иконки: ClipRect + widthFactor растит
-                // её по месту, без рывка при появлении.
                 ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: maxLabelWidth),
                   child: ClipRect(
                     child: Align(
-                      // Подпись выезжает от иконки, а иконка в RTL стоит
-                      // справа — с физическим centerLeft она бы выползала
-                      // не с той стороны.
                       alignment: AlignmentDirectional.centerStart,
                       widthFactor: tc,
-                      // heightFactor обязателен: без него Align растёт в высоту
-                      // до максимума ограничений, а bottomNavigationBar
-                      // получает от Scaffold высоту всего экрана.
+                      // без heightFactor Align растёт до высоты экрана
                       heightFactor: 1,
                       child: Opacity(
                         opacity: tc,
@@ -261,7 +226,6 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-/// Значок раздела с точкой «подключено» — общий у нижней панели и рейки.
 class NavIcon extends StatelessWidget {
   final IconData icon;
   final bool badge;
@@ -285,8 +249,6 @@ class NavIcon extends StatelessWidget {
           Positioned(
             top: -1,
             right: -1,
-            // Обводка цветом поверхности: без неё точка сливается с иконкой,
-            // когда попадает на её штрих.
             child: Container(
               decoration: BoxDecoration(
                 color: cs.surface,

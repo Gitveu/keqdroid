@@ -36,33 +36,18 @@ import kotlin.math.min
 
 
 
-/**
-
- * Starts a short-lived Xray process, performs HTTP via local SOCKS5 (noauth),
-
- * then kills the process.
- *
- * URL tests run concurrently: each one writes its own config file and gets its
- * own SOCKS port from Dart, so nothing here is shared between them. How many go
- * at once is decided in PingService (urlPingConcurrency) — one place, and it
- * applies to desktop too.
- *
- * Speed tests stay serialized: they measure bandwidth, and parallel downloads
- * would split the channel between themselves and report nonsense.
-
- */
+// URL-тесты идут параллельно: у каждого свой файл конфига и свой SOCKS-порт от Dart, сколько разом решает PingService.
+// спидтест последовательно: параллельные загрузки делили бы канал и мерили чушь
 
 object EphemeralXrayPing {
 
-    /// Ядро замера, как его называет dart-сторона (`VpnBackend.wireValue`).
+    // имена как у VpnBackend.wireValue в Dart
 
     const val CORE_XRAY = "xray"
 
     const val CORE_MIHOMO = "mihomo"
 
-    /// Бинарь ядра. Оба лежат в nativeLibraryDir под именами `lib*.so`: APK
-    /// распаковывает только то, что похоже на библиотеку, поэтому ядра там и
-    /// названы так, хотя это обычные исполняемые файлы.
+    // ядра названы lib*.so: APK распаковывает только то, что похоже на библиотеку
 
     private fun coreBinary(nativeLibraryDir: String, core: String): File =
         File(nativeLibraryDir, if (core == CORE_MIHOMO) "libmihomo.so" else "libxray.so")
@@ -70,7 +55,7 @@ object EphemeralXrayPing {
 
     private const val TAG = "KEQDIS_PING"
 
-    // Only the speed test takes it, see the class doc.
+    // его берёт только спидтест
 
     private val lock = ReentrantLock()
 
@@ -172,12 +157,7 @@ object EphemeralXrayPing {
 
 
 
-    /**
-     * Runs several URL tests in one call — saves a MethodChannel round-trip per
-     * server. Items share a single SOCKS port, so they go one after another;
-     * running servers in parallel is PingService's job, and it hands every
-     * measurement a port of its own.
-     */
+    // у элементов один SOCKS-порт, поэтому по очереди, параллель по серверам делает PingService
 
     fun urlTestBatch(
 
@@ -256,18 +236,8 @@ object EphemeralXrayPing {
         val port: Int,
     )
 
-    /**
-     * Measures a whole batch with ONE core process.
-     *
-     * The config carries an inbound per server (MultiPingConfig on the Dart
-     * side), so each probe reaches its own server through its own port. That is
-     * what makes fifty servers possible on a phone: the limit was never startup
-     * time, it was holding fifty Go runtimes at once.
-     *
-     * A batch fails as a whole on purpose. One unusable server takes the config
-     * down with it, and rather than guess which one, the caller splits the batch
-     * and retries — down to a single server, which is the old path.
-     */
+    // один процесс ядра на весь батч: телефон упирался не во время старта, а в пятьдесят рантаймов Go разом.
+    // батч падает целиком намеренно: вызывающий делит его и повторяет, вплоть до одного сервера
     fun urlTestMulti(
         nativeLibraryDir: String,
         filesDir: File,
@@ -292,8 +262,7 @@ object EphemeralXrayPing {
         val configFile = File(filesDir, "xray_ping_multi_${UUID.randomUUID()}.json")
         var pid = -1
         var coreStartedAt = System.currentTimeMillis()
-        // Первая удачная проба означает, что ядро дочитало конфиг: остальным
-        // отказам в этом батче верим сразу, они уже про серверы.
+        // первая удачная проба значит, что ядро дочитало конфиг, остальным отказам батча верим сразу
         val coreAwake = AtomicBoolean(false)
         try {
             configFile.writeText(configJson, Charsets.UTF_8)
@@ -304,8 +273,7 @@ object EphemeralXrayPing {
                 return probes.map { BatchResult(it.id, err) }
             }
 
-            // Порты поднимаются разом, поэтому бюджет общий: первый ждёт старта
-            // ядра, остальные к этому моменту уже слушают.
+            // порты поднимаются разом, бюджет общий: первый ждёт старта ядра
             val portWaitMs = min(timeoutMs, 8_000)
             for (probe in probes) {
                 if (!waitForPort("127.0.0.1", probe.port, portWaitMs)) {
@@ -328,15 +296,12 @@ object EphemeralXrayPing {
                                 coreAwake = coreAwake,
                             ),
                         )
-                        // Сразу, а не с концом батча: автовыбору хватает ответа
-                        // своего сервера и одного живого соседа, а батч держит
-                        // до таймаута самый медленный из десяти.
+                        // сразу, а не по концу батча: батч держит до таймаута самый медленный
                         onEach?.let { runCatching { it(item) } }
                         item
                     }
                 }
-                // Один срок на весь батч: пробы идут параллельно, и ждать надо
-                // самую медленную, а не сумму их таймаутов.
+                // пробы параллельны, ждём самую медленную, а не сумму таймаутов
                 val futures = pool.invokeAll(tasks, (timeoutMs + 5_000).toLong(), TimeUnit.MILLISECONDS)
                 return probes.mapIndexed { index, probe ->
                     runCatching { futures[index].get() }.getOrElse {
@@ -513,7 +478,7 @@ object EphemeralXrayPing {
 
 
 
-            // logName="" — ping/спидтест не пишут в файл логов соединения.
+            // пустой logName: замер не пишет в лог соединения
             val coreStartedAt = System.currentTimeMillis()
 
             pid = NativeHelper.startCore(xrayBin.absolutePath, configFile.absolutePath, assetDir, "", core)
@@ -566,7 +531,7 @@ object EphemeralXrayPing {
 
                 }
 
-                // Brief wait so the port is released before the next server in a batch.
+                // ждём, пока порт освободится для следующего сервера
 
                 var i = 0
 
@@ -628,7 +593,6 @@ object EphemeralXrayPing {
 
 
 
-            // logName="" — ping/спидтест не пишут в файл логов соединения.
             pid = NativeHelper.startCore(xrayBin.absolutePath, configFile.absolutePath, assetDir, "", core)
 
             when {
@@ -745,24 +709,11 @@ object EphemeralXrayPing {
 
 
 
-    /// Сколько ядру дают на то, чтобы начать обслуживать соединения.
-    ///
-    /// Открытый порт готовности не означает: mihomo поднимает листенеры
-    /// раньше, чем дочитывает конфиг, и до самого конца загрузки молча
-    /// закрывает всё, что успело подключиться (tunnel.isHandle — status !=
-    /// Running, ни строки в лог). Снаружи это неотличимо от мёртвого сервера:
-    /// проба видит закрытое соединение. При живом туннеле ядро замера доходит
-    /// до Running за 1.3-1.8 с (замерено на Pixel 6a; без туннеля — за
-    /// полсекунды), и до этого момента падает ВЕСЬ батч разом — именно это и
-    /// выглядело как «при включённом VPN пинг не работает».
+    // открытый порт у mihomo ещё не готовность: листенеры поднимаются раньше конца загрузки конфига,
+    // и всё подключившееся до Running закрывается молча. при живом туннеле это 1.3-1.8 с на Pixel 6a
     private const val CORE_WAKEUP_GRACE_MS = 3_000L
 
-    /// Проба, которая не принимает загружающееся ядро за мёртвый сервер.
-    ///
-    /// Повтор только у mihomo и только в первые секунды жизни процесса: у
-    /// xray листенеры поднимаются последними, там открытый порт и есть
-    /// готовность. [coreAwake] снимает ожидание досрочно — как только кто-то
-    /// в батче ответил, ядро точно работает.
+    // повтор только у mihomo: у xray листенеры поднимаются последними. coreAwake снимает ожидание, как только кто-то в батче ответил
     private fun probeAwaitingCore(
         testUrl: String,
         port: Int,
@@ -801,20 +752,12 @@ object EphemeralXrayPing {
         val connectTimeoutMs = min(timeoutMs, 6_000)
         val readTimeoutMs = min(timeoutMs, 8_000)
         return try {
-            // Два запроса, берём лучший. Первый оплачивает DNS, TLS-рукопожатие и
-            // прогрев цепочки — он меряет стоимость процедуры, а не сервер. Второй
-            // идёт по уже поднятому соединению (пул HttpURLConnection переиспользует
-            // его, пока никто не просил `Connection: close`) и показывает чистое
-            // время ответа.
+            // два запроса, берём лучший: первый платит за DNS и TLS, второй по тому же соединению меряет сервер
             var best: Result? = null
             for (attempt in 0 until if (keepAlive) 2 else 1) {
                 val start = System.currentTimeMillis()
                 connection = (URL(safeUrl).openConnection(proxy) as HttpURLConnection).apply {
-                    // Всегда GET. Раньше на `generate_204` и `connecttest.txt` уходил
-                    // HEAD — то есть на два пресета из трёх (gstatic-дефолт и
-                    // Microsoft), и именно они у пользователей не отвечали, пока
-                    // Cloudflare с GET работал. Экономии от HEAD тут нет: 204 без
-                    // тела, connecttest.txt — 22 байта.
+                    // всегда GET: на HEAD generate_204 и connecttest.txt у людей не отвечали, а Cloudflare с GET работал
                     requestMethod = "GET"
                     connectTimeout = connectTimeoutMs
                     readTimeout = readTimeoutMs
@@ -825,14 +768,12 @@ object EphemeralXrayPing {
                 val code = connection.responseCode
                 val elapsed = (System.currentTimeMillis() - start).toInt()
 
-                // Тело дочитываем всегда: недочитанный ответ не возвращает
-                // соединение в пул, и второй запрос откроет новое — то есть
-                // померит ровно то же, что первый.
+                // тело дочитываем: иначе соединение не вернётся в пул, и второй запрос померит то же, что первый
                 if (code != 204) {
                     runCatching {
                         connection.inputStream?.use { stream ->
                             val buf = ByteArray(1024)
-                            while (stream.read(buf) >= 0) { /* до конца */ }
+                            while (stream.read(buf) >= 0) { }
                         }
                     }
                 }
@@ -846,8 +787,7 @@ object EphemeralXrayPing {
             best!!
         } catch (e: Exception) {
 
-            // Мимо NativeLog намеренно: недоступный сервер в замере — не сбой
-            // приложения, а один прогон по подписке вытеснил бы из журнала всё.
+            // мимо NativeLog: мёртвый сервер в замере не сбой приложения, а прогон подписки вытеснил бы из журнала всё
             Log.w(TAG, "httpProbeViaSocks failed: ${e.message}")
 
             Result(false, null, e.message ?: e.javaClass.simpleName, null)
@@ -942,7 +882,7 @@ object EphemeralXrayPing {
 
         } catch (e: Exception) {
 
-            // Мимо NativeLog — по той же причине, что и в httpProbeViaSocks.
+            // тоже мимо NativeLog
             Log.w(TAG, "downloadProbeViaSocks failed: ${e.message}")
 
             SpeedResult(false, null, e.message ?: e.javaClass.simpleName)

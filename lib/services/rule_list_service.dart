@@ -14,26 +14,19 @@ import '../models/app_settings.dart';
 import '../utils/local_vpn_proxy.dart';
 import '../utils/rule_lists.dart';
 
-/// Почему список по ссылке не обновился.
 enum RuleListFailure {
-  /// Не https: подменённый по дороге список увёл бы сайты мимо VPN.
+  // подменённый по дороге список увёл бы сайты мимо VPN
   insecure,
 
-  /// Сервер ответил не 200, код в [RuleListStatus.httpStatus].
   http,
 
-  /// Больше [RuleListService.defaultMaxBytes].
   tooLarge,
 
-  /// Скачался, но доменов в нём нет — скорее всего, это не список.
   empty,
 
-  /// Не дошли до сервера или он не дослал ответ.
   network,
 }
 
-/// Что известно о списке по ссылке: сколько в нём доменов и когда он
-/// обновился, или почему последняя попытка не удалась.
 class RuleListStatus {
   const RuleListStatus({
     required this.url,
@@ -47,15 +40,11 @@ class RuleListStatus {
   final String url;
   final int domains;
 
-  /// Последнее удачное обновление; null — список ни разу не скачивался.
   final DateTime? updatedAt;
 
-  /// Чем кончилась последняя попытка; null — удачей. Скачанное раньше при
-  /// неудаче остаётся в силе.
   final RuleListFailure? failure;
   final int? httpStatus;
 
-  /// Идёт скачивание. Только в памяти, на диск не пишется.
   final bool loading;
 
   bool get loaded => updatedAt != null;
@@ -94,12 +83,6 @@ class RuleListStatus {
   }
 }
 
-/// Скачивает списки доменов по ссылкам из полей маршрутизации и держит их на
-/// диске.
-///
-/// Подключение никогда не ждёт сети: ядру уходит то, что уже лежит в кэше.
-/// Обновление идёт само по себе, через туннель, если он поднят (пакет
-/// приложения из туннеля исключён, и прямой запрос ушёл бы мимо VPN).
 class RuleListService {
   RuleListService({
     LocalProxyPortResolver? localProxyPort,
@@ -114,11 +97,8 @@ class RuleListService {
   final bool allowPlainHttp;
   final int maxBytes;
 
-  /// Самые крупные из ходовых списков весят единицы мегабайт; тридцать — с
-  /// запасом, но не даёт ошибочной ссылке на образ диска забить память.
   static const defaultMaxBytes = 30 * 1024 * 1024;
 
-  /// Списки фильтров обновляются раз в сутки-двое, чаще ходить незачем.
   static const staleAfter = Duration(hours: 24);
 
   Future<Directory> _dir() async {
@@ -127,7 +107,6 @@ class RuleListService {
     return dir;
   }
 
-  /// Имя файла по ссылке: в самой ссылке бывают символы, запрещённые в путях.
   static String fileId(String url) =>
       sha1.convert(utf8.encode(url)).toString().substring(0, 16);
 
@@ -145,8 +124,6 @@ class RuleListService {
     return RuleListStatus(url: url);
   }
 
-  /// Скачивает список заново. Не бросает: неудача записывается в статус, а
-  /// прежние домены остаются в силе.
   Future<RuleListStatus> refresh(String url) async {
     final previous = await status(url);
     final uri = Uri.tryParse(url.trim());
@@ -188,8 +165,6 @@ class RuleListService {
         }
       }
       final body = bytes.takeBytes();
-      // Разбор сотен тысяч строк на главном изоляте — это заметный подвис
-      // интерфейса, если список пришёл, пока человек листает настройки.
       final domains = await Isolate.run(() => _parseSorted(body));
       if (domains.isEmpty) {
         return _saveFailure(previous, RuleListFailure.empty);
@@ -218,8 +193,6 @@ class RuleListService {
     }
   }
 
-  /// Домены всех скачанных списков, упомянутых в настройках, по полям.
-  /// Не скачанное ещё пропускается: подключение не ждёт сети.
   Future<RuleListDomains> domainsFor(AppSettings settings) async {
     final direct = ruleListUrls(settings.directRules);
     final proxy = ruleListUrls(settings.proxyRules);
@@ -242,8 +215,7 @@ class RuleListService {
     );
   }
 
-  /// Домены скачанных списков из ссылок в произвольных записях — для
-  /// маршрутов на другие серверы, у которых своих полей нет.
+  // для маршрутов на другие серверы, у которых своих полей нет
   Future<List<String>> domainsForEntries(String entries) async {
     final urls = ruleListUrls(entries);
     if (urls.isEmpty) return const [];
@@ -252,7 +224,6 @@ class RuleListService {
     return Isolate.run(() => _readMerged(paths));
   }
 
-  /// Убирает с диска списки, ссылок на которые в настройках больше нет.
   Future<void> prune(Set<String> keepUrls) async {
     final keep = {for (final url in keepUrls) fileId(url)};
     try {
@@ -294,8 +265,7 @@ class RuleListService {
     }
   }
 
-  /// Через временный файл: ядро, запущенное посреди записи, иначе получило бы
-  /// обрезанный список.
+  // через временный файл: ядро, запущенное посреди записи, получило бы обрезанный список
   static Future<void> _writeAtomically(File file, String content) async {
     final tmp = File('${file.path}.tmp');
     await tmp.writeAsString(content, flush: true);

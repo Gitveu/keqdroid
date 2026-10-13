@@ -8,8 +8,7 @@ class _ThemeCustomizationCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final settings = settingsAsync.value ?? const AppSettings();
-    // Через themePresetFor, а не resolveThemePreset: у своей темы id в списке
-    // не значится, и в подписи карточки стоял бы дефолтный Ocean.
+    // themePresetFor: своей темы в списке нет, и resolveThemePreset дал бы Ocean
     final preset = themePresetFor(settings);
     final modeLabel = settings.darkTheme ? l10n.themeModeDark : l10n.themeModeLight;
     final isDesktop = PlatformBootstrap.isDesktop;
@@ -17,8 +16,7 @@ class _ThemeCustomizationCard extends ConsumerWidget {
         ? (isDesktop
             ? l10n.settingsSystemColorsSubtitle(modeLabel)
             : l10n.settingsAndroidColorsSubtitle(modeLabel))
-        // Своя тема называется своим цветом, «#BE74CF»: без изоляции решётка
-        // в персидском уезжает в конец.
+        // без изоляции в фарси решётка уезжает в конец
         : '${ltrIsolate(preset.name)} · $modeLabel';
     return _SettingsCard(
       title: AppLocalizations.of(context)!.settingsThemeTitle,
@@ -47,8 +45,6 @@ class _ThemeCustomizationScreen extends ConsumerWidget {
       await ref.read(settingsNotifierProvider.notifier).save(next);
     }
 
-    // Две вкладки: «Общие» — как выглядит приложение (колонки, чипы статистики),
-    // «Темы» — всё про цвета (динамические/системные, светлая/тёмная, пресеты).
     final tabBar = TabBar(
       labelColor: controlsAccent,
       unselectedLabelColor: AppTheme.textLight(context),
@@ -64,9 +60,6 @@ class _ThemeCustomizationScreen extends ConsumerWidget {
       length: 2,
       child: Scaffold(
         backgroundColor: AppTheme.bg(context),
-        // Высоту считаем от самого TabBar, а не константой: он
-        // `PreferredSizeWidget`, и его высота зависит от того, есть ли в
-        // вкладках иконки.
         appBar: ExpressiveScrolledUnderBar(
           preferredSize: Size.fromHeight(
             kToolbarHeight + tabBar.preferredSize.height,
@@ -77,11 +70,8 @@ class _ThemeCustomizationScreen extends ConsumerWidget {
             bottom: tabBar,
           ),
         ),
-        // Не TabBarView: его PageView при смене зависимостей (тёмная/светлая
-        // тема из этого же экрана, метрики окна) синхронизирует застрявший
-        // offset страницы через jumpToPage прямо в didChangeDependencies —
-        // «setState() called during build» в консоли. Свайп между двумя
-        // вкладками настроек не нужен, переключаем контент сами по index.
+        // без TabBarView: его PageView зовёт jumpToPage в didChangeDependencies,
+        // и смена темы отсюда же даёт setState() called during build
         body: Builder(
           builder: (context) {
             final tabController = DefaultTabController.of(context);
@@ -108,7 +98,6 @@ class _ThemeCustomizationScreen extends ConsumerWidget {
   }
 }
 
-/// Вкладка «Общие»: раскладка списка серверов и чипы статистики под кнопкой.
 class _AppearanceGeneralTab extends ConsumerWidget {
   final AppSettings current;
   final Future<void> Function(AppSettings) onSave;
@@ -127,9 +116,6 @@ class _AppearanceGeneralTab extends ConsumerWidget {
             onSelect: (id) => onSave(current.copyWith(fontId: id)),
           ),
           const SizedBox(height: 8),
-          // Рядом со шрифтом, а не в группе переключателей ниже: это про то же
-          // — каким текст выглядит, — и смотреть на результат удобно прямо
-          // здесь, потому что подпись под ползунком меняется вместе с ним.
           _UiScalePicker(
             value: current.uiScale,
             onChanged: (v) => onSave(current.copyWith(uiScale: v)),
@@ -140,10 +126,6 @@ class _AppearanceGeneralTab extends ConsumerWidget {
             onSelect: (id) => onSave(current.copyWith(iconShapeId: id)),
           ),
           const SizedBox(height: 8),
-          // Дальше — не сплошная стопка переключателей, а группы по смыслу.
-          // Девять одинаковых строк подряд читались как список без иерархии:
-          // глазу не за что зацепиться, и найти нужную можно только прочитав
-          // все. Заголовки разбивают их на «где что живёт».
           ExpressiveSectionHeader(l10n.appearanceSectionServers),
           ExpressiveGroup(
             children: [
@@ -163,10 +145,6 @@ class _AppearanceGeneralTab extends ConsumerWidget {
               ),
             ],
           ),
-          // Чипы и волна — своей секцией, хотя это тот же «главный экран».
-          // Место вынесено в заголовок, чтобы не повторять «под кнопкой» в
-          // каждом названии: одного общего заголовка хватает, чтобы понять,
-          // где именно появится то, что включаешь.
           ExpressiveSectionHeader(l10n.appearanceSectionUnderButton),
           ExpressiveGroup(
             children: [
@@ -174,15 +152,8 @@ class _AppearanceGeneralTab extends ConsumerWidget {
                 icon: Icons.swap_vert_rounded,
                 title: l10n.appearanceShowTraffic,
                 value: current.showTrafficStats,
-                // Включение гасит разбивку, и наоборот: чипы там и там одни и
-                // те же, просто в разном виде. Раньше включённая разбивка
-                // молча перекрывала общие, и соседний переключатель выглядел
-                // сломанным.
                 onChanged: (v) => onSave(current.withTrafficStats(v)),
               ),
-              // Разбивку по маршрутам считает только mihomo: xray отдаёт одну
-              // общую пару счётчиков, и на нём переключатель молча ничего не
-              // делал. Поэтому при его ядре его здесь просто нет.
               if (ref.watch(activeVpnBackendProvider) == VpnBackend.mihomo)
                 _AppearanceSwitchTile(
                   icon: Icons.alt_route_rounded,
@@ -205,10 +176,6 @@ class _AppearanceGeneralTab extends ConsumerWidget {
               ),
             ],
           ),
-          // AMOLED уехал на вкладку «Темы», к выбору светлой/тёмной: он и есть
-          // поправка к тёмной схеме и без неё не работает. Здесь от секции
-          // остаётся одна вибрация, которой на десктопе нет вовсе — поэтому
-          // прячем секцию целиком, а не оставляем заголовок над пустой группой.
           if (!PlatformBootstrap.isDesktop) ...[
             ExpressiveSectionHeader(l10n.appearanceSectionFeel),
             ExpressiveGroup(
@@ -256,26 +223,13 @@ class _AppearanceGeneralTab extends ConsumerWidget {
   }
 }
 
-/// Переключатель настройки — сегмент группы, а не `SwitchListTile`.
-///
-/// `SwitchListTile` тянет за собой чужую анатомию: иконка без контейнера,
-/// свои отступы, своя высота строки. Рядом с остальными экранами, которые
-/// давно живут на [ExpressiveGroupTile] с кружком-иконкой, это и читалось как
-/// «страница из прошлой версии».
-///
-/// Включённое состояние показывает цвет кружка (`tertiary` — роль «тут
-/// что-то изменилось»), как у LAN-прокси и HWID. Нажатие по всей строке, а не
-/// только по самому переключателю: попасть в строку проще, чем в тумблер.
 class _AppearanceSwitchTile extends StatelessWidget {
   final IconData icon;
   final String title;
 
-  /// Обычно null: название говорит всё само. Остаётся там, где под рукой есть
-  /// то, чего из названия не узнать, — например, почему строка недоступна.
   final String? subtitle;
   final bool value;
 
-  /// null — настройка недоступна в текущем состоянии (AMOLED на светлой теме).
   final ValueChanged<bool>? onChanged;
 
   const _AppearanceSwitchTile({
@@ -339,12 +293,6 @@ class _AppearanceSwitchTile extends StatelessWidget {
   }
 }
 
-/// Выбор формы кружков под иконками — то же, что выбор формы иконок в лаунчере
-/// Pixel.
-///
-/// Образцы рисуются настоящим [ExpressiveIconBadge] с явно заданной формой, а
-/// не картинкой: превью, нарисованное отдельно, рано или поздно расходится с
-/// тем, что видно на экранах.
 class _IconShapePicker extends StatefulWidget {
   final String currentShapeId;
   final ValueChanged<String> onSelect;
@@ -358,8 +306,6 @@ class _IconShapePicker extends StatefulWidget {
 }
 
 class _IconShapePickerState extends State<_IconShapePicker> {
-  /// Ради колеса мыши: без своего контроллера ряд форм на десктопе не листается
-  /// вовсе, а в узком окне ещё и уезжает за край (см. [HorizontalMouseScroll]).
   final ScrollController _shapes = ScrollController();
 
   @override
@@ -380,11 +326,6 @@ class _IconShapePickerState extends State<_IconShapePicker> {
           l10n.appearanceIconShapeTitle,
           icon: Icons.category_rounded,
         ),
-        // Образцы — сами формы, крупно и без обвязки, как в выборе формы
-        // иконок на Pixel. Прежние карточки с рамкой и подписью под каждой
-        // соревновались с тем единственным, что тут надо разглядеть, — с
-        // силуэтом. Название выбранной формы уходит одной строкой под ряд:
-        // подпись нужна одна, а не шесть.
         SizedBox(
           height: 60,
           child: HorizontalMouseScroll(
@@ -438,8 +379,6 @@ class _IconShapePickerState extends State<_IconShapePicker> {
       };
 }
 
-/// Один силуэт формы. Выбранный залит акцентом — тем же приёмом, что и в
-/// системном выборе: не рамкой вокруг, а самим цветом фигуры.
 class _ShapeSwatch extends StatelessWidget {
   final IconShape shape;
   final String label;
@@ -484,8 +423,6 @@ class _ShapeSwatch extends StatelessWidget {
   }
 }
 
-/// Горизонтальный выбор шрифта интерфейса. Каждая карточка рисует образец своим
-/// шрифтом (латиница + кириллица); применяется поверх любой темы.
 class _FontPicker extends StatelessWidget {
   final String currentFontId;
   final ValueChanged<String> onSelect;
@@ -502,9 +439,6 @@ class _FontPicker extends StatelessWidget {
           l10n.appearanceFontTitle,
           icon: Icons.text_fields_rounded,
         ),
-        // Тот же принцип, что у форм: образец шрифта и всё. Рамка с подписью
-        // под каждой карточкой мешала сравнивать сами начертания, а сравнивают
-        // тут именно их.
         SizedBox(
           height: 60,
           child: ListView.separated(
@@ -547,8 +481,6 @@ class _FontPicker extends StatelessWidget {
       font.id == kDefaultFontId ? l10n.appearanceFontSystem : font.label;
 }
 
-/// Образец начертания. Выбранный залит акцентом — как и выбранная форма, тем
-/// же приёмом, чтобы два ряда подряд читались как один язык.
 class _FontSwatch extends StatelessWidget {
   final String label;
   final String? fontFamily;
@@ -586,8 +518,6 @@ class _FontSwatch extends StatelessWidget {
               borderRadius: BorderRadius.circular(ExpressiveShape.large),
             ),
             child: Text(
-              // Латиница и кириллица разом: часть шрифтов различается только
-              // в одной из них, и по «Aa» выбрать было бы не из чего.
               'Aa Яя',
               maxLines: 1,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -602,7 +532,6 @@ class _FontSwatch extends StatelessWidget {
   }
 }
 
-/// Вкладка «Темы»: динамические/системные цвета, светлая/тёмная, пресеты.
 class _AppearanceThemesTab extends StatelessWidget {
   final AppSettings current;
   final Future<void> Function(AppSettings) onSave;
@@ -612,14 +541,7 @@ class _AppearanceThemesTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final isDesktop = PlatformBootstrap.isDesktop;
-    // Сетка пресетов — отдельный сливер, а не виджет внутри списка.
-    //
-    // Раньше она стояла в `ListView` как `GridView(shrinkWrap: true)`, и это
-    // стоило дорого: shrinkWrap заставляет сливер разложить все элементы, чтобы
-    // узнать свою высоту, то есть все двенадцать плиток собирались и
-    // раскладывались на каждом кадре — включая девять, которых на экране нет.
-    // А кадров таких много: `AnimatedTheme` пересобирает поддерево все 350 мс
-    // перехода светлая↔тёмная. В сливере строятся только видимые.
+    // отдельным сливером: GridView(shrinkWrap) раскладывал все плитки на каждом кадре смены темы
     return SmoothScroll(
       builder: (context, controller) => CustomScrollView(
         controller: controller,
@@ -637,19 +559,12 @@ class _AppearanceThemesTab extends StatelessWidget {
     );
   }
 
-  /// Всё, что стоит над сеткой: выбор яркости, источник палитры и заголовок.
   List<Widget> _controls(
     BuildContext context,
     AppLocalizations l10n,
     bool isDesktop,
   ) {
     return [
-          // Светлая/тёмная — связанная группа M3E, а не самодельный ползунок с
-          // бегунком. Тот держал выбор на одной заливке: форма выбранной
-          // половины не менялась вовсе, хотя у связанной группы именно она и
-          // есть индикатор. Подпись на бегунке к тому же красилась в
-          // `AppTheme.bg` — цвет фона на месте роли `onPrimary`, — и в AMOLED
-          // выходила чёрным по акценту.
           ExpressiveConnectedButtons<bool>(
             segments: [
               ExpressiveSegment(
@@ -665,25 +580,14 @@ class _AppearanceThemesTab extends StatelessWidget {
             ],
             selected: current.darkTheme,
             onChanged: (v) => onSave(current.copyWith(darkTheme: v)),
-            // Размер M (56): группа стоит первой на экране и отвечает за самый
-            // частый выбор на нём.
             height: 56,
           ),
           const SizedBox(height: ExpressiveSpacing.large),
-          // Источник палитры — такой же сегмент группы, как переключатели на
-          // соседней вкладке. Голый `SwitchListTile` на фоне был последним
-          // следом старого экрана: чужая анатомия строки (иконка без
-          // контейнера, свои отступы, своя высота) и никакого containment.
           ExpressiveGroup(
             children: [
-              // AMOLED стоит первым и сразу под выбором светлой/тёмной: это
-              // поправка к тёмной схеме, и на светлой она погашена. Пока он
-              // жил на соседней вкладке рядом с вибрацией, «почему выключено»
-              // было не ответить, не уходя с экрана.
               _AppearanceSwitchTile(
                 icon: Icons.contrast_rounded,
                 title: l10n.appearanceAmoled,
-                // Гасим, а не прячем: иначе он «пропадает» и его ищут.
                 subtitle: current.darkTheme ? null : l10n.appearanceAmoledNeedsDark,
                 value: current.amoledBlack,
                 onChanged: current.darkTheme
@@ -703,14 +607,6 @@ class _AppearanceThemesTab extends StatelessWidget {
               ),
             ],
           ),
-          // Подпись под группой — тем же приёмом, что и пояснение под ползунком
-          // масштаба: отступ 4 слева, роль `bodySmall` на `onSurfaceVariant`.
-          //
-          // Раньше здесь было три текста — «активна динамическая/системная/
-          // пользовательская палитра» — и все три заканчивались одной и той же
-          // фразой. Какая палитра активна, видно по переключателю прямо над
-          // подписью; неочевидна только независимость светлой и тёмной, её и
-          // говорим.
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
             child: Text(
@@ -729,20 +625,12 @@ class _AppearanceThemesTab extends StatelessWidget {
   }
 }
 
-/// Ползунок размера интерфейса: множитель поверх системного масштаба текста.
-///
-/// Значение пишется в настройки на каждое движение — «Сохранить» тут нет, и
-/// правильно: результат виден целиком, всей страницей сразу, и подбирают его
-/// глазами. Ради этого же ползунок стоит на экране, который сам под него
-/// перерисовывается.
 class _UiScalePicker extends StatelessWidget {
   final double value;
   final ValueChanged<double> onChanged;
 
   const _UiScalePicker({required this.value, required this.onChanged});
 
-  /// Шаг 5%: мельче — разницы между соседними положениями не видно, крупнее —
-  /// нужного размера можно не найти вовсе.
   static const _step = 0.05;
 
   @override
@@ -775,11 +663,6 @@ class _UiScalePicker extends StatelessWidget {
                 onChanged: onChanged,
               ),
             ),
-            // Ширина под самое длинное значение, иначе ползунок дёргается на
-            // каждом переходе через сотню процентов. Процент, а не «как в
-            // системе» на 100%: подпись под ползунком и так говорит, что это
-            // поправка к системному размеру, а строка переменной длины сдвигала
-            // бы ползунок ровно в тот момент, когда его тянут.
             SizedBox(
               width: 56,
               child: Text(
@@ -807,33 +690,15 @@ class _UiScalePicker extends StatelessWidget {
   }
 }
 
-/// Сетка пресетов.
-///
-/// Плитки — те же сегменты списка, что и строки серверов
-/// ([ExpressiveListSegment]): выбор несут заливка и морф формы. Прежде его
-/// показывала рамка в 2 px цветом самого пресета — на светлых палитрах её было
-/// не разглядеть, а на тёмных она спорила с картинкой внутри.
-///
-/// Обвязка плитки живёт в текущей теме приложения, а миниатюра внутри — в
-/// цветах пресета. Это не небрежность: рамка с подписью — орган управления и
-/// обязана выглядеть как остальной экран, а картинка внутри показывает чужую
-/// палитру. Пока в цвета пресета красилась и обвязка, выбранная плитка на
-/// светлой теме и невыбранная на тёмной различались меньше, чем две соседние.
 class _ThemePresetGrid extends StatelessWidget {
   final AppSettings current;
   final Future<void> Function(AppSettings) onSave;
   const _ThemePresetGrid({required this.current, required this.onSave});
 
-  /// Поля плитки вокруг миниатюры.
   static const double _padding = 10;
 
-  /// Ширина, к которой стремится плитка. Колонки считаются от неё, а не от
-  /// платформы: `isDesktop ? 4 : 2` давал в узком окне десктопа плитки в
-  /// пол-экрана, а на планшете — две колонки на 800 px.
   static const double _targetTileWidth = 190;
 
-  /// Палитра пресета в том виде, в каком её увидит пользователь: в текущей
-  /// яркости и с учётом AMOLED.
   ColorScheme _previewScheme(ThemePreset preset) {
     final scheme = buildPresetScheme(
       preset,
@@ -848,19 +713,12 @@ class _ThemePresetGrid extends StatelessWidget {
     final scheme = theme.colorScheme;
     final iconShape = ExpressiveIconShapeTheme.of(context);
 
-    // Ширину берём из сливерных ограничений: обычный LayoutBuilder внутри
-    // CustomScrollView не поставить, а `crossAxisExtent` — это та же
-    // ширина, уже за вычетом SliverPadding.
     return SliverLayoutBuilder(
       builder: (context, constraints) {
         final columns = (constraints.crossAxisExtent / _targetTileWidth)
             .floor()
             .clamp(2, 6);
         final tileWidth = constraints.crossAxisExtent / columns;
-        // Высота плитки считается, а не задаётся пропорцией. Пропорций было
-        // две — 0.72 на телефоне и 1.35 на десктопе, — и под каждую рисовалась
-        // своя раскладка превью. Здесь раскладка одна, а высота ровно такая,
-        // какую просит миниатюра в своём масштабе плюс строка с названием.
         final mockWidth =
             tileWidth - ExpressiveListSegment.gap * 2 - _padding * 2;
         final labelHeight = MediaQuery.textScalerOf(context)
@@ -872,8 +730,6 @@ class _ThemePresetGrid extends StatelessWidget {
             labelHeight +
             ExpressiveListSegment.gap;
 
-        // Своя тема — последней плиткой той же сетки, а не отдельным блоком:
-        // выбирают её тем же движением и из того же ряда, что и готовую.
         final l10n = AppLocalizations.of(context)!;
         final customSeed = parseThemeSeed(current.customThemeSeed);
         final customSelected = !current.followSystemTheme &&
@@ -884,19 +740,12 @@ class _ThemePresetGrid extends StatelessWidget {
           itemCount: count,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
-            // Зазор набирается полями самих сегментов (segmentMargin), как в
-            // списке серверов, — иначе крайние плитки встали бы уже остальных.
             mainAxisSpacing: 0,
             crossAxisSpacing: 0,
             mainAxisExtent: tileHeight,
           ),
           itemBuilder: (context, i) {
             if (i == kThemePresets.length) {
-              // Пока цвет не выбирали, плитка показывает тот, который получит
-              // человек по тапу, — а не пустоту и не чужую палитру.
-              // Вариант палитры берётся из настроек вместе с цветом: иначе
-              // плитка обещала бы спокойную палитру, а выбор отдавал бы
-              // точную — ровно ту, ради которой вариант и меняли.
               final preset = customThemePreset(
                 customSeed ?? kCustomThemeDefaultSeed,
                 variant: parseThemeVariant(current.customThemeVariant),
@@ -931,13 +780,7 @@ class _ThemePresetGrid extends StatelessWidget {
               );
             }
             final preset = kThemePresets[i];
-            // Сравниваем с разрешённым id, а не с сохранённым: у того, кто
-            // сидел на удалённом пресете, в настройках так и лежит «forest», и
-            // прямое сравнение не отметило бы галочкой ни одну плитку — экран
-            // выглядел бы «тема не выбрана».
-            // Своя тема тоже снимает галочку со всех готовых: её id в списке
-            // не значится, и `resolveThemePreset` отдал бы дефолтный Ocean —
-            // выбранными выглядели бы сразу две плитки.
+            // с разрешённым id: у тех, кто сидел на удалённой теме, в настройках лежит forest
             final selected = !current.followSystemTheme &&
                 !customSelected &&
                 preset.id == resolveThemePreset(current.themePresetId).id;
@@ -955,20 +798,12 @@ class _ThemePresetGrid extends StatelessWidget {
                 selected: selected,
                 color: scheme.surfaceContainerHigh,
                 selectedColor: scheme.secondaryContainer,
-                // Выбор пресета отключает системные цвета: пока
-                // followSystemTheme включён, пресет не применяется и галочка не
-                // рисуется — тап выглядел бы «ничего не делает».
                 onTap: () => onSave(current.copyWith(
                   themePresetId: preset.id,
                   followSystemTheme: false,
                 )),
                 child: _ThemePresetTile(
                   name: preset.name,
-                  // AMOLED учитывается: он чернит фон поверх любой тёмной
-                  // схемы, и без него превью показывало бы не тот экран,
-                  // который получится. Лестница контейнеров при этом остаётся
-                  // обычной, поэтому список и навигация в миниатюре не
-                  // сливаются с фоном — ровно как в приложении.
                   scheme: _previewScheme(preset),
                   iconShape: iconShape,
                   selected: selected,
@@ -983,7 +818,6 @@ class _ThemePresetGrid extends StatelessWidget {
   }
 }
 
-/// Содержимое плитки: миниатюра экрана и строка с названием.
 class _ThemePresetTile extends StatelessWidget {
   final String name;
   final ColorScheme scheme;
@@ -1012,8 +846,6 @@ class _ThemePresetTile extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
-            // Миниатюра нарисована в своём масштабе и ужимается сюда целиком:
-            // так толщины линий и пропорции одинаковы при любой ширине плитки.
             child: FittedBox(
               child: _ThemeScreenMock(scheme: scheme, iconShape: iconShape),
             ),
@@ -1026,16 +858,12 @@ class _ThemePresetTile extends StatelessWidget {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  // Выбранное отличается весом, а не кеглем — как имя активного
-                  // сервера в списке.
                   style: (selected
                           ? textTheme.emphasized(textTheme.labelLarge)
                           : textTheme.labelLarge)
                       ?.copyWith(color: labelColor),
                 ),
               ),
-              // Слот под галочку занят всегда: иначе название пересобиралось бы
-              // по ширине в момент выбора и дёргалось.
               SizedBox(
                 width: ExpressiveIconSize.inline,
                 height: ExpressiveIconSize.inline,
@@ -1055,20 +883,6 @@ class _ThemePresetTile extends StatelessWidget {
   }
 }
 
-/// Миниатюра главного экрана в цветах пресета.
-///
-/// Показывает то, что видно в приложении: кнопку подключения (её форму и
-/// цвет в состоянии «подключено»), строку статуса, волну-индикатор под ней, два
-/// сегмента списка серверов — верхний выбранный — и нижнюю навигацию с
-/// пилюлей-индикатором. Прежнее превью осталось от интерфейса, которого давно
-/// нет: круг с play, градиентная полоска поперёк карточки, «карточки подписок»
-/// с шевронами и три иконки в пилюле снизу.
-///
-/// Кружок сервера подчиняется выбранной форме иконок — той же, что в списке.
-///
-/// Масштаб честный, но не буквальный: экран целиком (360×800) в плитку сетки не
-/// влезает ни при какой пропорции, поэтому миниатюра сжата по вертикали —
-/// элементы узнаваемы, а высоты подобраны под 120×160.
 class _ThemeScreenMock extends StatelessWidget {
   final ColorScheme scheme;
   final IconShape iconShape;
@@ -1089,8 +903,6 @@ class _ThemeScreenMock extends StatelessWidget {
         color: scheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
-          // Волосяная обводка отделяет миниатюру от плитки, когда палитра
-          // пресета почти совпадает с текущей темой.
           side: BorderSide(
             color: scheme.outlineVariant.withValues(alpha: 0.6),
             width: 0.8,
@@ -1100,8 +912,6 @@ class _ThemeScreenMock extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: 9),
-          // Кнопка «подключено»: заливка primary, иконка паузы, угол в той же
-          // доле от размера, что у настоящей (48 из 136).
           Container(
             width: 40,
             height: 40,
@@ -1160,8 +970,6 @@ class _ThemeScreenMock extends StatelessWidget {
         decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       );
 
-  /// Сегмент списка серверов: кружок страны, имя, бейдж протокола и пинг,
-  /// кружок действия справа.
   Widget _serverRow({required bool selected}) {
     final fg = selected ? scheme.onSecondaryContainer : scheme.onSurface;
     final muted = selected
@@ -1174,8 +982,6 @@ class _ThemeScreenMock extends StatelessWidget {
       decoration: BoxDecoration(
         color:
             selected ? scheme.secondaryContainer : scheme.surfaceContainerHigh,
-        // Углы настоящих сегментов (16 снаружи, 4 на стыке), уменьшенные вместе
-        // со строкой: выбранный круглый со всех сторон, у соседа сверху стык.
         borderRadius: selected
             ? BorderRadius.circular(5)
             : const BorderRadius.vertical(
@@ -1190,8 +996,6 @@ class _ThemeScreenMock extends StatelessWidget {
             height: 13,
             child: DecoratedBox(
               decoration: ShapeDecoration(
-                // Кружки берут контейнерные роли, а не один акцент: превью
-                // заодно показывает, какими выйдут иконки и чипы.
                 color: selected
                     ? scheme.tertiaryContainer
                     : scheme.primaryContainer,
@@ -1227,9 +1031,6 @@ class _ThemeScreenMock extends StatelessWidget {
     );
   }
 
-  /// Нижняя навигация: пилюля-индикатор с иконкой и подписью в один ряд — та
-  /// самая горизонтальная раскладка, ради которой в приложении своя реализация
-  /// навбара.
   Widget _bottomNav() => SizedBox(
         height: 14,
         child: Row(
@@ -1261,9 +1062,6 @@ class _ThemeScreenMock extends StatelessWidget {
       );
 }
 
-/// Волна-индикатор миниатюры — уменьшенная копия той, что на главном экране:
-/// синусоида штрихом с круглыми торцами, зазор, короткий хвост трека и
-/// точка-стоп в его конце.
 class _MockWavePainter extends CustomPainter {
   final Color color;
   final Color track;
@@ -1274,14 +1072,11 @@ class _MockWavePainter extends CustomPainter {
   static const double _amplitude = 1.5;
   static const double _wavelength = 13;
 
-  /// Хвост трека справа: у настоящего индикатора активная часть до края не
-  /// доходит — соединение это состояние, а не задача с концом.
   static const double _tail = 13;
 
   @override
   void paint(Canvas canvas, Size size) {
     final mid = size.height / 2;
-    // Круглый торец выходит за конец отрезка на радиус штриха.
     final cap = _thickness / 2;
     final left = cap;
     final right = size.width - cap;
@@ -1306,7 +1101,6 @@ class _MockWavePainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round,
     );
 
-    // Зазор меряется между видимыми краями, а drawLine берёт центры торцов.
     final trackStart = activeRight + _thickness + 2;
     if (trackStart < right) {
       canvas.drawLine(

@@ -53,9 +53,7 @@ void NotifyExistingInstanceAutostart() {
   }
 }
 
-// The running instance holds the mutex from its very first line, but its window
-// appears only a moment later — clicking a second link right after the first
-// would otherwise find nothing to hand it to.
+// мьютекс держится с первой строки, а окно появляется чуть позже, и вторая ссылка сразу за первой не нашла бы, кому отдаться
 HWND WaitForExistingWindow() {
   for (int attempt = 0; attempt < 30; ++attempt) {
     HWND existing = ::FindWindowW(kWindowClassName, kWindowTitle);
@@ -114,8 +112,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   const bool admin_restart = HasAdminRestartFlag();
-  // keqdroid://install-config?url=… from a subscription panel page, or a bare
-  // vless:// link dropped onto the exe.
   const std::string deep_link = KeqdroidDeepLinkFromCommandLine();
 
   if (admin_restart) {
@@ -155,9 +151,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     }
   }
 
-  // Refreshed on every start rather than at install time: the app ships as a
-  // portable archive and updates itself in place, so nothing else would ever
-  // fix the stored path.
+  // на каждом старте: приложение портативное и обновляет себя на месте, путь иначе никто не поправит
   KeqdroidRegisterUrlProtocols();
   if (!deep_link.empty()) {
     KeqdisSetPendingDeepLink(deep_link);
@@ -169,15 +163,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (!window.Create(L"keqdroid", origin, size)) {
     return EXIT_FAILURE;
   }
-  // Reopen with the bounds of the previous session (saved on move/resize and
-  // on exit). Falls back to the default centered window when nothing valid
-  // is stored (first run, monitor unplugged, corrupt record).
   bool restore_maximized = false;
   if (KeqdroidRestoreWindowPlacement(window.GetHandle(), &restore_maximized) &&
       restore_maximized) {
     window.SetPreferredShowCommand(SW_SHOWMAXIMIZED);
   }
-  // WM_CLOSE hides to tray; exit via tray menu calls PostQuitMessage.
   window.SetQuitOnClose(true);
 
   ::MSG msg;

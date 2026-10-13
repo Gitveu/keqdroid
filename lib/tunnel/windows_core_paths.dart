@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
-/// пути к xray.exe и sing-box.exe на windows
 class WindowsCorePaths {
   WindowsCorePaths._();
 
@@ -25,23 +24,17 @@ class WindowsCorePaths {
     return Directory.systemTemp.createTemp('keqdis_session_');
   }
 
-  /// Стабильный пользовательский каталог для извлечённых из ассетов файлов.
-  /// Не %TEMP%: Defender агрессивнее к exe, запускаемым из Temp (правило
-  /// «never run from %TEMP%»), а случайные keqdis_bin_*/keqdis_geo_* папки
-  /// копились там без подчистки.
+  // не %TEMP%: Defender строже к exe оттуда, а папки там копились
   static String _stableExtractRoot() {
     final localAppData = Platform.environment['LOCALAPPDATA'];
     final base = (localAppData != null && localAppData.isNotEmpty)
         ? localAppData
-        : Directory.systemTemp.path; // крайний фоллбэк
+        : Directory.systemTemp.path;
     return p.join(base, 'keqdroid');
   }
 
   static bool _legacySweepStarted = false;
 
-  /// Одноразовая (на процесс) подчистка keqdis_bin_*/keqdis_geo_* из %TEMP%:
-  /// старые версии создавали их через createTemp на каждое извлечение и
-  /// никогда не удаляли. Новые извлечения идут в LOCALAPPDATA.
   static void _sweepLegacyTempDirs() {
     if (_legacySweepStarted) return;
     _legacySweepStarted = true;
@@ -56,13 +49,9 @@ class WindowsCorePaths {
           }
           try {
             await e.delete(recursive: true);
-          } catch (_) {
-            // занято (например, ядром старого экземпляра) — заберём позже
-          }
+          } catch (_) {}
         }
-      } catch (_) {
-        // недоступный Temp — не мешаем подключению
-      }
+      } catch (_) {}
     });
   }
 
@@ -72,25 +61,13 @@ class WindowsCorePaths {
   static Future<String?> singboxExecutable() =>
       _resolveExecutable(assetSingbox, 'sing-box.exe');
 
-  /// keqrnel — единое ядро (sing-box host + встроенный xray). Заменяет связку
-  /// xray + sing-box, когда выбран coreEngine == keqrnel.
   static Future<String?> keqrnelExecutable() =>
       _resolveExecutable(assetKeqrnel, 'keqrnel.exe');
 
-  /// mihomo — второе ядро: исполняет готовые конфиги Clash и ссылки, а в
-  /// TUN-режиме само владеет wintun-адаптером (keqrnel ему для этого не нужен).
   static Future<String?> mihomoExecutable() =>
       _resolveExecutable(assetMihomo, 'mihomo.exe');
 
-  /// Домашний каталог mihomo (аргумент `-d`).
-  ///
-  /// Отдельный от каталога с geo-базами намеренно. Ядро на старте создаёт в
-  /// доме `config.yaml`, если его там нет (`config.Init`), и на недоступном для
-  /// записи каталоге возвращает ошибку — а `config.Init` в mihomo фатален,
-  /// то есть ядро просто не стартует. Каталог рядом с exe бывает недоступен
-  /// (установка в Program Files, карантин, read-only носитель), поэтому дом
-  /// живёт в пользовательском каталоге, а geo-базы копируются в него один раз —
-  /// сверка по размеру, как и во всех остальных извлечениях здесь.
+  // отдельный дом: ядро создаёт в нём config.yaml и на недоступном для записи каталоге не стартует
   static Future<String> mihomoHomeDir() async {
     final dir = Directory(p.join(_stableExtractRoot(), 'mihomo'));
     if (!dir.existsSync()) dir.createSync(recursive: true);
@@ -103,21 +80,13 @@ class WindowsCorePaths {
         if (dst.existsSync() && dst.lengthSync() == src.lengthSync()) continue;
         try {
           await src.copy(dst.path);
-        } catch (_) {
-          // Занят работающим ядром или нет места — geo-правила тогда не
-          // сработают, но подключение важнее; ядро скажет об этом в лог.
-        }
+        } catch (_) {}
       }
     }
     return dir.path;
   }
 
-  /// Directory holding geoip.dat / geosite.dat for xray's asset lookup
-  /// (passed to xray via XRAY_LOCATION_ASSET so `geoip:`/`geosite:` rules
-  /// resolve regardless of the process working directory). Null if not found.
   static Future<String?> geoAssetDir() async {
-    // Prefer the directory next to keqdroid.exe — CMake installs *.dat there on
-    // Windows release builds (same folder as keqrnel.exe / wintun.dll).
     final exeDir = p.dirname(Platform.resolvedExecutable);
     if (_dirHasGeoFiles(exeDir)) return exeDir;
 
@@ -143,8 +112,6 @@ class WindowsCorePaths {
     return _dirHasGeoFiles(dir) ? dir : null;
   }
 
-  /// Extracts whatever geo files are bundled into a stable user dir; returns
-  /// the dir when at least one is available there, else null.
   static Future<String?> _extractGeoFiles() async {
     try {
       final outDir = Directory(p.join(_stableExtractRoot(), 'geo'));
@@ -160,14 +127,11 @@ class WindowsCorePaths {
           final bytes = data.buffer
               .asUint8List(data.offsetInBytes, data.lengthInBytes);
           final outFile = File(p.join(outDir.path, entry.value));
-          // размер совпадает — уже извлечено этой же сборкой, не перезаписываем
           if (!outFile.existsSync() || outFile.lengthSync() != bytes.length) {
             await outFile.writeAsBytes(bytes, flush: true);
           }
           extracted = true;
-        } catch (_) {
-          // file not bundled — skip
-        }
+        } catch (_) {}
       }
       return extracted ? outDir.path : null;
     } catch (_) {
@@ -188,7 +152,6 @@ class WindowsCorePaths {
     return _which(fileName);
   }
 
-  /// `build/windows/x64/runner/Debug/data/flutter_assets/...` при `flutter run`.
   static String? _pathBesideFlutterAssets(String fileName) {
     final path = p.join(
       p.dirname(Platform.resolvedExecutable),
@@ -213,14 +176,12 @@ class WindowsCorePaths {
       final outDir = Directory(p.join(_stableExtractRoot(), 'cores'));
       if (!outDir.existsSync()) outDir.createSync(recursive: true);
       final outFile = File(p.join(outDir.path, fileName));
-      // размер совпадает — уже извлечён этой же сборкой
       if (outFile.existsSync() && outFile.lengthSync() == bytes.length) {
         return outFile.path;
       }
       try {
         await outFile.writeAsBytes(bytes, flush: true);
       } on FileSystemException {
-        // exe занят запущенным ядром — пользуемся существующей копией
         if (outFile.existsSync()) return outFile.path;
         rethrow;
       }

@@ -1,6 +1,5 @@
 part of '../settings_tab.dart';
 
-/// Выбор в шторке «Что».
 sealed class _ContentChoice {
   const _ContentChoice();
 }
@@ -15,11 +14,7 @@ class _ContentPreset extends _ContentChoice {
   final RoutingPreset preset;
 }
 
-/// Редактор маршрута: три строки «Кто / Что / Куда» и переключатель.
-///
-/// Сохраняет сам, без кнопки: выбор в шторке — сразу, набор в поле сайтов —
-/// на паузе, как на прежнем экране списков. Новый маршрут появляется в списке,
-/// только когда начал что-то забирать: пустой маршрут ничего бы не делал.
+// сохраняет сам, без кнопки. новый маршрут появляется в списке, только когда начал что-то забирать
 class _RouteEditorScreen extends ConsumerStatefulWidget {
   const _RouteEditorScreen({this.initial});
 
@@ -45,14 +40,13 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
 
   @override
   void dispose() {
-    // Без ref: см. PopScope ниже — несохранённое дописывается на уходе.
+    // ref тут нельзя: несохранённое дописывает PopScope на уходе
     _debounce?.cancel();
     _sites.dispose();
     super.dispose();
   }
 
-  /// «Все приложения + весь трафик» — это и есть «Всё остальное»; такой
-  /// маршрут в редакторе не собрать, но страхуемся и при сохранении.
+  // все приложения и весь трафик это и есть всё остальное
   bool get _savable =>
       !(_route.allApps && _route.content == RouteContent.allTraffic) &&
       (_stored || !routeIsEmpty(_route));
@@ -114,8 +108,7 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
       _installedForLabels(ref, [_route]),
     );
     return PopScope(
-      // Набор в поле сохраняется на паузе; уход с экрана раньше паузы её не
-      // теряет. Здесь, а не в dispose: там ref уже нельзя трогать.
+      // здесь, а не в dispose: там ref уже нельзя трогать
       onPopInvokedWithResult: (didPop, _) {
         if (didPop && (_debounce?.isActive ?? false)) unawaited(_persist());
       },
@@ -149,8 +142,6 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
           ],
           ExpressiveGroup(
             children: [
-              // Без отдельных приложений «кто» один — все приложения, и
-              // строка с единственным вариантом была бы пустым нажатием.
               if (caps.appsOffered || !_route.allApps) _whoTile(l10n),
               _whatTile(l10n),
               _whereTile(l10n, servers),
@@ -184,8 +175,6 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     );
   }
 
-  // ── Кто ────────────────────────────────────────────────────────────────
-
   Widget _whoTile(AppLocalizations l10n) {
     final installed = _installedForLabels(ref, [_route]);
     return ExpressiveGroupTile(
@@ -218,14 +207,11 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     if (apps == null || !mounted) return;
     _change(_route.copyWith(
       apps: apps,
-      // «Все приложения + весь трафик» — это «Всё остальное», не маршрут.
       content: apps.isEmpty && _route.content == RouteContent.allTraffic
           ? RouteContent.sites
           : _route.content,
     ));
   }
-
-  // ── Что ────────────────────────────────────────────────────────────────
 
   Widget _whatTile(AppLocalizations l10n) {
     final header = _RouteRowContent(
@@ -245,7 +231,6 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
         child: header,
       );
     }
-    // Поле внутри той же карточки: нажатие по нему — ввод, а не шторка.
     return ExpressiveGroupTile(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -310,8 +295,6 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
       case _ContentKind(:final content):
         _change(_route.copyWith(content: content));
       case _ContentPreset(:final preset):
-        // Готовый список несёт и разумное «куда» — российские сайты
-        // напрямую, рекламу в блок; поменять можно следующей строкой.
         _change(_route.copyWith(
           content: RouteContent.preset,
           presetId: preset.id,
@@ -325,8 +308,7 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     }
   }
 
-  /// Re-filter заодно ставит «Всё остальное» напрямую: заблокированное идёт
-  /// через VPN, прочее мимо него — ради этого пресет и берут.
+  // Re-filter заодно ставит всё остальное напрямую: ради этого пресет и берут
   Future<void> _applyPresetUnmatched(
     AppLocalizations l10n,
     RoutingPreset preset,
@@ -349,8 +331,6 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
       SnackBar(content: Text(l10n.routeRefilterUnmatched)),
     );
   }
-
-  // ── Куда ───────────────────────────────────────────────────────────────
 
   Widget _whereTile(AppLocalizations l10n, List<ServerItem> servers) {
     final color = _targetColor(context, _route.target);
@@ -402,8 +382,7 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
       _change(_route.copyWith(target: target, serverId: ''));
       return;
     }
-    // Только то, что ядро активного сервера возьмёт отдельным выходом:
-    // остальное в маршруте всё равно ушло бы «через VPN».
+    // только то, что ядро возьмёт отдельным выходом, остальное ушло бы через VPN
     final candidates = [
       for (final s in servers)
         if (routeServerSupported(s.config, caps.core)) s,
@@ -424,8 +403,6 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     _change(_route.copyWith(target: RouteTarget.server, serverId: picked.id));
   }
 
-  // ── Поле сайтов ────────────────────────────────────────────────────────
-
   String _sitesCount(AppLocalizations l10n) {
     final entries = routingEntries(_sites.text);
     final statuses = ref.watch(ruleListsProvider);
@@ -443,8 +420,7 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     );
   }
 
-  /// Тысячи разделены по-местному, но цифры латинские и в фарси: остальные
-  /// числа в приложении печатает код, и персидские стояли бы одни на экране.
+  // цифры латинские и в фарси: остальные числа в приложении печатает код
   String _groupedCount(int n) {
     final lang = Localizations.localeOf(context).languageCode;
     return NumberFormat.decimalPattern(lang == 'fa' ? 'en' : lang).format(n);
@@ -454,8 +430,6 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     final geoIndex =
         ref.watch(geoAssetIndexProvider).value ?? GeoAssetIndex.empty;
     final unknown = unknownGeoTokens(_sites.text, geoIndex);
-    // Статус есть только у сохранённых ссылок: недопечатанная ещё не ушла в
-    // маршрут, и строки под ней пока нет.
     final statuses = ref.watch(ruleListsProvider);
     final lists = [
       for (final url in ruleListUrls(_sites.text)) ?statuses[url],
@@ -486,8 +460,6 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     ];
   }
 
-  /// Поле — залитое, на уровень ниже карточки, а не с рамкой: оно здесь и есть
-  /// содержимое строки. Рамка только в фокусе — видно, где сейчас ввод.
   Widget _sitesField(AppLocalizations l10n, GeoAssetIndex geoIndex) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -517,7 +489,6 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
               borderRadius: radius,
               borderSide: BorderSide(color: scheme.primary, width: 2),
             ),
-            // Справа место под кнопку кодов, чтобы текст под неё не заезжал.
             contentPadding: EdgeInsetsDirectional.fromSTEB(
               16,
               14,
@@ -543,8 +514,6 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     );
   }
 
-  /// Пикер кодов из реальных баз: 1500+ geosite и 260+ geoip кодов руками не
-  /// вспомнишь, а опечатка молча ломает правило.
   Future<void> _pickGeoCode(GeoAssetIndex index) async {
     final token = await showModalBottomSheet<String>(
       context: context,
@@ -557,9 +526,7 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     _change(_route.copyWith(sites: _sites.text));
   }
 
-  /// Одна строка под полем на каждую ссылку: сколько в списке доменов и когда
-  /// он обновился, либо почему не скачался. Скачанное раньше при неудаче
-  /// остаётся в силе, поэтому такая строка не красная, а предупреждающая.
+  // скачанное раньше при неудаче остаётся в силе, поэтому строка предупреждающая, а не красная
   Widget _ruleListLine(AppLocalizations l10n, RuleListStatus s) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -611,8 +578,7 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
           Expanded(
             child: Text(
               text,
-              // Оранжевый текст на светлой теме не проходит по контрасту, его
-              // несёт иконка; красный проходит и остаётся у ошибки целиком.
+              // оранжевый текст на светлой теме не проходит по контрасту, его несёт иконка
               style: theme.textTheme.bodySmall?.copyWith(
                 color: color == scheme.error ? color : scheme.onSurfaceVariant,
               ),
@@ -623,9 +589,7 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     );
   }
 
-  /// Токены, которых нет в поставляемых базах. Ядро на неизвестном geo-коде не
-  /// игнорирует правило, а падает на разборе всего конфига, поэтому такие
-  /// записи выкидываются перед подключением — и видеть это надо здесь.
+  // неизвестный geo-код роняет весь конфиг, такие записи выкидываются перед подключением, и видеть это надо здесь
   Widget _unknownGeoWarning(AppLocalizations l10n, List<String> tokens) {
     final orange = AppTheme.orange(context);
     final textTheme = Theme.of(context).textTheme;

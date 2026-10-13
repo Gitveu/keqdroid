@@ -24,10 +24,6 @@ class _ServersListPanel extends ConsumerWidget {
       return emptyState;
     }
 
-    // Разбиение на группы — общее с боковым навигатором (`buildServerGroups`):
-    // кнопка «перейти к группе», которой в списке нет или которая там стоит не
-    // там, — это не мелочь оформления, а сломанная навигация. Здесь к каждой
-    // группе добавляются только заголовок и действия, состав и порядок — оттуда.
     final groups = [
       for (final group in buildServerGroups(
         servers: serversState.servers,
@@ -66,10 +62,7 @@ class _ServersListPanel extends ConsumerWidget {
     ];
 
 
-    // Режим колонок читаем здесь и раздаём карточкам параметром, а не вотчем
-    // внутри _SubCard: при смене настройки AnimatedSwitcher ниже держит старое
-    // поддерево на кросс-фейде, и вотч внутри него мгновенно перестроил бы
-    // «уходящий» список в новую раскладку — перехода не было бы видно.
+    // параметром сверху: вотч внутри карточки перестроил бы уходящий при кросс-фейде список
     final twoColumns = ref.watch(
       settingsNotifierProvider.select(
         (a) => a.value?.serversTwoColumns ?? false,
@@ -88,13 +81,6 @@ class _ServersListPanel extends ConsumerWidget {
         final rowExtent =
             layout == _ServerListLayout.cards ? cardHeight : ServerRow.height;
 
-        // CustomScrollView + sliver-группы: тайлы серверов строятся лениво по
-        // мере прокрутки (SliverList.builder в _SubCard), а не все разом
-        // Column'ом — раскрытая группа на сотни серверов иначе джанкает свайп
-        // (build + семантика каждого тайла на каждый кадр).
-        // Отступ прыжка: список накрыт градиентом шапки, и выровненная «в ноль»
-        // группа уехала бы под него. Здесь же живёт слежение за тем, на какой
-        // группе список стоит сейчас, — по нему навигатор ставит подсветку.
         final list = ServerGroupAnchorScope(
           leadingInset: topPadding + 12,
           child: SmoothScroll(
@@ -128,9 +114,6 @@ class _ServersListPanel extends ConsumerWidget {
           ),
         );
 
-        // Плавная смена раскладки — от настройки или от поворота экрана: мягкий
-        // фейд с лёгким масштабом (в стиле остальных AnimatedSwitcher
-        // приложения) вместо резкого скачка.
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 350),
           switchInCurve: Curves.easeOutCubic,
@@ -152,16 +135,6 @@ class _ServersListPanel extends ConsumerWidget {
   }
 }
 
-/// Подложка карточки подписки, перенесённая в шапку её группы серверов.
-///
-/// Цвет, выведенный из картинки, связывает группу с карточкой лишь
-/// намёком — «похожий оттенок» ещё нужно заметить. Та же картинка связывает их
-/// буквально, с одного взгляда.
-///
-/// Отдельным виджетом, а не парой строк в шапке: подложка обязана
-/// обрезаться по форме карточки группы, а форма зависит от того, свёрнута ли
-/// группа. Держать эту связку рядом с деревом из семи уровней Row/Padding —
-/// верный способ однажды её потерять.
 class _GroupHeaderBackground extends StatelessWidget {
   const _GroupHeaderBackground({
     required this.subscription,
@@ -172,33 +145,12 @@ class _GroupHeaderBackground extends StatelessWidget {
 
   final Subscription? subscription;
 
-  /// Фон карточки группы — им же кроется картинка, чтобы текст читался.
   final Color surface;
   final bool collapsed;
   final Widget child;
 
-  /// Насколько картинка заходит ниже строки заголовка.
-  ///
-  /// Эта полоса и есть весь смысл: обрезанная точно по строке картинка даёт
-  /// прямой горизонтальный шов — на нём взгляд и спотыкается. Продолженная
-  /// вниз и растворённая в фоне, она кончается там, где её край уже не виден.
-  ///
-  /// Полосу видно, только когда группа развёрнута: у свёрнутой снизу край
-  /// карточки, растворять картинку не во что.
   static const fadeHeight = 26.0;
 
-  /// Высота шапки с учётом полосы растворения — её же занимает
-  /// SliverToBoxAdapter. Группы без картинки остаются прежней высоты: лишняя
-  /// полоса пустоты в каждой из них дороже, чем польза от единообразия.
-  ///
-  /// Переключатель «Авто» занимает свою строку, а не втискивается в ряд с
-  /// иконками: там у каждой кнопки 32dp с зазором в 8, и ещё одна цель рядом
-  /// означала бы промахи пальцем по соседней.
-  ///
-  /// Но и целой строки шапка не получает: у группы с картинкой под заголовком
-  /// уже есть полоса растворения, и кнопка садится на неё. Шапка вырастает на
-  /// разницу, то есть на полтора десятка точек, а не на сорок — иначе
-  /// включённая плашка раздувала бы карточку у каждой подписки.
   static double heightFor(Subscription? subscription, {required bool collapsed}) {
     if (collapsed) return _subCardRowHeight;
     final below = [
@@ -209,14 +161,8 @@ class _GroupHeaderBackground extends StatelessWidget {
     return _subCardRowHeight + below;
   }
 
-  /// Полоса под заголовком, когда в ней живёт переключатель «Авто»: кнопка
-  /// размера XS (32dp) плюс по четыре точки, которые тоже ловят палец.
   static const autoRowHeight = 40.0;
 
-  /// Именно `hasImage`, а не «тема выбрана»: у палитровой темы картинки нет
-  /// вовсе, и шапка вырастала на [fadeHeight] пустоты — подложку из ролей
-  /// схемы съедала та же вуаль, которой кроется картинка. Со стороны это и
-  /// выглядело как «картинка не загрузилась».
   static bool _showsImage(Subscription? sub) =>
       sub != null &&
       sub.cardThemeInServers &&
@@ -226,15 +172,10 @@ class _GroupHeaderBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sub = subscription;
-    // Группы без подписки (цепочки, ручные серверы) картинки не имеют вовсе,
-    // и выключенный тумблер оставляет от темы только цвета.
     if (!_showsImage(sub)) return child;
     final theme = resolveCardTheme(sub!.cardThemeId);
 
-    // Радиус ровно карточный: рамки у группы больше нет, и «минус пиксель»,
-    // которым от неё уходили, оставлял бы вдоль дуги полоску фона.
     const outer = ExpressiveShape.extraLarge;
-    // Доля высоты, на которой стоит строка заголовка. Ниже — только картинка.
     final headerFraction = collapsed
         ? 1.0
         : _subCardRowHeight / (_subCardRowHeight + fadeHeight);
@@ -247,17 +188,8 @@ class _GroupHeaderBackground extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Своя вуаль у подложки выключена: шапка кроет картинку сама, ниже.
-          // Иначе слоя два, и «убрать затемнение» убирало бы только один.
           theme.background(context, veil: CardVeil.none),
-          // Вуаль поверх картинки — та же роль, что у карточки подписки: слева
-          // плотная (под заголовком), справа картинка открыта. Но цвет берётся
-          // из фактического фона группы, уже подкрашенного акцентом, а не из
-          // роли темы: иначе на стыке с первым сервером был бы виден шов.
           CardVeilOverlay(color: surface, veil: sub.cardVeil),
-          // Растворение вниз. Начинается выше строки заголовка (на 0.72 от
-          // неё), иначе плавным был бы только хвост, а на самой границе строки
-          // всё равно читался бы уступ яркости.
           if (!collapsed)
             DecoratedBox(
               decoration: BoxDecoration(
@@ -273,16 +205,9 @@ class _GroupHeaderBackground extends StatelessWidget {
                 ),
               ),
             ),
-          // Строка заголовка держится верха, а не центра всей области: иначе
-          // полоса растворения утащила бы её вниз, и шапка перестала бы
-          // совпадать по высоте с обычными группами.
           Align(
             alignment: Alignment.topCenter,
-            // Высота ровно по содержимому шапки, включая строку «Авто».
-            // Фиксированная высота строки заголовка обрезала бы её по нижней
-            // границе: нарисована кнопка была видна (Stack не обрезает), а
-            // нажатия до неё не доходили — попадание проверяется по границам
-            // родителя, и за ними его нет.
+            // высота вместе со строкой Авто: иначе кнопку видно, но нажатия до неё не доходят
             child: SizedBox(
               height: heightFor(sub, collapsed: collapsed),
               child: child,
@@ -299,11 +224,8 @@ class _ServerGroupEntry {
   final Subscription? subscription;
   final List<ServerItem> servers;
 
-  /// Ключ группы для сворачивания/сортировки/пинга. null — считается из
-  /// подписки (`sub.id`, либо `__manual__`).
   final String? groupKey;
 
-  /// Заголовок вместо выведенного из подписки.
   final String? groupTitle;
   final Future<void> Function()? onRefresh;
   final Future<void> Function() onPingAll;
@@ -319,31 +241,20 @@ class _ServerGroupEntry {
   });
 }
 
-/// высота градиента-затухания над списком серверов
 const _listTopFadeHeight = 56.0;
 
-/// насколько верхний тайл заезжает под фейд (виден из-под хедера)
 const _listTopFadeTileOverlap = 34.0;
 
-// фейд продлён вверх за нижний padding хедера, чтобы не было видимого шва
 const _listTopFadeUpExtension = 8.0;
 const _listTopFadeOverlayHeight = _listTopFadeHeight + _listTopFadeUpExtension;
-// доля непрозрачной части градиента с учётом extension, чтобы фейд начинался у хедера
 const _listTopFadeSolidStop =
     (_listTopFadeUpExtension + 0.45 * _listTopFadeHeight) /
     _listTopFadeOverlayHeight;
 
-/// высота строки группы совпадает с высотой [_ServerTile]
 const _subCardRowHeight = ServerRow.height;
 
-/// боковое поле списка серверов; от него же считается ширина ячейки сетки
 const _listSideInset = 16.0;
 
-/// Как лягут серверы в группе.
-///
-/// Две колонки бывают двух видов. Строкой ряд читается, пока ячейке хватает
-/// ширины: телефон боком, планшет, десктоп. На вертикальном телефоне её нет —
-/// строка сжимала имя до «Росс…», — и там те же две колонки встают карточками.
 enum _ServerListLayout {
   list,
   grid,
@@ -363,20 +274,16 @@ enum _ServerListLayout {
     required TextScaler textScaler,
   }) {
     if (!twoColumns) return list;
-    // Ширина самого сегмента: минус поля списка и поля сегмента — полный
-    // зазор у края группы и половина у соседа.
     final segment = (width - _listSideInset * 2) / 2 -
         ExpressiveListSegment.gap * 1.5;
     return ServerRow.fitsInline(segment, textScaler) ? grid : cards;
   }
 }
 
-/// Действия в шапке группы — XSmall-кнопка M3E: контейнер 32dp, глиф 20dp.
 const _subCardHeaderIconSize = 32.0;
 const _subCardHeaderActionGap = ExpressiveSpacing.small;
 const _subCardHeaderIntervalGap = ExpressiveSpacing.small;
 
-/// [color] — цвет значка (см. TvFocus.iconButtonStyle).
 Widget _subCardHeaderIconButton(
   BuildContext context, {
   required String tooltip,
@@ -419,8 +326,7 @@ void _serverGroupSortMenu(
   showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
-    // Без этого шторка не выше 9/16 экрана, и на телевизоре (540dp) список
-    // режимов обрывался по нижнему краю.
+    // без этого шторка не выше 9/16 экрана, и на телевизоре список обрывался
     isScrollControlled: true,
     builder: (ctx) {
       return SafeArea(
@@ -429,8 +335,6 @@ void _serverGroupSortMenu(
             mainAxisSize: MainAxisSize.min,
             children: [
               ExpressiveSectionHeader(l10n.serversSortTitle),
-              // Это выбор, а не список действий: текущий режим виден заливкой
-              // и галочкой, а не только чуть более жирной подписью.
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: ExpressiveGroup(
@@ -460,12 +364,6 @@ void _serverGroupSortMenu(
 }
 
 
-/// Шапка группы серверов: название, счётчики, сортировка, обновление, пинг.
-///
-/// Отдельный виджет, а не кусок общего `build()`: он сам подписан на то,
-/// свёрнута ли группа, идёт ли обновление и не пингуется ли она — поэтому
-/// вращение любой из этих кнопок перерисовывает шапку, а не всю группу вместе
-/// со списком серверов под ней.
 class _ServerGroupHeader extends ConsumerWidget {
   const _ServerGroupHeader({
     required this.subscription,
@@ -484,8 +382,6 @@ class _ServerGroupHeader extends ConsumerWidget {
   final Future<void> Function()? onRefresh;
   final Future<void> Function() onPingAll;
 
-  /// Акцент подписки разрешается асинхронно в состоянии карточки, поэтому
-  /// шапка его не вычисляет, а получает.
   final SubscriptionAccent? accent;
 
   @override
@@ -516,9 +412,6 @@ class _ServerGroupHeader extends ConsumerWidget {
     final groupColor =
         accent?.surface(scheme.surfaceContainerLow) ??
         scheme.surfaceContainerLow;
-    // Иконки шапки и спиннеры уводим в цвет подписки — это те самые элементы,
-    // что уже есть на её карточке (обновление, «12h»), и связь читается без
-    // единого нового пикселя.
     final accentColor = accent?.seed ?? AppTheme.accent(context);
     final textLightColor = AppTheme.textLight(context);
     final pingScope = collapseKey;
@@ -541,9 +434,6 @@ class _ServerGroupHeader extends ConsumerWidget {
           child: _GroupHeaderBackground(
             subscription: sub,
             surface: groupColor,
-            // Свёрнутая группа — это только шапка, и снизу у неё тоже
-            // край карточки: не скругли мы его, картинка вылезла бы
-            // прямыми углами из-под скруглённой рамки.
             collapsed: collapsed,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -556,12 +446,7 @@ class _ServerGroupHeader extends ConsumerWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Шеврон и заголовок в общем Expanded: при узкой ширине
-                // (напр. кадр во время сворачивания окна в трей) они
-                // сжимаются вместе, а ряд иконок справа не вызывает overflow.
                 Expanded(
-                  // Шеврон + заголовок + tap — один семантический узел
-                  // (см. комментарий в _ServerTile).
                   child: MergeSemantics(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
@@ -597,8 +482,6 @@ class _ServerGroupHeader extends ConsumerWidget {
                           Expanded(
                             child: Text(
                               title,
-                              // Заголовок группы — роль подзаголовка
-                              // списка в M3, а не свой кегль 13.
                               style: Theme.of(context)
                                   .textTheme
                                   .titleSmall
@@ -626,8 +509,6 @@ class _ServerGroupHeader extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (sub != null && sub.autoUpdate) ...[
-                        // InkWell, а не GestureDetector: чип нажимается,
-                        // и до сих пор об этом ничем не сообщал.
                         TvFocusHighlight(
                           radius: BorderRadius.circular(ExpressiveShape.full),
                           child: Builder(builder: (context) {
@@ -636,8 +517,6 @@ class _ServerGroupHeader extends ConsumerWidget {
                             return Material(
                               color: focusFill ??
                                   accentColor.withValues(alpha: 0.18),
-                              // Маленькая метка-действие у M3E — пилюля,
-                              // как и бейдж протокола в строке сервера.
                               shape: ExpressiveShape.border(
                                 ExpressiveShape.full,
                               ),
@@ -663,9 +542,6 @@ class _ServerGroupHeader extends ConsumerWidget {
                                         .textTheme
                                         .labelSmall
                                         ?.copyWith(
-                                          // В фокусе — цвет текста инверсной
-                                          // темы: акцент на тёмной заливке
-                                          // не читается.
                                           color: focusFill != null
                                               ? Theme.of(context)
                                                   .colorScheme
@@ -682,9 +558,6 @@ class _ServerGroupHeader extends ConsumerWidget {
                           width: _subCardHeaderIntervalGap,
                         ),
                       ],
-                      // Явная кнопка сортировки: long-press по шапке
-                      // остаётся, но на десктопе он неоткрываем мышью
-                      // интуитивно — иконка делает функцию видимой.
                       _subCardHeaderIconButton(
                         context,
                         tooltip:
@@ -801,22 +674,11 @@ class _ServerGroupHeader extends ConsumerWidget {
   }
 }
 
-/// Строка с переключателем «Авто» под заголовком группы.
-///
-/// Кнопка-переключатель, а не чип: галочка у M3 Expressive осталась приёмом
-/// фильтров, которые ходят наборами. Имя выбранного сервера здесь не пишется —
-/// оно живёт в плашке под главной кнопкой и подсветкой строки в списке.
 class _AutoSelectRow extends ConsumerWidget {
   const _AutoSelectRow({required this.subscription});
 
   final Subscription subscription;
 
-  /// Включение — это сразу выбор сервера, а не обещание выбрать потом.
-  ///
-  /// Иначе переключатель горит, а подключение осталось на прежнем сервере:
-  /// снаружи это «нажала, ничего не произошло». Выбранный отмечается в списке
-  /// как обычно — разница с ручным выбором только в том, кто его сделал. «Авто»
-  /// в других подписках при этом гаснет: сервер теперь выбирает эта.
   Future<void> _toggle(WidgetRef ref, BuildContext context) async {
     final on = subscription.autoSelect;
     final subs = ref.read(subscriptionsProvider.notifier);
@@ -840,10 +702,7 @@ class _AutoSelectRow extends ConsumerWidget {
     if (status != VpnStatus.connected && status != VpnStatus.connecting) return;
     try {
       await ref.read(vpnStateProvider.notifier).reconnectToActiveServer();
-    } catch (_) {
-      // Ошибку показывать нечем — шапка группы не знает про снек-бар экрана,
-      // а состояние подключения и так покраснеет под главной кнопкой.
-    }
+    } catch (_) {}
   }
 
   @override
@@ -851,8 +710,6 @@ class _AutoSelectRow extends ConsumerWidget {
     final l10n = context.l10n;
     return SizedBox(
       height: _GroupHeaderBackground.autoRowHeight,
-      // Без вертикальных отступов: вся высота строки — зона нажатия кнопки,
-      // сама она рисуется по центру своими 32dp.
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 14, 0),
         child: Align(
@@ -874,13 +731,8 @@ class _AutoSelectRow extends ConsumerWidget {
 class _SubCard extends ConsumerStatefulWidget {
   final Subscription? subscription;
   final List<ServerItem> servers;
-  /// Своя пара «ключ + заголовок» для групп, которых нет среди подписок
-  /// (цепочки). null — берётся из подписки, как раньше.
   final String? groupKey;
   final String? groupTitle;
-  /// Раскладка и шаг строки приходят параметром сверху (см. _ServersListPanel):
-  /// вотч настройки внутри карточки сломал бы кросс-фейд смены колонок, а
-  /// ширину ячейки знает только список.
   final _ServerListLayout layout;
   final double rowExtent;
   final void Function(ServerItem) onSelectServer;
@@ -905,15 +757,10 @@ class _SubCard extends ConsumerStatefulWidget {
 }
 
 class _SubCardState extends ConsumerState<_SubCard> {
-  // Мемоизация сортировки: карточка перестраивается и от «своих» вотчей
-  // (спиннеры refresh/ping, collapse, activeServerId), когда список серверов
-  // не менялся — в этих случаях не пересортировываем O(N·logN) заново.
   List<ServerItem>? _sortedCache;
   List<ServerItem>? _sortedSource;
   ServerSortMode? _sortedMode;
 
-  /// Цвета, выведенные из картинки подписки. Группа связывает себя с карточкой
-  /// на вкладке «Подписки» именно ими.
   SubscriptionAccent? _accent;
 
   @override
@@ -925,20 +772,12 @@ class _SubCardState extends ConsumerState<_SubCard> {
   @override
   void didUpdateWidget(_SubCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Подписке сменили картинку — группа обязана перекраситься следом.
     if (oldWidget.subscription?.cardThemeId !=
         widget.subscription?.cardThemeId) {
       _syncAccent();
     }
   }
 
-  /// Достаёт акцент из кэша, а при промахе досчитывает его в фоне.
-  ///
-  /// Синхронный кэш — не оптимизация, а условие: список серверов
-  /// перестраивается на каждый пинг и на каждую смену активного сервера, и
-  /// FutureBuilder на этом пути дёргал бы квантование картинки постоянно, а
-  /// заодно мигал бы пустым кадром. Первый показ до готовности проходит без
-  /// подсветки — это то, как выглядит группа без своей темы.
   void _syncAccent() {
     final themeId = widget.subscription?.cardThemeId ?? '';
     final scheme = Theme.of(context).colorScheme;
@@ -961,8 +800,6 @@ class _SubCardState extends ConsumerState<_SubCard> {
         themeId: themeId,
         scheme: scheme,
       );
-      // Пока считали, карточку могли увести с экрана, а подписке — сменить
-      // картинку: показывать акцент от прошлой было бы хуже, чем никакого.
       if (!mounted) return;
       if ((widget.subscription?.cardThemeId ?? '') != themeId) return;
       if (accent != _accent) setState(() => _accent = accent);
@@ -990,24 +827,14 @@ class _SubCardState extends ConsumerState<_SubCard> {
       ref.watch(serverSortModesProvider.select((m) => m[collapseKey])),
     );
     final sortedServers = _sortedFor(widget.servers, sortMode);
-    // Обновление, ошибка, пинг и заголовок здесь больше не нужны: на них
-    // подписана сама шапка, и перерисовывается от них она одна.
     final activeServerId = ref.watch(
       serversProvider.select((s) => s.activeServerId),
     );
 
-    // Где стоит активный сервер — для прыжка к нему с главного экрана.
-    //
-    // Пишем из build, а не из initState, как якорь группы: смещение строки
-    // меняется от сортировки, числа колонок и от того, какой сервер активен, —
-    // то есть ровно на тех перестроениях, что здесь и происходят. Запись
-    // дешёвая (поле в реестре, без уведомлений), а расчёт живёт там, где
-    // известна раскладка.
     final activeIndex = activeServerId == null
         ? -1
         : sortedServers.indexWhere((s) => s.id == activeServerId);
     if (activeIndex >= 0) {
-      // Шаг строки общий с `mainAxisExtent` сетки, потому и считается одинаково.
       final row = activeIndex ~/ widget.layout.columns;
       ServerGroupAnchors.instance.registerActiveServer(
         serverId: activeServerId!,
@@ -1015,55 +842,32 @@ class _SubCardState extends ConsumerState<_SubCard> {
         offsetInGroup: collapsed
             ? null
             : _GroupHeaderBackground.heightFor(sub, collapsed: false) +
-                // разделитель шапки и списка сегментов
                 widget.layout.gap / 2 +
                 row * widget.rowExtent,
       );
     } else {
-      // Активного сервера в этой группе нет — если запись всё же наша, она
-      // протухла (сервер удалили, перенесли, спрятал фильтр).
       ServerGroupAnchors.instance.unregisterActiveServer(collapseKey);
     }
 
-    // кэшируем цвета, чтобы не дёргать Theme.of() на каждый вложенный виджет
     final accent = _accent;
     final scheme = Theme.of(context).colorScheme;
-    // Группа — поверхность уровнем ниже своих сегментов.
-    //
-    // Раньше карточка группы и строки в ней были одного цвета, и разделить их
-    // было нечем, кроме рамки. Иерархию в M3 несут уровни `surfaceContainer`:
-    // перепад уровня и делает строки залитыми пунктами внутри контейнера, а не
-    // полосами на нём.
     final groupColor = accent?.surface(scheme.surfaceContainerLow) ??
         scheme.surfaceContainerLow;
     final textLightColor = AppTheme.textLight(context);
 
-    // Sliver-карточка: DecoratedSliver рисует фон/рамку/тень на всю длину
-    // группы (включая невидимую часть), а тайлы строятся лениво SliverList'ом.
     return DecoratedSliver(
-      // Заливка и форма — и всё. Здесь стояли одновременно рамка, тень и
-      // заливка, то есть три варианта карточки M3 сразу (outlined + elevated +
-      // filled); ни один контейнер приложения так больше не выглядит, и именно
-      // это делало список серверов «вставленным из другого приложения».
       decoration: BoxDecoration(
         color: groupColor,
-        // Группа серверов — «поверхность», а не карточка: extraLarge, заметно
-        // крупнее 16dp у сегментов внутри.
         borderRadius: ExpressiveShape.radius(ExpressiveShape.extraLarge),
       ),
       sliver: SliverPadding(
-        // Снизу — вторая половина зазора последнего сегмента (первую он
-        // отступает сам), чтобы поля группы были одинаковы со всех сторон.
         padding: EdgeInsets.only(
           bottom: collapsed ? 0 : widget.layout.gap / 2,
         ),
         sliver: SliverMainAxisGroup(
           slivers: [
             SliverToBoxAdapter(
-              // Шапка — цель прыжка из бокового навигатора. Именно она, а не
-              // сама sliver-карточка: `SliverToBoxAdapter` строит и раскладывает
-              // ребёнка всегда, даже когда группа далеко за экраном, так что у
-              // якоря есть живой render object и посчитанное смещение.
+              // якорь на шапке: SliverToBoxAdapter раскладывает её всегда, даже за экраном
               child: _ServerGroupHeader(
                 subscription: widget.subscription,
                 servers: widget.servers,
@@ -1075,17 +879,12 @@ class _SubCardState extends ConsumerState<_SubCard> {
               ),
             ),
 
-            // Первая половина зазора между шапкой и верхним сегментом: вторую
-            // сегмент отступает сам, и вместе выходит ровно зазор раскладки —
-            // столько же, сколько между сегментами.
             if (!collapsed)
               SliverToBoxAdapter(
                 child: SizedBox(height: widget.layout.gap / 2),
               ),
 
-            // Свёрнутая группа — просто без sliver'а тайлов. Никакого
-            // AnimatedSize вокруг: он требует построить все тайлы разом и
-            // несовместим с ленивым sliver-построением (анимируется шеврон).
+            // без AnimatedSize: он строит все тайлы разом и ломает ленивый sliver
             if (!collapsed)
               _buildExpandedServerList(
                 servers: sortedServers,
@@ -1099,9 +898,6 @@ class _SubCardState extends ConsumerState<_SubCard> {
     );
   }
 
-  /// Sliver с тайлами: SliverList.builder строит только видимые в viewport,
-  /// чтобы раскрытая группа на сотни серверов не собирала все тайлы разом.
-  /// В две колонки — SliverGrid, строится так же лениво.
   Widget _buildExpandedServerList({
     required List<ServerItem> servers,
     required String? activeServerId,
@@ -1121,9 +917,6 @@ class _SubCardState extends ConsumerState<_SubCard> {
       );
     }
 
-    // Форму и поля сегмента считает список: только он знает, где у тайла сосед,
-    // а где край группы. Нечётный хвост в сетке при этом получается сам собой —
-    // у одинокой нижней плитки справа не сосед, а фон группы.
     final layout = widget.layout;
     final columns = layout.columns;
     final direction = Directionality.of(context);
@@ -1137,20 +930,12 @@ class _SubCardState extends ConsumerState<_SubCard> {
         height: widget.rowExtent,
         accent: accent,
         radius: layout == _ServerListLayout.cards
-            // Карточки сетки одинаковы, 12dp по спеке карточек. Форма по месту
-            // — приём вертикального списка: в два ряда 4dp-стыки с соседями
-            // читались случайным набором углов. У угла группы поле с 8dp
-            // сужается до пяти, но карточка остаётся внутри её дуги.
             ? ExpressiveShape.radius(ExpressiveShape.medium)
             : ExpressiveListSegment.segmentRadius(
                 index: index,
                 count: servers.length,
                 columns: columns,
-                // Низ последнего ряда упирается в скруглённый угол карточки
-                // группы, и радиус там обязан быть концентричным её
-                // собственному: тот же центр дуги, поле по 4dp со всех сторон.
-                // Со спековыми 16dp поле на углу схлопывалось, и последний
-                // сервер выпирал за край списка.
+                // радиус концентричный углу группы, со спековыми 16dp последний сервер выпирал за край
                 endCorner:
                     ExpressiveShape.extraLarge - ExpressiveListSegment.gap,
               ).resolve(direction),
@@ -1175,7 +960,6 @@ class _SubCardState extends ConsumerState<_SubCard> {
           (context, index) => tileAt(index),
           childCount: servers.length,
           addAutomaticKeepAlives: false,
-          // _ServerTile сам оборачивается в RepaintBoundary — не дублируем.
           addRepaintBoundaries: false,
         ),
       );
@@ -1186,11 +970,8 @@ class _SubCardState extends ConsumerState<_SubCard> {
         (context, index) => tileAt(index),
         childCount: servers.length,
         addAutomaticKeepAlives: false,
-        // _ServerTile сам оборачивается в RepaintBoundary — не дублируем.
         addRepaintBoundaries: false,
       ),
     );
   }
-
-  /// Долгое нажатие на шапку группы → выбор сортировки серверов.
 }

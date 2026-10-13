@@ -1,37 +1,14 @@
 import 'dart:convert';
 
-/// Расширенные настройки sing-box TUN-инбаунда. Только desktop
-/// (Windows/Linux): на Android TUN держит VpnService, а читает его само ядро,
-/// sing-box-инбаунд там не используется.
 class TunSettings {
-  /// Сетевой стек: [stackSystem] | [stackGvisor] | [stackMixed] | [stackMips].
   final String stack;
   final int mtu;
-  /// [strictRouteAuto] | [strictRouteOn] | [strictRouteOff].
-  /// Auto = on везде, кроме Windows: там strict_route ломает маршруты при
-  /// активном другом VPN (например, Tailscale).
+  // auto выключает strict_route на Windows: с ним ломаются маршруты при втором VPN вроде Tailscale
   final String strictRoute;
-  /// Full-cone NAT для UDP. sing-box применяет только на gvisor/mixed стеке.
   final bool endpointIndependentNat;
-  /// Таймаут NAT-записей UDP в секундах (дефолт sing-box — 5 минут).
   final int udpTimeoutSec;
-  /// Автоматические маршруты в TUN. Выключать только при ручном управлении
-  /// маршрутами: без auto_route трафик в туннель не попадает.
   final bool autoRoute;
 
-  /// Не выпускать IPv6 мимо туннеля.
-  ///
-  /// TUN-интерфейс с одним лишь IPv4-адресом IPv6-маршрутов не получает, и на
-  /// двухстековой машине весь IPv6-трафик идёт мимо туннеля — то есть мимо
-  /// правил роутинга и мимо прокси. Наш DNS отдаёт только A-записи, но браузеры
-  /// ходят своим DoH и AAAA получают, поэтому «сайт открывается в обход VPN» и
-  /// «мой IP не сменился» на дуалстеке — это оно.
-  ///
-  /// Включённая опция добавляет интерфейсу IPv6-адрес (ядро тогда забирает и
-  /// IPv6-маршруты) и закрывает выход IPv6 наружу — приложения мгновенно
-  /// откатываются на IPv4, который уже в туннеле. Адрес заводится только когда
-  /// у машины есть настоящий глобальный IPv6: на машине с выключенным IPv6
-  /// sing-box падает на настройке адаптера, и TUN не поднимается вовсе.
   final bool blockIpv6Leak;
 
   const TunSettings({
@@ -48,26 +25,13 @@ class TunSettings {
   static const stackGvisor = 'gvisor';
   static const stackMixed = 'mixed';
 
-  /// Mihomo IP Stack — свой пользовательский TCP/IP-стек mihomo вместо netstack
-  /// из gVisor. Есть только у mihomo: в `sagernet/sing-tun`, на котором держится
-  /// TUN-инбаунд sing-box, стеков три, и на этом имени он отвергает
-  /// конфиг целиком (`unknown stack`). Отсюда и гейт в настройках, и подмена
-  /// в `singbox_tun_config.dart`: выбранное значение хранится, но в чужое ядро
-  /// не уезжает.
+  // только у mihomo: sing-tun на таком имени отвергает весь конфиг (unknown stack)
   static const stackMips = 'mips';
 
   static const stacks = [stackSystem, stackGvisor, stackMixed, stackMips];
 
-  /// Стек по умолчанию.
-  ///
-  /// `system` терминирует TCP не в процессе, а листенером на адресе самого
-  /// TUN-интерфейса, и на Windows требует правила Windows Firewall — sing-tun
-  /// заводит его сам (`fixWindowsFirewall`), но ошибку глотает. Не завелось —
-  /// входящие к листенеру режет фаервол, TUN поднялся, ошибок нет, а трафика
-  /// нет вовсе. Отсюда жалоба «на нормальных настройках туннель не работает,
-  /// работает только на gvisor». gvisor держит TCP/IP целиком в процессе ядра,
-  /// поэтому ни листенера, ни правил фаервола ему не нужно; своё умолчание
-  /// (пустая строка) sing-box тоже разрешает в пользу gvisor-стека.
+  // system на Windows держится на правиле фаервола, sing-tun глотает ошибку его создания,
+  // и TUN поднимается без трафика
   static const defaultStack = stackGvisor;
 
   static const strictRouteAuto = 'auto';
@@ -75,20 +39,13 @@ class TunSettings {
   static const strictRouteOff = 'off';
   static const strictRouteModes = [strictRouteAuto, strictRouteOn, strictRouteOff];
 
-  /// MTU по умолчанию — как у sing-box и у клиентов на нём (v2rayN, Nekoray,
-  /// Hiddify). Прежние 1400 — величина из мира физических каналов: TUN здесь
-  /// не гоняет байты по проводу, он отдаёт их ядру, и мелкий MTU лишь дробит
-  /// один поток на лишние пакеты.
   static const defaultMtu = 9000;
   static const minMtu = 576;
   static const maxMtu = 65535;
 
-  /// Прежняя пара умолчаний (до смены на gvisor/9000). Нужна миграции ниже.
   static const _legacyDefaultStack = stackSystem;
   static const _legacyDefaultMtu = 1400;
 
-  /// Версия набора умолчаний, записанная в json. Отсутствует — настройки
-  /// сохранены до миграции.
   static const _defaultsVersion = 2;
 
   static const defaultUdpTimeoutSec = 300;
@@ -97,7 +54,6 @@ class TunSettings {
 
   bool get isDefault => this == const TunSettings();
 
-  /// Итоговое значение strict_route для конфига.
   bool strictRouteEnabled({required bool windows}) => switch (strictRoute) {
         strictRouteOn => true,
         strictRouteOff => false,
@@ -135,11 +91,7 @@ class TunSettings {
     var stack = normalizeStack(json['stack'] as String?);
     var mtu = clampMtu((json['mtu'] as num?)?.toInt() ?? defaultMtu);
 
-    // Миграция прежних умолчаний. Настройки записываются целиком при любом
-    // изменении в приложении, поэтому старая пара `system`/1400 лежит почти у
-    // всех — и почти ни у кого не выбрана осознанно. Меняем ровно её и ровно
-    // один раз: значения, отличные от прежних умолчаний, — это уже выбор
-    // пользователя, и трогать его нельзя.
+    // старая пара system/1400 лежит почти у всех без выбора, меняем только её и один раз
     final migrated = json['defaultsVersion'] == null;
     if (migrated && stack == _legacyDefaultStack && mtu == _legacyDefaultMtu) {
       stack = defaultStack;
@@ -155,9 +107,6 @@ class TunSettings {
         (json['udpTimeoutSec'] as num?)?.toInt() ?? defaultUdpTimeoutSec,
       ),
       autoRoute: json['autoRoute'] as bool? ?? true,
-      // Отсутствие ключа — настройки, сохранённые до появления опции. Дефолт
-      // тот же, что у новых установок: утечка IPv6 мимо туннеля — это баг, а
-      // не выбор пользователя.
       blockIpv6Leak: json['blockIpv6Leak'] as bool? ?? true,
     );
   }

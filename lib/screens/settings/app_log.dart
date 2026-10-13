@@ -1,17 +1,8 @@
 part of '../settings_tab.dart';
 
-/// Вход в журнал для виджет-теста: путь к нему через «О приложении» в тесте
-/// не пройти — панель ждёт версий ядер и сведений об устройстве, которых там
-/// нет.
 @visibleForTesting
 Widget appLogScreenForTest() => const _AppLogScreen();
 
-/// «Журнал приложения»: журналы частей приложения порознь, у каждой — сколько в
-/// ней проблем.
-///
-/// Порознь потому, что вопрос почти всегда «какая часть сломалась», и в общей
-/// ленте строк службы и Dart на него не ответить. Счётчик на входе отвечает
-/// на него раньше, чем журнал открыт.
 class _AppLogScreen extends StatefulWidget {
   const _AppLogScreen();
 
@@ -50,7 +41,6 @@ class _AppLogScreenState extends State<_AppLogScreen> {
 
   Future<void> _open(Widget screen) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
-    // Пока смотрели журнал, в нём могли появиться новые строки.
     if (mounted) unawaited(_load());
   }
 
@@ -109,8 +99,6 @@ String _sourceDescription(AppLocalizations l10n, AppLogSource source) =>
       AppLogSource.native => l10n.appLogSourceNativeDesc,
     };
 
-/// Часть приложения на входе в журнал. [problems] — null, пока журнал
-/// читается, и тогда строки со счётом нет вовсе, а не «без проблем».
 class _AppLogSourceTile extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -166,9 +154,6 @@ class _AppLogSourceTile extends StatelessWidget {
   }
 }
 
-/// Журнал одной части: свежие записи внизу, ошибки красным, предупреждения
-/// оранжевым. Долгое нажатие копирует запись — выделять стек пальцем на
-/// телефоне невозможно.
 class _AppLogSourceScreen extends StatefulWidget {
   final AppLogSource source;
   const _AppLogSourceScreen({required this.source});
@@ -186,7 +171,6 @@ class _AppLogSourceScreenState extends State<_AppLogSourceScreen> {
   void initState() {
     super.initState();
     _refresh();
-    // Журнал пишется, пока его смотрят: подключение из шторки, живое ядро.
     _poll = Timer.periodic(const Duration(seconds: 3), (_) => _refresh());
   }
 
@@ -274,9 +258,6 @@ class _AppLogSourceScreenState extends State<_AppLogSourceScreen> {
                           style: TextStyle(color: AppTheme.textLight(context)),
                         ),
                       )
-                    // Коробка по содержимому и сверху: иначе короткий журнал
-                    // (reverse прижимает его к низу) висел бы под пустым полем
-                    // на весь экран.
                     : Align(
                         alignment: Alignment.topCenter,
                         child: Container(
@@ -288,8 +269,6 @@ class _AppLogSourceScreenState extends State<_AppLogSourceScreen> {
                             border: Border.all(color: AppTheme.divider(context)),
                           ),
                           clipBehavior: Clip.antiAlias,
-                          // reverse: журнал открывается на свежем, а новые
-                          // строки при опросе не сдвигают то, что читают.
                           child: ListView.builder(
                             shrinkWrap: true,
                             reverse: true,
@@ -324,8 +303,6 @@ class _AppLogSourceScreenState extends State<_AppLogSourceScreen> {
   }
 }
 
-/// Записи системы о том, как закрывался процесс. Своего журнала у этого нет:
-/// убитый процесс ничего не пишет, помнит только система.
 class _ProcessExitsScreen extends StatelessWidget {
   final List<ProcessExit> exits;
   const _ProcessExitsScreen({required this.exits});

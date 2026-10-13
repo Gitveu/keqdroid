@@ -9,20 +9,8 @@ import '../core/connections_poll_stats.dart';
 import 'connection_mode.dart';
 import 'tunnel_state.dart';
 
-/// Счётчики трафика десктопных бэкендов: секундный опрос, тоталы, скорости.
-///
-/// Windows и Linux вели этот код двумя дословными копиями. Каждую общую правку
-/// приходилось вносить дважды, а забытая вторая копия ничем себя не выдавала —
-/// расхождение всплывало на другой ОС, которую в этот момент обычно не
-/// запускают.
-///
-/// Сюда переехало только совпадавшее посимвольно. Всё, что отличается по делу,
-/// осталось в бэкендах и объявлено здесь абстрактным: источники счётчиков разные
-/// (sysfs tun, MethodChannel, clash_api), и порядок перебора тоже.
-///
-/// Состояние ниже помечено [protected] и объявлено без подчёркивания намеренно:
-/// [pollTrafficStats] живёт в бэкендах, то есть в других библиотеках, а
-/// приватные члены mixin'а видны только внутри своей.
+// без подчёркивания намеренно: pollTrafficStats живёт в бэкендах,
+// а приватное у mixin видно только в своей библиотеке
 mixin DesktopTrafficStats {
   @protected
   Timer? statsTimer;
@@ -37,23 +25,16 @@ mixin DesktopTrafficStats {
   @protected
   int totalUpload = 0;
 
-  /// false = окно скрыто (трей/свёрнуто): секундный опрос счётчиков приостановлен.
   @protected
   bool statsPollingEnabled = true;
 
-  /// Базовая отметка счётчиков снята. Отдельный флаг, а не «prev == 0»:
-  /// 0 — легитимное значение на старте сессии, и с паузой опроса такое
-  /// кодирование теряло бы весь скрытый период из тоталов.
+  // отдельный флаг: 0 законное значение на старте, и с паузой опроса терялся бы скрытый период
   @protected
   bool statsBaselineTaken = false;
 
-  /// Первый опрос после паузы: скрытый период целиком попадает в тоталы, но как
-  /// «скорость» его не показываем — иначе на секунду вспыхивает гигантское значение.
   @protected
   bool resumeBaselinePending = false;
 
-  /// Один keep-alive клиент на сессию вместо нового HttpClient (сокет+закрытие)
-  /// на каждый секундный опрос clash_api.
   HttpClient? _statsHttpClient;
 
   @protected
@@ -61,18 +42,12 @@ mixin DesktopTrafficStats {
       _statsHttpClient ??= HttpClient()
         ..connectionTimeout = const Duration(seconds: 2);
 
-  /// Отдать состояние наружу. У каждого бэкенда свой контроллер потока.
   @protected
   void emit(VpnState state);
 
-  /// Режим текущей сессии, либо null если сессии нет. Живёт в бэкендах вместе с
-  /// остальным лайфсайклом — сюда нужен только чтобы возобновить опрос после
-  /// разворачивания окна.
   @protected
   ConnectionMode? get activeMode;
 
-  /// Снять счётчики. Источники и порядок их перебора у Windows и Linux разные —
-  /// это и есть причина, по которой метод не переехал сюда.
   @protected
   Future<void> pollTrafficStats(ConnectionMode mode, {bool force = false});
 
@@ -87,9 +62,7 @@ mixin DesktopTrafficStats {
     if (statsPollingEnabled) {
       startStatsTimer(mode);
     } else {
-      // Окно скрыто (сессия из хоткея/автостарта в трее): цикл не заводим, но
-      // снимаем базовую отметку счётчиков — иначе трафик скрытого периода не
-      // попал бы в тоталы при возобновлении опроса.
+      // окно скрыто: цикл не заводим, но базу снимаем, иначе скрытый период не попадёт в тоталы
       unawaited(takeHiddenBaseline(mode));
     }
   }
@@ -97,8 +70,6 @@ mixin DesktopTrafficStats {
   Future<void> takeHiddenBaseline(ConnectionMode mode) async {
     final startedAt = sessionStartedAt;
     for (var i = 0; i < 5; i++) {
-      // Сессия сменилась/остановилась, опрос возобновился или база уже снята —
-      // дальше не наше дело.
       if (!identical(sessionStartedAt, startedAt) ||
           statsPollingEnabled ||
           statsBaselineTaken) {
@@ -117,12 +88,9 @@ mixin DesktopTrafficStats {
     unawaited(_pollStatsOnce(mode));
   }
 
-  /// Прошлый опрос ещё не вернулся.
   bool _statsPollInFlight = false;
 
-  /// Такт, на котором прошлый опрос ещё в пути, пропускаем. Раньше он слал
-  /// второй запрос вдогонку, и ядро, отвечающее дольше секунды, получало
-  /// очередь, которая росла быстрее, чем разбиралась.
+  // прошлый опрос в пути: второй вдогонку растил очередь к медленному ядру
   Future<void> _pollStatsOnce(ConnectionMode mode) async {
     if (_statsPollInFlight) return;
     _statsPollInFlight = true;
@@ -136,14 +104,10 @@ mixin DesktopTrafficStats {
   void setTrafficStatsPollingEnabled(bool enabled) {
     if (statsPollingEnabled == enabled) return;
     statsPollingEnabled = enabled;
-    // Рядом со слепками памяти: видно, шёл ли секундный опрос ядра, пока
-    // она росла, — окно могло быть спрятано в трей всё это время.
     AppLogger.instance.info(
       'traffic polling ${enabled ? 'resumed: window shown' : 'paused: window hidden'}',
     );
     if (!enabled) {
-      // Только глушим таймер; сессионные поля (тоталы, started) не трогаем —
-      // при возобновлении кумулятивные счётчики ядра дадут корректные тоталы.
       statsTimer?.cancel();
       statsTimer = null;
       resetStatsHttp();
@@ -169,20 +133,15 @@ mixin DesktopTrafficStats {
     resetStatsHttp();
   }
 
-  /// Клиент сначала отцепляем, потом закрываем. Закрытие рвёт все запросы в
-  /// полёте, каждый попадает в свой catch и зовёт сброс снова; пока поле ещё
-  /// указывает на закрываемый клиент, это рекурсия. Уже при двух сотнях
-  /// висящих запросов стек переполнялся, и больше половины их так и оставались
-  /// висеть.
+  // сначала отцепляем, потом закрываем: каждый оборванный запрос зовёт сброс,
+  // и пока поле указывает на закрываемый клиент, это рекурсия до переполнения стека
   void resetStatsHttp() {
     final client = _statsHttpClient;
     _statsHttpClient = null;
     client?.close(force: true);
   }
 
-  /// [secret] — токен RESTful API. У keqrnel его нет (API слушает петлю), у
-  /// mihomo он обязателен: без заголовка ядро отвечает 401, и счётчики молча
-  /// остаются нулями.
+  // у mihomo токен обязателен: без него 401, и счётчики молча нули
   Future<({int down, int up})?> queryClashTraffic(
     int port, {
     String secret = '',

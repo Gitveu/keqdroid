@@ -9,26 +9,13 @@ import '../tunnel/tunnel_session_request.dart';
 import '../tunnel/vpn_backend.dart';
 import '../utils/singbox_tun_config.dart';
 
-/// собирает TunnelSessionRequest под платформу и режим proxy/tun
 class TunnelSessionBuilder {
-  /// Режим сессии из настроек — теперь и на Android.
-  ///
-  /// Раньше здесь стояло жёсткое `tun`: другого пути на Android не было, весь
-  /// трафик забирал VpnService. Режим «прокси» его не поднимает вовсе — ядро
-  /// слушает 127.0.0.1, а кого через него пускать, решает пользовательница в
-  /// настройках приложений или Wi-Fi.
-  ///
-  /// [isAndroid] параметром, а не только из [Platform]: тесты идут на хосте,
-  /// где `Platform.isAndroid` всегда false, и ветку Android иначе не проверить.
   static ConnectionMode resolveMode(
     AppSettings settings, {
     bool? isAndroid,
   }) {
     final android = isAndroid ?? Platform.isAndroid;
-    // Сохранённый режим на Android учитываем только если его выбирали руками.
-    // До 0.13.0 поле там не читалось вовсе, и в настройках у всех лежит
-    // десктопный дефолт `proxy`, которого никто не просил: уважить его молча —
-    // значит выключить туннель всему, что обновилось.
+    // на Android сохранённый режим только если выбран руками, до 0.13.0 у всех лежит proxy
     if (android && !settings.connectionModeChosen) return ConnectionMode.tun;
     return ConnectionMode.fromStorage(settings.connectionMode);
   }
@@ -48,15 +35,10 @@ class TunnelSessionBuilder {
     String? serverName,
     AppRoutingMode routingMode = AppRoutingMode.allProxy,
     ConnectionMode? modeOverride,
-    /// Есть ли у машины глобальный IPv6 — решает, забирать ли IPv6 в туннель
-    /// (см. [TunSettings.blockIpv6Leak]). Считает вызывающий: здесь нельзя,
-    /// метод синхронный, а перечисление интерфейсов — нет.
     bool hostHasIpv6 = false,
   }) {
     final mode = modeOverride ?? resolveMode(settings);
 
-    // TUN на десктопе: sing-box оборачивает tun → локальный SOCKS xray с auth.
-    // В proxy-режиме sing-box не нужен (системный прокси).
     String? singboxConfig;
     if ((Platform.isWindows || Platform.isLinux) && mode == ConnectionMode.tun) {
       final managed = switch (routingMode) {

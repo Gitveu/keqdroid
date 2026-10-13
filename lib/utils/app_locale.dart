@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../models/app_settings.dart';
 
-/// подпись языка для настроек.
 String appLanguageLabel(AppSettings settings, {required String systemLabel}) {
   return switch (settings.appLanguageCode) {
     'en' => 'English',
@@ -14,10 +13,7 @@ String appLanguageLabel(AppSettings settings, {required String systemLabel}) {
   };
 }
 
-/// Язык интерфейса: выбранный в настройках, иначе системный, если он
-/// переведён, иначе английский. Первый из [supported] брать нельзя: gen-l10n
-/// сортирует их по алфавиту, и незнакомый язык системы (французский,
-/// украинский, `C` на Linux без локали) превращался в немецкий.
+// первый из supported брать нельзя: gen-l10n сортирует их, и незнакомый язык системы становился немецким
 Locale resolveAppLocale(
   Locale? chosen,
   Locale? device,

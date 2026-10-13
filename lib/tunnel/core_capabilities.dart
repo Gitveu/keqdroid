@@ -2,44 +2,26 @@ import 'dart:io';
 
 import '../utils/go_build_info.dart';
 
-/// Что умеет конкретный бинарь ядра — по его собственному блоку build info.
-///
-/// Нужно одному вопросу: собрано ли ядро с `-tags with_gvisor`. Без тега
-/// `stack: gvisor` и `stack: mixed` не просто игнорируются, а роняют старт
-/// («gVisor is not included in this build»), то есть TUN не поднимается вовсе.
-/// Читаем сам файл, а не спрашиваем ядро: своей команды `version` у keqrnel
-/// нет, а запуск ради одной строки — лишний процесс на каждый коннект.
+// без with_gvisor стек gvisor и mixed роняет старт ядра (gVisor is not included in this build)
 class CoreCapabilities {
   CoreCapabilities._();
 
-  /// Кэш по пути к бинарю: разбор — это поиск метки в файле на десятки
-  /// мегабайт, а файл в пределах запуска не меняется. Хранится сам разбор, а
-  /// не его итог: подключение, начатое посреди прогрева, дожидается того же
-  /// чтения, а не запускает второе.
+  // храним сам Future: подключение посреди прогрева дождётся того же чтения
   static final _cache = <String, Future<bool?>>{};
 
-  /// Только для тестов.
   static void resetCacheForTests() => _cache.clear();
 
-  /// `true` — в ядре есть gVisor, `false` — точно нет, `null` — выяснить не
-  /// удалось (не Go-бинарь, старый формат, файла нет). Null не означает «нет»:
-  /// по нему ничего переписывать нельзя.
+  // null не значит нет, по нему ничего не переписываем
   static Future<bool?> hasGvisor(String? binaryPath) {
     final path = binaryPath;
     if (path == null || path.isEmpty) return Future.value();
     return _cache[path] ??= _probe(path);
   }
 
-  /// Разбор заранее, при запуске приложения. Метка у keqrnel лежит на 43-м
-  /// мегабайте файла; на медленном диске или под антивирусом, который
-  /// проверяет файл при чтении, это секунды, и платить их на первом
-  /// подключении незачем.
   static Future<void> warmUp(Future<String?> binaryPath) async {
     try {
       await hasGvisor(await binaryPath);
-    } catch (_) {
-      // Не вышло сейчас — выйдет на подключении, как и раньше.
-    }
+    } catch (_) {}
   }
 
   static Future<bool?> _probe(String path) async {

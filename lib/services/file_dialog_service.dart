@@ -8,31 +8,15 @@ import 'package:path/path.dart' as p;
 import '../core/app_logger.dart';
 import '../core/exceptions.dart';
 
-/// Системные диалоги «открыть файл» и «сохранить файл».
-///
-/// Везде, кроме Linux, это тонкая обёртка над file_picker — там диалоги свои и
-/// они не подводят. Исключение — сохранение на Android: запись там своя, см.
-/// [saveFile].
-///
-/// На Linux своего диалога у приложения нет: file_picker ходит по D-Bus в портал
-/// XDG, а рисует диалог backend портала. На голых сессиях без backend'а (niri,
-/// sway и прочие wlroots, где портал ставят ради screencast'а) кнопка «Импорт из
-/// файла» молчала: портал отвечает «отменено» тем же кодом, что и живой диалог,
-/// закрытый рукой. Отличить можно только по времени — рукой за 400 мс не успеть,
-/// поэтому мгновенный `null` считаем поломкой портала и переспрашиваем через
-/// zenity/qarma/kdialog. Нет и их — бросаем [FileDialogUnavailableException],
-/// чтобы экран сказал, чего не хватает.
+// портал без backend'а отвечает отменой мгновенно, рукой за 400 мс диалог не закрыть,
+// поэтому быстрый null считаем поломкой и идём в zenity/qarma/kdialog
 abstract final class AppFileDialogs {
   static const _nativeChannel = MethodChannel('keqdis_vpn_channel');
 
-  /// Быстрее этого человек диалог не закроет — значит, его и не показывали.
   static const _silentFailureWindow = Duration(milliseconds: 400);
 
-  /// Порядок важен: zenity — GTK, как и само приложение; qarma — её же
-  /// аргументы под Qt; kdialog последний, у него свой синтаксис.
   static const _cliTools = ['zenity', 'qarma', 'kdialog'];
 
-  /// Выбор одного файла. `null` — человек отказался.
   static Future<PlatformFile?> pickFile({
     String? dialogTitle,
     FileType type = FileType.any,
@@ -67,11 +51,6 @@ abstract final class AppFileDialogs {
     throw FileDialogUnavailableException(cause: portal.error);
   }
 
-  /// Диалог сохранения: возвращает путь, по которому уже лежат [bytes], или
-  /// `null`, если человек отказался.
-  ///
-  /// [mimeType] нужен только системному диалогу Android: по нему он решает,
-  /// какое расширение оставить в имени.
   static Future<String?> saveFile({
     required String fileName,
     required Uint8List bytes,
@@ -79,8 +58,7 @@ abstract final class AppFileDialogs {
     String mimeType = 'application/octet-stream',
   }) async {
     if (Platform.isAndroid) {
-      // Пишет натив, а не file_picker: тот не обрезает файл при перезаписи
-      // (подробности у writeDocument в MainActivity).
+      // пишет натив: file_picker не обрезает файл при перезаписи
       return _nativeChannel.invokeMethod<String>('saveDocument', {
         'fileName': fileName,
         'mimeType': mimeType,
@@ -110,8 +88,6 @@ abstract final class AppFileDialogs {
     if (cli.ran) {
       final path = cli.path;
       if (path == null) return null;
-      // Портальный saveFile пишет файл сам, CLI-утилиты отдают только путь:
-      // дописываем, чтобы у обеих веток был один и тот же итог.
       await File(path).writeAsBytes(bytes, flush: true);
       return path;
     }
@@ -119,9 +95,6 @@ abstract final class AppFileDialogs {
     throw FileDialogUnavailableException(cause: portal.error);
   }
 
-  /// Прогон портального диалога с разбором двух его немых отказов: исключения
-  /// D-Bus (портала нет вовсе) и мгновенного `null` (портал есть, backend'а
-  /// нет). `trusted` — ответу можно верить, дальше идти не нужно.
   static Future<({bool trusted, T? value, Object? error})> _tryPortal<T>(
     Future<T?> Function() pick,
   ) async {
@@ -143,8 +116,6 @@ abstract final class AppFileDialogs {
     }
   }
 
-  /// Первая утилита, которая реально запустилась, и решает исход: её «отмена»
-  /// — отмена, а не повод показать человеку второй диалог подряд.
   static Future<({bool ran, String? path})> _runCliDialog(
     List<String> Function(String tool) args,
   ) async {
@@ -153,10 +124,9 @@ abstract final class AppFileDialogs {
       try {
         res = await Process.run(tool, args(tool));
       } on ProcessException {
-        continue; // утилиты нет в PATH
+        continue;
       }
-      // 1 — «Отмена»/закрытое окно; всё остальное ненулевое (нет дисплея,
-      // неизвестный аргумент) — поломка самой утилиты, пробуем следующую.
+      // 1 значит отмена, остальное ненулевое это поломка утилиты
       if (res.exitCode == 1) return (ran: true, path: null);
       if (res.exitCode != 0) {
         AppLogger.instance.warn(
@@ -170,10 +140,6 @@ abstract final class AppFileDialogs {
     return (ran: false, path: null);
   }
 
-  /// Аргументы CLI-диалогов наружу ради тестов: сам диалог проверяется только
-  /// руками и только на Linux, а порядок аргументов у kdialog ломкий —
-  /// перепутанные местами каталог и фильтр дают ту же немую неудачу, ради
-  /// которой всё это и написано.
   @visibleForTesting
   static List<String> cliOpenArgs(
     String tool, {
@@ -197,8 +163,7 @@ abstract final class AppFileDialogs {
         '--title',
         title,
         '--getopenfilename',
-        // Стартовый каталог позиционный и обязателен: без него kdialog примет
-        // за него сам фильтр.
+        // без стартового каталога kdialog примет за него фильтр
         _homeDir(),
         if (filter != null) '${filter.patterns.join(' ')}|${filter.label}',
       ];
@@ -216,8 +181,7 @@ abstract final class AppFileDialogs {
     if (tool == 'kdialog') {
       return ['--title', title, '--getsavefilename', suggested];
     }
-    // `--confirm-overwrite` не передаём: в свежих zenity он выпилен, а
-    // неизвестный аргумент — это выход с ошибкой вместо диалога.
+    // --confirm-overwrite в свежих zenity выпилен, неизвестный аргумент даёт ошибку
     return [
       '--file-selection',
       '--save',

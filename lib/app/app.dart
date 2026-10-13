@@ -22,12 +22,6 @@ import '../utils/app_locale.dart';
 
 const kSeedFallback = Color(0xFFFFAEBC);
 
-/// Корневой навигатор приложения.
-///
-/// Нужен тем, кто живёт вне дерева виджетов и всё-таки обязан показать диалог:
-/// меню трея на Windows — нативное (его рисует сама система), а переключение в
-/// TUN спрашивает про перезапуск с правами администратора. Спросить не у кого,
-/// если контекста нет.
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 class ThemePreset {
@@ -35,26 +29,12 @@ class ThemePreset {
   final String name;
   final Color seed;
 
-  /// Кастомная схема вместо одноцветного fromSeed.
   final ColorScheme Function(Brightness)? schemeBuilder;
 
-  /// «Финтифлюшки»: свой шрифт, сильнее скругления, анимированный оверлей.
   final bool flair;
 
-  /// Палитра kawaii-оверлея (стикеры и дождик из частиц); только у flair-тем.
   final KawaiiFlavor? kawaii;
 
-  /// Как палитра строится из сида.
-  ///
-  /// `tonalSpot` — то же, чем строит Material You сам Android, и потому дефолт:
-  /// иначе тема «Ocean» рядом с синей системной выглядит кислотной, хотя сид у
-  /// них почти один. Дело в контейнерных ролях: `fidelity` держится за сид и в
-  /// тёмной схеме кладёт в `primaryContainer` его же, на полной насыщенности
-  /// (`#4c8eff` против `#2b4678` у tonalSpot), а на контейнерах держится
-  /// заливка всех кружков-иконок, чипов и кнопок — светится сразу весь экран.
-  ///
-  /// Kawaii-темам `fidelity` оставлен намеренно: там леденцовый цвет и есть
-  /// смысл темы, а поверхности под него подобраны вручную.
   final DynamicSchemeVariant variant;
 
   const ThemePreset({
@@ -68,12 +48,6 @@ class ThemePreset {
   });
 }
 
-/// Kawaii «Sakura»: однотонная клубнично-молочная пастель (намеренно чистый
-/// розовый kawaii-кор, без второго «небесного» цвета).
-/// База — fromSeed, чтобы тона/контрасты остались корректными по Material 3;
-/// вручную только фоновые поверхности: кремово-розовые вместо нейтрально-серых
-/// в светлой, тёмная — сливовая с розовым тинтом. Контрасты onSurface не
-/// страдают: тона близки к исходным.
 ColorScheme _sakuraScheme(Brightness brightness) {
   final pink = ColorScheme.fromSeed(
     seedColor: const Color(0xFFFF8FB8),
@@ -92,7 +66,6 @@ ColorScheme _sakuraScheme(Brightness brightness) {
   );
 }
 
-/// Kawaii «Milky Lavender»: лавандово-молочная пастель, устроена как сакура.
 ColorScheme _lavenderMilkScheme(Brightness brightness) {
   final lavender = ColorScheme.fromSeed(
     seedColor: const Color(0xFFB39DF2),
@@ -111,17 +84,6 @@ ColorScheme _lavenderMilkScheme(Brightness brightness) {
   );
 }
 
-/// Пресеты, которые с виду разные, а на выходе давали одну и ту же схему.
-///
-/// Так вышло из-за `tonalSpot`: он строит палитру по тону сида и нормализует
-/// насыщенность, поэтому два непохожих на глаз цвета с близким тоном дают
-/// одинаковые роли. Замер разницы по акцентным ролям (0..255): Forest↔Mint —
-/// 0.5, Sunset↔Ruby — 2.3, Ocean↔Cobalt — 3.7, тогда как у заведомо разных тем
-/// разрыв 10 и больше. То есть в списке лежали три пары одинаковых плиток.
-///
-/// Оставлены Mint, Sunset и Ocean; Forest, Ruby и Cobalt убраны — см.
-/// [_kRetiredPresets], который уводит их прежних владельцев к близнецу, а не к
-/// дефолту.
 const kThemePresets = <ThemePreset>[
   ThemePreset(id: 'ocean', name: 'Ocean', seed: Color(0xFF3A86FF)),
   ThemePreset(id: 'sunset', name: 'Sunset', seed: Color(0xFFEF476F)),
@@ -130,8 +92,7 @@ const kThemePresets = <ThemePreset>[
   ThemePreset(id: 'mono', name: 'Monochrome', seed: Color(0xFF607D8B)),
   ThemePreset(id: 'mint', name: 'Mint', seed: Color(0xFF2EC4B6)),
   ThemePreset(id: 'rose', name: 'Rose', seed: Color(0xFFE76FAD)),
-  // id остался «sakura_sky» с двухцветных времён: он сохранён в настройках
-  // пользователей, смена уронила бы их на дефолтный ocean.
+  // id остался с двухцветной версии, он сохранён у людей в настройках
   ThemePreset(
     id: 'sakura_sky',
     name: 'Sakura ✿',
@@ -152,13 +113,7 @@ const kThemePresets = <ThemePreset>[
   ),
 ];
 
-/// Удалённые пресеты → тот из оставшихся, который выглядит так же.
-///
-/// Без этой таблицы `resolveThemePreset` уронил бы их владельцев на дефолтный
-/// Ocean, то есть человек с зелёной темой обнаружил бы синюю — при том что
-/// удалили мы ровно копию его темы и внешне меняться не должно ничего. Id живут
-/// в сохранённых настройках и в резервных копиях, поэтому таблица остаётся
-/// навсегда, а не до следующего релиза.
+// удалённые темы живут в настройках и бэкапах, таблицу не трогать
 const _kRetiredPresets = <String, String>{
   'forest': 'mint',
   'ruby': 'sunset',
@@ -173,43 +128,19 @@ ThemePreset resolveThemePreset(String id) {
   );
 }
 
-/// Id темы «свой цвет».
-///
-/// Сам цвет лежит отдельной настройкой ([AppSettings.customThemeSeed]), а не в
-/// id: иначе уход на готовый пресет и обратно терял бы набранное, и человек
-/// каждый раз подбирал бы оттенок заново.
 const String kCustomThemePresetId = 'custom';
 
-/// Цвет по умолчанию, когда своя тема выбрана, а цвет ещё не задан.
 const Color kCustomThemeDefaultSeed = Color(0xFF7B2CBF);
 
-/// Варианты палитры, предложенные в «своём цвете», в порядке нарастания цвета.
-///
-/// Три из девяти: остальные либо повторяют соседа (`content` почти равен
-/// `fidelity`), либо выбрасывают выбранный оттенок вовсе (`rainbow`,
-/// `fruitSalad`, `monochrome`) — на экране, где оттенок и подбирают, это
-/// выглядело бы поломкой.
-///
-/// Ключи — имена [DynamicSchemeVariant]: они и уезжают в настройки, поэтому в
-/// резервной копии видно, что именно выбрано, без второго словаря наших слов.
 const kCustomThemeVariants = <String, DynamicSchemeVariant>{
   'tonalSpot': DynamicSchemeVariant.tonalSpot,
   'vibrant': DynamicSchemeVariant.vibrant,
   'fidelity': DynamicSchemeVariant.fidelity,
 };
 
-/// Имя варианта → вариант; неизвестное или пустое — `tonalSpot`.
-///
-/// Дефолт тот же, что был единственным вариантом до появления выбора: у того,
-/// кто уже подобрал свой цвет, палитра от обновления не поедет.
 DynamicSchemeVariant parseThemeVariant(String raw) =>
     kCustomThemeVariants[raw.trim()] ?? DynamicSchemeVariant.tonalSpot;
 
-/// `RRGGBB`/`#RRGGBB`/`AARRGGBB` → цвет. `null` — строка не цвет.
-///
-/// Разбор терпимый, потому что hex сюда попадает и из чужих рук: из фигмы, из
-/// чата, из резервной копии постарше. Непрозрачность дописываем сами — сид
-/// палитры полупрозрачным не бывает.
 Color? parseThemeSeed(String raw) {
   var hex = raw.trim();
   if (hex.startsWith('#')) hex = hex.substring(1);
@@ -219,16 +150,10 @@ Color? parseThemeSeed(String raw) {
   return Color(hex.length == 6 ? 0xFF000000 | value : value | 0xFF000000);
 }
 
-/// Цвет в том виде, в каком он лежит в настройках и показывается человеку.
 String formatThemeSeed(Color color) =>
     (color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
 
-/// Пресет из своего цвета.
-///
-/// Id несёт и цвет, и вариант палитры, и это не косметика: по id кешируются
-/// готовые схемы (см. [buildPresetScheme]), так что с постоянным `custom` в
-/// кеше навсегда осела бы первая выбранная палитра, а следующий выбор молча не
-/// применялся бы.
+// по id кешируются схемы, поэтому цвет и вариант зашиты в него
 ThemePreset customThemePreset(
   Color seed, {
   DynamicSchemeVariant variant = DynamicSchemeVariant.tonalSpot,
@@ -240,10 +165,6 @@ ThemePreset customThemePreset(
       variant: variant,
     );
 
-/// Тема, которую надо применить: готовая или своя.
-///
-/// Незаданный или испорченный цвет не роняет человека на чужой пресет — своя
-/// тема остаётся своей, просто с цветом по умолчанию.
 ThemePreset themePresetFor(AppSettings settings) {
   if (settings.themePresetId == kCustomThemePresetId) {
     return customThemePreset(
@@ -254,22 +175,8 @@ ThemePreset themePresetFor(AppSettings settings) {
   return resolveThemePreset(settings.themePresetId);
 }
 
-/// Готовые схемы пресетов: ключ — (id, яркость).
-///
-/// `ColorScheme.fromSeed` — это полный расчёт динамической схемы по HCT, и
-/// стоит он не наносекунды: двенадцать пресетов на десктопе считаются 8 мс
-/// (замер), на телефоне втрое дольше. А считать их приходится целиком и на
-/// каждом кадре: экран выбора темы строит все двенадцать превью сразу, а
-/// `AnimatedTheme` внутри MaterialApp пересобирает поддерево на каждом кадре
-/// перехода светлая↔тёмная. То есть расчёт палитр выпадал ровно на те 350 мс,
-/// когда пользователь смотрит на анимацию, — отсюда и рывки при смене темы.
-///
-/// Кешировать безопасно: функция чистая, а `ColorScheme` неизменяем.
 final Map<(String, Brightness), ColorScheme> _presetSchemeCache = {};
 
-/// Потолок кеша. Готовых пресетов на две яркости — два десятка, и без своих
-/// цветов потолок был бы не нужен вовсе; но у каждого своего цвета свой id, и
-/// человек, гоняющий ползунок, набивал бы кеш до конца сессии.
 const int _presetSchemeCacheLimit = 48;
 
 ColorScheme buildPresetScheme(ThemePreset preset, Brightness brightness) {
@@ -287,28 +194,14 @@ ColorScheme buildPresetScheme(ThemePreset preset, Brightness brightness) {
   });
 }
 
-/// Чёрный AMOLED-фон поверх любой тёмной схемы.
-///
-/// На OLED выключенный пиксель не светится: чистый чёрный экономит заряд и даёт
-/// настоящую глубину. Светлую схему не трогаем.
-///
-/// Чернеет только фон. Уровни surfaceContainer остаются как в обычной тёмной
-/// теме — на них держится вся иерархия M3: карточка над фоном, шторка над
-/// карточкой, вставка внутри карточки. Первая версия тянула к чёрному и лестницу
-/// тоже, «чтобы было темнее», и карточки сливались с фоном. Когда фон опускается,
-/// а карточки стоят на месте, контраст между ними наоборот растёт — ради этого
-/// режим и включают.
 ColorScheme applyAmoledBlack(ColorScheme scheme) {
   if (scheme.brightness != Brightness.dark) return scheme;
   return scheme.copyWith(
     surface: Colors.black,
-    // surfaceDim — тот же фон в «приглушённом» состоянии, иначе он остался бы
-    // светлее самого фона.
     surfaceDim: Colors.black,
   );
 }
 
-/// Ключ кеша готовых тем.
 typedef _AppThemeKey = ({
   ColorScheme scheme,
   bool flair,
@@ -317,20 +210,6 @@ typedef _AppThemeKey = ({
   ServerIconPalette iconPalette,
 });
 
-/// Собранные `ThemeData` — по одной на набор аргументов.
-///
-/// Сборка темы стоит дорого: `ThemeData` разрешает десятки компонентных подтем,
-/// а рядом строится выразительная шкала типографики. На кадре смены настройки
-/// собираются сразу обе темы, светлая и тёмная, — замер на Pixel 6a дал 35–48 мс
-/// при бюджете 16.7. Это два-три пропущенных кадра ровно в момент нажатия, они и
-/// читались рывком.
-///
-/// Ключ — полный набор аргументов; `ThemeData` неизменяема, так что отдавать
-/// один и тот же объект безопасно и даже полезно: `AnimatedTheme` сверяет темы
-/// по идентичности и не перезапускает анимацию впустую.
-///
-/// Кеш с потолком: между двумя-тремя палитрами человек ходит, а динамические
-/// схемы Android меняются вместе с обоями, и держать их все вечно незачем.
 final Map<_AppThemeKey, ThemeData> _appThemeCache = {};
 const int _appThemeCacheLimit = 8;
 
@@ -352,8 +231,6 @@ ThemeData buildAppTheme(
   if (cached != null) return cached;
   final built =
       _buildAppTheme(scheme, flair, fontFamily, iconShape, iconPalette);
-  // Простое вытеснение целиком: набор ключей крошечный, и держать LRU ради
-  // восьми записей дороже, чем изредка пересобрать тему.
   if (_appThemeCache.length >= _appThemeCacheLimit) _appThemeCache.clear();
   return _appThemeCache[key] = built;
 }
@@ -365,17 +242,12 @@ ThemeData _buildAppTheme(
   IconShape iconShape,
   ServerIconPalette iconPalette,
 ) {
-  // Токены M3 Expressive: шкала форм, выразительные веса типографики и
-  // компонентные темы. Экраны, пока живущие на хардкоде, от этого не ломаются —
-  // они просто ещё не переехали (см. миграцию по этапам).
   final components = buildExpressiveComponentThemes(scheme);
   final expressiveText = buildExpressiveTextTheme(scheme.brightness);
   final textTheme = fontFamily == null
       ? expressiveText
       : expressiveText.apply(fontFamily: fontFamily);
 
-  // Телевизор: кнопки в фокусе заливаются так же, как строки в
-  // TvFocusHighlight, а не полупрозрачным слоем поверх своего цвета.
   final tv = TvFocus.enabled;
   ButtonStyle? tvButtons(ButtonStyle? base) =>
       tv ? TvFocus.buttonStyle(scheme, base) : base;
@@ -385,9 +257,6 @@ ThemeData _buildAppTheme(
     useMaterial3: true,
     iconButtonTheme:
         tv ? IconButtonThemeData(style: TvFocus.buttonStyle(scheme)) : null,
-    // Форма кружков-иконок едет расширением темы: так её видит любой
-    // ExpressiveIconBadge, не таща за собой ни настройки, ни провайдеры. Тем же
-    // путём — чем красить сервер без флага.
     extensions: [
       ExpressiveIconShapeTheme(shape: iconShape),
       ServerIconPaletteTheme(palette: iconPalette),
@@ -401,20 +270,12 @@ ThemeData _buildAppTheme(
     ),
     textButtonTheme:
         TextButtonThemeData(style: tvButtons(components.textButton.style)),
-    // Подпись расширенного FAB — `titleMedium`: выразительное обновление увело
-    // её с `labelLarge`. Стиль берём из уже собранной шкалы, а не собираем в
-    // компонентной теме: там нет ни выбранного шрифта, ни его метрик.
     floatingActionButtonTheme: components.fab.copyWith(
       extendedTextStyle: textTheme.titleMedium,
     ),
     listTileTheme: components.listTile,
     inputDecorationTheme: components.inputDecoration,
-    // Шрифт приходит из выбора пользователя (см. _ThemedApp): flair-пресеты по
-    // умолчанию несут Comfortaa, но пользователь может сменить его в любой теме.
-    // Прочие «финтифлюшки» (усиленные скругления) остаются привязаны к flair.
     fontFamily: fontFamily,
-    // flair поднимает скругления на шаг вверх по той же шкале — не произвольные
-    // числа, как было, а следующий токен формы.
     cardTheme: flair
         ? components.card.copyWith(
             shape: ExpressiveShape.border(ExpressiveShape.largeIncreased),
@@ -442,15 +303,11 @@ class KeqdisApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Запасной сид «динамических цветов». Плагин dynamic_color отдаёт схему
-    // только на устройствах с официальным флагом Material You (Pixel); на
-    // Realme/ColorOS, OneUI и прочих он молчит, хотя системный акцент у них есть.
-    // Читаем его нативно и используем как сид, чтобы «следовать цветам системы»
-    // работало и там. Нет акцента (Android < 12 / не Android) — фирменный fallback.
+    // dynamic_color работает только с флагом Material You (Pixel),
+    // на Realme, OneUI и прочих системный акцент читаем сами
     final systemAccent = ref.watch(systemAccentColorProvider).value;
     final fallbackSeed = systemAccent ?? kSeedFallback;
-    // Списки по ссылкам из маршрутизации обновляются раз в сутки сами, а не
-    // только пока открыт экран с ними: заводим их вместе с приложением.
+    // держит провайдер живым: списки по ссылкам обновляются раз в сутки и без открытого экрана
     ref.listen(ruleListsProvider, (_, _) {});
 
     return DynamicColorBuilder(
@@ -479,17 +336,7 @@ class KeqdisApp extends ConsumerWidget {
   }
 }
 
-/// Фон окна Android держим равным поверхности приложения.
-///
-/// `NormalTheme` в `styles.xml` наследуется от `Theme.Light`/`Theme.Black`, то
-/// есть переключается системной тёмной темой. Тема приложения выбирается своей
-/// настройкой и с системной не связана: у человека со светлой системой и тёмным
-/// приложением фон окна оставался белым. Виден он там, где поверхность Flutter
-/// не достаёт до края экрана, — на HyperOS под панелью навигации остаётся
-/// полоска в несколько пикселей, и она светилась белым поперёк всего низа.
-///
-/// Зовётся из `build`, поэтому дедуплицируется по цвету и уходит в нативку
-/// отложенно: дёргать канал во время сборки дерева нельзя.
+// фон окна Android идёт от системной темы, и на HyperOS под навигацией была белая полоса
 Color? _lastWindowBackground;
 
 void _syncAndroidWindowBackground(Color surface) {
@@ -515,8 +362,6 @@ class _ThemedApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings =
         ref.watch(settingsNotifierProvider).value ?? const AppSettings();
-    // Единственная точка синхронизации флага отдачи: присваивание идемпотентно
-    // и ничего не перестраивает, зато обработчикам нажатий не нужен ref.
     AppHaptics.enabled = settings.hapticFeedback;
     final preset = themePresetFor(settings);
     final customLight = buildPresetScheme(preset, Brightness.light);
@@ -524,12 +369,8 @@ class _ThemedApp extends ConsumerWidget {
     ColorScheme dark(ColorScheme scheme) =>
         settings.amoledBlack ? applyAmoledBlack(scheme) : scheme;
     final useSystem = settings.followSystemTheme;
-    // Финтифлюшки только когда пресет реально применён (системные цвета
-    // выключены): следуем той же логике, что и палитра.
     final flair = !useSystem && preset.flair;
 
-    // Выбранный шрифт применяется в любой теме. Оставлен системный дефолт —
-    // flair-пресеты сохраняют фирменный Comfortaa.
     final font = resolveAppFont(settings.fontId);
     final fontFamily = font.family ?? (flair ? 'Comfortaa' : null);
     final iconShape = IconShape.fromId(settings.iconShapeId);
@@ -539,8 +380,6 @@ class _ThemedApp extends ConsumerWidget {
 
     final locale = localeFromSettings(settings);
 
-    // Фон окна Android — под ту схему, которая реально на экране (см.
-    // [_syncAndroidWindowBackground]).
     _syncAndroidWindowBackground(
       settings.darkTheme
           ? dark(useSystem ? darkScheme : customDark).surface
@@ -551,15 +390,7 @@ class _ThemedApp extends ConsumerWidget {
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       debugShowCheckedModeBanner: false,
       themeMode: settings.darkTheme ? ThemeMode.dark : ThemeMode.light,
-      // Тема переключается мгновенно, без покадрового лерпа. Это не экономия на
-      // красоте, а замер: штатный `AnimatedTheme` пересобирает всё поддерево на
-      // каждом кадре перехода, а поддерево здесь — три живых вкладки PageView
-      // плюс открытый поверх экран. Один такой пересбор стоит 55 мс на Pixel 6a,
-      // и двадцать один кадр подряд по 55 мс — это не анимация, а затор: кадры
-      // уходили с задержкой 230–280 мс, и смена темы выглядела зависанием.
-      //
-      // Пересбор при смене темы неизбежен, но нужен он ровно один. Так и
-      // сделано: одна короткая задержка вместо трёхсот миллисекунд каши.
+      // анимация темы пересобирает всё дерево на каждом кадре, на Pixel 6a это 55 мс на кадр
       themeAnimationDuration: Duration.zero,
       theme: buildAppTheme(useSystem ? lightScheme : customLight,
           flair: flair,
@@ -578,10 +409,6 @@ class _ThemedApp extends ConsumerWidget {
                 flavor: preset.kawaii ?? KawaiiFlavor.sakura,
                 child: child,
               );
-        // Пока окно скрыто в трее (не видно и меню трея не открыто) — глушим все
-        // тикеры поддерева: волну-хедер, «дыхание» и полноэкранный kawaii-оверлей
-        // (иначе он рендерил 60fps за кадром и жёг CPU в трее). Возвращается сам,
-        // как только окно/меню снова на экране. См. desktopUiVisibleProvider.
         final gated = _VisibilityTickerGate(child: content);
         if (settings.uiScale == 1.0) return gated;
         final mq = MediaQuery.of(context);
@@ -608,19 +435,8 @@ class _ThemedApp extends ConsumerWidget {
   }
 }
 
-/// Глушит тикеры всего поддерева, когда десктопный UI не на экране (окно скрыто
-/// в трей и меню трея закрыто). На платформах без трея desktopUiVisibleProvider
-/// всегда true — TickerMode включён, поведение не меняется.
-/// Системный масштаб текста, домноженный на [AppSettings.uiScale].
-///
-/// Обёртка вокруг системного, а не `TextScaler.linear(factor)`: на Android 14+
-/// системное масштабирование нелинейно — крупный текст растёт медленнее мелкого,
-/// чтобы заголовки не разносили вёрстку. Линейный множитель вместо системного
-/// эту кривую стёр бы, и у того, кто выкрутил шрифт в системе, интерфейс поехал
-/// бы сильнее, чем он просил.
-///
-/// `==`/`hashCode` обязательны: [MediaQuery] сравнивает данные, и объект без
-/// равенства заставлял бы перестраивать всё поддерево на каждый кадр.
+// оборачиваем системный масштаб: на Android 14+ он нелинейный
+// без ==/hashCode MediaQuery пересобирает всё дерево на каждом кадре
 class _ScaledTextScaler extends TextScaler {
   const _ScaledTextScaler(this.base, this.factor);
 
@@ -630,9 +446,6 @@ class _ScaledTextScaler extends TextScaler {
   @override
   double scale(double fontSize) => base.scale(fontSize) * factor;
 
-  // Реализовать обязаны: геттер в [TextScaler] абстрактный, хотя и помечен
-  // устаревшим. Отсюда и ignore — не «мы игнорируем устаревшее», а «без него
-  // класс не компилируется».
   @override
   // ignore: deprecated_member_use
   double get textScaleFactor => base.textScaleFactor * factor;

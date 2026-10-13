@@ -7,12 +7,8 @@ final ruleListServiceProvider = Provider<RuleListService>((ref) {
   );
 });
 
-/// Состояние списков по ссылкам из маршрутов, по ссылке.
-///
-/// Новая ссылка скачивается, как только маршрут сохранён; дальше списки
-/// обновляются раз в сутки — при возвращении в приложение и при каждом
-/// подключении, уже через туннель. Скачанное доезжает до ядра на следующем
-/// подключении, как и любая другая правка списков.
+// новая ссылка качается сразу при сохранении маршрута, дальше раз в сутки, уже через туннель.
+// до ядра доезжает на следующем подключении
 class RuleListsNotifier extends Notifier<Map<String, RuleListStatus>> {
   final _lastAttempt = <String, DateTime>{};
   Timer? _syncDebounce;
@@ -21,8 +17,6 @@ class RuleListsNotifier extends Notifier<Map<String, RuleListStatus>> {
   bool _pending = false;
   bool _pendingRetryFailed = false;
 
-  /// Неудачную попытку не повторяем чаще: без связи с хостом списка каждое
-  /// возвращение в приложение иначе стоило бы таймаута в фоне.
   static const _retryAfter = Duration(minutes: 10);
 
   @override
@@ -33,8 +27,6 @@ class RuleListsNotifier extends Notifier<Map<String, RuleListStatus>> {
     ref.onDispose(lifecycle.dispose);
     ref.onDispose(() => _syncDebounce?.cancel());
 
-    // Только что поднятый туннель — повод повторить и неудачные: чаще всего
-    // список не скачался потому, что его хост закрыт без VPN.
     ref.listen<bool>(
       vpnStateProvider.select((a) => a.value?.status == VpnStatus.connected),
       (previous, connected) {
@@ -44,8 +36,7 @@ class RuleListsNotifier extends Notifier<Map<String, RuleListStatus>> {
       },
     );
 
-    // Поле сохраняется на паузе в наборе, и ссылка, которую ещё печатают,
-    // успела бы уйти на скачивание по кусочку. Ждём, пока правка устоится.
+    // поле сохраняется на паузе в наборе, без ожидания ушла бы недопечатанная ссылка
     ref.listen<String?>(
       routesProvider.select((a) {
         final routes = a.value;
@@ -54,7 +45,6 @@ class RuleListsNotifier extends Notifier<Map<String, RuleListStatus>> {
       (_, urls) {
         _syncDebounce?.cancel();
         if (urls == null) return;
-        // Без ссылок ждать нечего: остаётся только убрать лишнее.
         if (urls.isEmpty) {
           unawaited(_sync());
           return;
@@ -79,8 +69,6 @@ class RuleListsNotifier extends Notifier<Map<String, RuleListStatus>> {
     }
     if (!ref.mounted) return;
     state = next;
-    // Чистим один раз за запуск, а не на каждой правке: вырезанная и тут же
-    // вставленная обратно ссылка не должна скачиваться заново.
     if (!_pruned) {
       _pruned = true;
       await service.prune(urls.toSet());
@@ -88,10 +76,6 @@ class RuleListsNotifier extends Notifier<Map<String, RuleListStatus>> {
     await refreshStale();
   }
 
-  /// Обновляет списки, которые не обновлялись сутки или не скачивались вовсе.
-  ///
-  /// Скачивания идут по одному. Вызов посреди прохода не теряется: новая
-  /// ссылка или поднявшийся туннель дают ещё один проход следом.
   Future<void> refreshStale({bool retryFailed = false}) async {
     _pendingRetryFailed = _pendingRetryFailed || retryFailed;
     if (_refreshing) {

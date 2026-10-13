@@ -19,15 +19,7 @@ import '../../utils/bidi.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/proxy_chain.dart';
 
-/// Сборка цепочки прокси: имя + порядок узлов.
-///
-/// Маршрут показан вертикально сверху вниз — «это устройство», узлы, «интернет»
-/// — и живёт одной карточкой, как группа серверов на главной. Порядок и есть
-/// смысл цепочки (первый узел набирает устройство, последний виден сайтам),
-/// поэтому он и вынесен в главный элемент экрана, а не спрятан в список с
-/// номерами.
 class ChainEditorScreen extends ConsumerStatefulWidget {
-  /// id уже существующей цепочки; null — создаём новую.
   final String? serverId;
 
   const ChainEditorScreen({super.key, this.serverId});
@@ -39,12 +31,8 @@ class ChainEditorScreen extends ConsumerStatefulWidget {
 class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
   final TextEditingController _name = TextEditingController();
 
-  /// Узлы по порядку: вход → выход. Каждый — сервер (из списка либо
-  /// восстановленный из снимка, если сервера уже нет).
   final List<ServerItem> _hops = [];
 
-  /// Узлы, которых больше нет в списке серверов: подписываются отдельно, чтобы
-  /// «сервер пропал» не выглядело как «цепочка сломалась».
   final Set<int> _detachedHopIndexes = {};
 
   String? _error;
@@ -67,8 +55,6 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
         _hops.add(live);
         continue;
       }
-      // Сервер уехал вместе с подпиской — узел живёт снимком ссылки. Цепочка
-      // от этого не ломается, но сказать об этом стоит.
       _detachedHopIndexes.add(_hops.length);
       _hops.add(ServerItem(
         id: hop.serverId ?? '',
@@ -93,8 +79,6 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
     final taken = {for (final h in _hops) h.id};
     final candidates = all
         .where((s) => ProxyChainConfig.canBeHop(s.protocol))
-        // Один сервер дважды подряд смысла не имеет, но через один — вполне
-        // (вход и выход через одну страну). Отсекаем только уже добавленные.
         .where((s) => !taken.contains(s.id))
         .toList();
 
@@ -121,7 +105,6 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
     setState(() {
       _hops.removeAt(index);
       _detachedHopIndexes.remove(index);
-      // Индексы «оторванных» узлов сдвигаются вместе со списком.
       final shifted =
           _detachedHopIndexes.map((i) => i > index ? i - 1 : i).toSet();
       _detachedHopIndexes
@@ -131,8 +114,7 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
     });
   }
 
-  /// [newIndex] уже пересчитан под удалённый элемент — это контракт
-  /// `onReorderItem` (в отличие от старого `onReorder`).
+  // onReorderItem отдаёт newIndex уже с поправкой на удалённый элемент
   void _reorder(int oldIndex, int newIndex) {
     setState(() {
       final hop = _hops.removeAt(oldIndex);
@@ -208,10 +190,6 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
         ),
       ),
       body: SafeArea(
-        // Один скролл на весь экран: маршрут — это sliver-карточка, внутри
-        // которой перетаскиваемый список. Так декорация карточки рисуется на
-        // всю длину маршрута (как у группы серверов), а не собирается из кусков
-        // вокруг ReorderableListView.
         child: SmoothScroll(
           builder: (context, controller) => CustomScrollView(
             controller: controller,
@@ -274,17 +252,12 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
     );
   }
 
-  /// Маршрут одной карточкой: «это устройство» → узлы → «добавить» → «интернет».
-  ///
-  /// Кнопка добавления стоит перед «интернетом», а не после: новый узел уходит
-  /// в конец списка и становится выходным — там, где кнопка и нарисована.
   Widget _routeCard(AppLocalizations l10n) {
     return DecoratedSliver(
       decoration: BoxDecoration(
         color: AppTheme.card(context),
         borderRadius: ExpressiveShape.radius(ExpressiveShape.extraLarge),
         border: Border.all(color: AppTheme.divider(context), width: 1),
-        // Нейтральная тень как высота — см. то же в server_groups.
         boxShadow: [
           BoxShadow(
             color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.10),
@@ -294,7 +267,6 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
         ],
       ),
       sliver: SliverPadding(
-        // 1px — чтобы содержимое не наезжало на рамку декорации.
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 1),
         sliver: SliverMainAxisGroup(
           slivers: [
@@ -318,8 +290,7 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
                 child: child,
               ),
               itemBuilder: (context, index) => _HopRow(
-                // Один сервер может стоять в цепочке дважды — ключ учитывает
-                // и место.
+                // один сервер может стоять в цепочке дважды, поэтому в ключе и место
                 key: ValueKey('chain-hop-$index-${_hops[index].id}'),
                 index: index,
                 server: _hops[index],
@@ -362,9 +333,7 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
                 height: 26,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  // Смешиваем с фоном карточки, а не кладём полупрозрачным:
-                  // кружок стоит поверх линии маршрута, и сквозь прозрачный
-                  // фон она просвечивала — кнопка выглядела перечёркнутой.
+                  // смешиваем с фоном: сквозь полупрозрачный кружок просвечивала линия маршрута
                   color: Color.alphaBlend(
                     color.withValues(alpha: 0.15),
                     AppTheme.card(context),
@@ -405,8 +374,6 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
           _banner(error, AppTheme.red(context), Icons.error_outline_rounded),
           const SizedBox(height: 8),
         ] else if (_hops.length < 2) ...[
-          // Не ошибка, а требование к маршруту: красный баннер тут пугал бы
-          // ровно в тот момент, когда пользователь ещё просто собирает цепочку.
           _banner(
             l10n.chainNeedsTwoNodes,
             AppTheme.textLight(context),
@@ -468,11 +435,9 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
       );
 }
 
-/// Ширина «рельса» маршрута — колонки с линией и кружком узла.
 const double _railWidth = 44;
 const double _nodeSize = 34;
 
-/// Вертикальная линия маршрута плюс кружок узла поверх неё.
 class _Rail extends StatelessWidget {
   final bool lineAbove;
   final bool lineBelow;
@@ -512,8 +477,6 @@ class _Rail extends StatelessWidget {
   }
 }
 
-/// Концевые точки маршрута — устройство и интернет. Не узлы цепочки, поэтому
-/// они не перетаскиваются и не удаляются: это границы, а не звенья.
 class _EndpointNode extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -567,12 +530,7 @@ class _EndpointNode extends StatelessWidget {
   }
 }
 
-/// Узел цепочки: кружок на рельсе + имя, адрес и ручка перетаскивания.
-///
-/// Высоту задаёт содержимое, а не константа: при крупном системном шрифте
-/// фиксированные 72px не вмещали две строки, и ряд рвало на overflow.
-/// `IntrinsicHeight` делает высоту Row известной — только поэтому здесь
-/// допустим `stretch`, которым рельс дотягивается до краёв строки.
+// stretch допустим только из-за IntrinsicHeight, иначе высота Row в списке не известна
 class _HopRow extends StatelessWidget {
   final int index;
   final ServerItem server;

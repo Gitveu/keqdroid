@@ -10,43 +10,22 @@ import 'process_name_utils.dart';
 import 'routing_entry.dart';
 import 'rule_lists.dart';
 
-/// Адрес TUN-интерфейса (тот же, что у sing-box по умолчанию). Вынесен из
-/// генератора: по нему бэкенды понимают, что адаптер уже поднят.
 const kTunInterfaceAddress = '172.19.0.1';
 
-/// Подсеть TUN-интерфейса — /30, как требует system-стек sing-box (ему нужен
-/// «следующий» адрес в префиксе).
+// /30: system-стеку sing-box нужен следующий адрес в префиксе
 const kTunInterfacePrefix = '$kTunInterfaceAddress/30';
 
-/// IPv6-подсеть TUN-интерфейса — умолчание sing-box (`/126` по той же причине,
-/// что и `/30` у IPv4). Заводится только когда у машины есть глобальный IPv6:
-/// см. [TunSettings.blockIpv6Leak].
 const kTunInterfaceIpv6Prefix = 'fdfe:dcba:9876::1/126';
 
-/// Локальные IPv6-диапазоны, которые обязаны ходить мимо туннеля и не попадать
-/// под запрет: link-local (соседи, SLAAC), ULA (адреса своей сети), multicast
-/// (mDNS/SSDP — обнаружение принтеров и колонок) и петля.
 const kLocalIpv6Cidrs = ['::1/128', 'fe80::/10', 'fc00::/7', 'ff00::/8'];
 
-/// Имя TUN-интерфейса. Задаём сами на всех платформах: без него sing-box берёт
-/// «tun0», а wintun считает GUID адаптера как MD5("wintun" + имя) — один и тот
-/// же у любого sing-box-клиента на машине.
+// без имени sing-box берёт tun0, а wintun считает GUID как MD5(wintun + имя), один на всех клиентов
 const kTunInterfaceName = 'tun-keqdis';
 
-/// Блок в правиле sing-box — действием, а не выходом `block`: особые выходы
-/// sing-box объявил устаревшими, замена им — `reject`.
-///
-/// Метод `drop`, а не умолчание, ради того же поведения, что было у выхода.
-/// TCP до правила доходит уже прочитанным снифером и так и так просто
-/// закрывается, а UDP выход терял молча. Умолчание ответило бы на UDP
-/// ICMP-ошибкой и после 50 срабатываний за 30 секунд само перешло бы на `drop`.
+// особые выходы sing-box объявил устаревшими. drop, а не умолчание: оно отвечало бы на UDP ICMP-ошибкой
 const kSingboxBlockAction = {'action': 'reject', 'method': 'drop'};
 
-/// Годится ли строка как значение `ip_cidr`: голый адрес или адрес с маской.
-///
-/// Домен сюда попадает штатным путём — резолв адреса сервера при неудаче
-/// откатывается на исходную строку, — а `ip_cidr` его не принимает и роняет
-/// разбор всего конфига.
+// домен сюда попадает при неудачном резолве адреса сервера, а ip_cidr его не принимает и роняет конфиг
 bool _isRoutableIpTarget(String raw) {
   final value = raw.trim();
   if (value.isEmpty) return false;
@@ -60,12 +39,7 @@ bool _isRoutableIpTarget(String raw) {
   return bits >= 0 && bits <= max;
 }
 
-/// Поднялся ли TUN, судя по выводу ядра.
-///
-/// Годятся только строки самого sing-box. Прежняя проверка ловила баннер
-/// встроенного xray, а его ядро поднимает раньше инбаундов: приложение
-/// показывало «Подключено» и заводило таймер сессии, пока трафик ещё шёл старым
-/// путём — отсюда была жалоба «работает только через 20 секунд».
+// только строки sing-box: баннер встроенного xray печатается раньше инбаундов, и Подключено показывалось за 20 с до трафика
 bool singboxTunReady(String rawLog) {
   final text = rawLog.toLowerCase();
   return text.contains('sing-box started') ||
@@ -73,24 +47,10 @@ bool singboxTunReady(String rawLog) {
       text.contains('started at ');
 }
 
-/// Стеки, которых нет в ядре, собранном без `-tags with_gvisor`.
-///
-/// `NewGVisor`/`NewMixed` там заменены заглушкой и возвращают «gVisor is not
-/// included in this build», то есть ядро падает на старте — конфиг разобран,
-/// адаптер не создан, пользователь видит «keqrnel TUN did not start (exit code
-/// 1)». Наши поставляемые бинари собраны с тегом (`go version -m` →
-/// `-tags=with_gvisor`), но чужая сборка `go build ./...` — нет.
 const _gvisorStacks = {TunSettings.stackGvisor, TunSettings.stackMixed};
 
-/// Понижает стек TUN-инбаунда до `system`, если ядро собрано без gVisor.
-///
-/// Умолчание у нас `gvisor`, и с ядром без тега оно означало бы «TUN не
-/// работает вообще, у всех, всегда». Обрезанный конфиг лучше упавшего: system
-/// доступен в любой сборке.
-///
-/// [gvisorAvailable] — `null`, когда выяснить не удалось (бинарь не Go, блок
-/// настроек сборки не прочитался). Тогда конфиг не трогаем: неизвестно — не
-/// повод переписывать выбор пользователя.
+// ядро без with_gvisor на gvisor и mixed падает на старте, system есть в любой сборке.
+// null значит неизвестно, тогда выбор пользователя не трогаем
 ({String config, String? downgradedFrom}) applyTunStackFallback(
   String singboxConfig, {
   required bool? gvisorAvailable,
@@ -114,8 +74,7 @@ const _gvisorStacks = {TunSettings.stackGvisor, TunSettings.stackMixed};
     final stack = raw['stack']?.toString();
     if (stack == null || !_gvisorStacks.contains(stack)) continue;
     raw['stack'] = TunSettings.stackSystem;
-    // endpoint_independent_nat живёт только на gvisor/mixed: на system
-    // sing-box его игнорирует, но в конфиге он оставался бы ложью.
+    // endpoint_independent_nat работает только на gvisor и mixed
     raw.remove('endpoint_independent_nat');
     downgradedFrom = stack;
   }
@@ -128,9 +87,6 @@ const _gvisorStacks = {TunSettings.stackGvisor, TunSettings.stackMixed};
   );
 }
 
-/// sing-box tun-конфиг: весь трафик tun → socks5 (auth) → локальный xray.
-/// xray поднимает upstream (vless, vmess, hysteria, …), sing-box только
-/// перехватывает пакеты и не парсит subscription-протоколы.
 class SingBoxTunConfigGen {
   static String generate({
     required int localSocksPort,
@@ -140,26 +96,13 @@ class SingBoxTunConfigGen {
     required AppSettings settings,
     List<String> managedProcessNames = const [],
     AppRoutingMode routingMode = AppRoutingMode.allProxy,
-    /// this app's own exe (e.g. keqdroid.exe). routed direct so our tcp/url ping
-    /// sockets measure latency from the local pc, not through the active server.
     String appProcessName = '',
-    /// Целевая ОС. По умолчанию текущая — в бою иначе не бывает. Параметром она
-    /// стала ради golden-тестов: три места ниже читают `Platform.isWindows`, и
-    /// снятая на Windows фикстура падала на linux-раннере, ничего не сообщая о
-    /// генераторе. Ср. [TunSettings.strictRouteEnabled], где платформа уже входит
-    /// аргументом.
+    // ОС параметром: фикстура, снятая на Windows, иначе падала бы на linux-раннере
     bool? windows,
-    /// Есть ли у машины глобальный IPv6 (см. `utils/host_ipv6.dart`). Только
-    /// вместе с [TunSettings.blockIpv6Leak] это включает захват IPv6: адрес на
-    /// интерфейсе там, где IPv6 в системе выключен, — это не «лишняя строка в
-    /// конфиге», а упавший на старте sing-box.
     bool hostHasIpv6 = false,
   }) {
     final isWindows = windows ?? Platform.isWindows;
-    // Разделители — и запятая, и перевод строки: UI обещает «по одному в
-    // строке или через запятую», сплит только по ',' склеивал построчные
-    // записи в один несрабатывающий токен. Ссылки на списки пропускаются: их
-    // домены приходят уже скачанными (см. [RuleListDomains]).
+    // и запятая, и перевод строки: сплит по запятой склеивал строки в один токен
     List<String> parseList(String s) => s
         .split(RegExp(r'[\r\n,]+'))
         .map((e) => e.trim())
@@ -169,10 +112,7 @@ class SingBoxTunConfigGen {
     Map<String, dynamic> buildProxyDnsServer() {
       final customDns = customDnsList(settings);
 
-      // Дефолт — DNS-over-HTTPS через туннель. Многие VPS-хостеры/серверы режут
-      // исходящий порт 53 (анти-abuse), из-за чего и UDP-, и TCP-DNS через
-      // прокси умирали с "read response: EOF" — браузер получал "server not
-      // found" при живом туннеле. DoH на 443 неотличим от обычного HTTPS.
+      // по умолчанию DoH через туннель: многие хостеры режут исходящий 53, и DNS через прокси умирал на EOF
       Map<String, dynamic> defaultDoh() => {
             'tag': 'proxy-dns',
             'type': 'https',
@@ -182,13 +122,8 @@ class SingBoxTunConfigGen {
 
       if (customDns.isEmpty) return defaultDoh();
 
-      // Поле DNS хранит адреса в xray-синтаксисе (https+local://, tls://,
-      // quic://, tcp://, голый ip[:port]). sing-box же ждёт типизированный
-      // объект сервера, а не сырую xray-строку: если скормить её как есть,
-      // keqrnel падал на разборе конфига (exit code 2 — «ошибка подключения»).
-      // Берём первый переводимый адрес, а не просто первый: непереводимая
-      // строка в начале списка (localhost, fakedns) иначе отправляла в дефолт
-      // весь список, включая нормальный DoH следующей строкой.
+      // сырую xray-строку sing-box не примет (exit code 2). берём первый переводимый адрес,
+      // иначе localhost в начале списка уводил в дефолт весь список
       for (final address in customDns) {
         final server = _singBoxDnsServerFromXray(address);
         if (server != null) return server;
@@ -225,11 +160,7 @@ class SingBoxTunConfigGen {
           continue;
         }
         if (cleaned.startsWith('geosite:')) {
-          // sing-box (1.11+) не умеет читать v2fly .dat вообще, а прежний
-          // перевод `geosite:telegram` → `domain_suffix: telegram` давал
-          // мёртвое правило: суффиксу «telegram» не соответствует ни
-          // telegram.org, ни t.me — так geosite молча не работал в TUN.
-          // Такие токены оставляем встроенному xray (см. needsXrayForGeo).
+          // sing-box не читает .dat, а domain_suffix: telegram не ловит ни telegram.org, ни t.me. geo оставляем встроенному xray
           continue;
         }
         if (cleaned.startsWith('.')) {
@@ -266,7 +197,6 @@ class SingBoxTunConfigGen {
       });
     }
 
-    // each list is mixed (domains + ip/cidr + geoip:); split per kind.
     final directSplit = splitDomainsAndIps(parseList(settings.directRules));
     final proxySplit = splitDomainsAndIps(parseList(settings.proxyRules));
     final blockedSplit = splitDomainsAndIps(parseList(settings.blockedRules));
@@ -289,11 +219,7 @@ class SingBoxTunConfigGen {
       return ipV6.hasMatch(v) || cidrV6.hasMatch(v);
     }
 
-    // sing-box has no built-in geoip db here, so keep only literal ip/cidr and
-    // leave every geoip: code (including geoip:private) to the embedded xray.
-    // `ip_cidr` accepts nothing but a prefix or a bare address — sing-box's
-    // NewIPCIDRItem rejects anything else and the core then exits on config
-    // load, so a stray `geoip:private` used to kill the whole connection.
+    // geoip отдаём встроенному xray: ip_cidr принимает только префикс или адрес, и geoip:private ронял весь конфиг
     List<String> ipsForSingBox(List<String> ips) => ips
         .where((entry) => isIPv4OrCidr(entry) || isIPv6OrCidr(entry))
         .map((e) => e.trim())
@@ -303,15 +229,11 @@ class SingBoxTunConfigGen {
     final proxyIpsForSingBox = ipsForSingBox(proxySplit.ips);
     final blockedIpsForSingBox = ipsForSingBox(blockedSplit.ips);
 
-    // geo-токен, который умеет вычислить только xray (у sing-box нет .dat).
     bool isGeoToken(String value) {
       final v = value.trim().toLowerCase();
       return v.startsWith('geosite:') || v.startsWith('geoip:');
     }
 
-    // Есть ли geo-правила, которые должны отправить трафик в прокси/блок.
-    // Их применяет встроенный xray — но только если соединение вообще доехало
-    // до аутбаунда `proxy`; см. финальное действие ниже.
     final needsXrayForGeo = [
       ...proxySplit.domains,
       ...proxySplit.ips,
@@ -321,14 +243,8 @@ class SingBoxTunConfigGen {
 
     const tunInboundTag = 'tun-in';
 
-    // Забирать ли IPv6 в туннель. Без адреса на интерфейсе ядро не берёт
-    // IPv6-маршруты, и на дуалстеке весь IPv6 идёт мимо туннеля (см.
-    // [TunSettings.blockIpv6Leak]); с адресом на машине, где IPv6 выключен,
-    // sing-box падает при настройке адаптера. Отсюда и настройка, и проверка
-    // машины.
     final captureIpv6 = settings.tun.blockIpv6Leak && hostHasIpv6;
 
-    // Этот конфиг — всегда TUN с перехватом DNS, так что подменять есть кому.
     final fakeIp = settings.fakeIp;
 
     final rules = <Map<String, dynamic>>[
@@ -337,55 +253,23 @@ class SingBoxTunConfigGen {
         'action': 'sniff',
       },
       {'protocol': 'dns', 'action': 'hijack-dns'},
-      // Тот же перехват, но по порту, а не по определению снифера.
-      //
-      // Правило выше срабатывает только если снифер опознал пакет как DNS.
-      // Не опознал — запрос проваливается ниже и попадает под правило
-      // «подсеть самого TUN → direct», а адрес системного резолвера лежит
-      // ровно в ней: sing-tun ставит системе следующий адрес после адреса
-      // интерфейса (172.19.0.1 → 172.19.0.2). Тогда ядро честно пытается
-      // открыть сокет к 172.19.0.2:53 наружу, попадает в никуда, и резолва
-      // нет вовсе — снаружи это «подключился, а интернета нет».
-      //
-      // У mihomo то же самое сделано сразу по порту (`dns-hijack: any:53`),
-      // и у xray-пути тоже (`dns-out` по `port: 53`).
+      // по порту тоже: не опознанный снифером запрос падает в direct подсети TUN, а резолвер системы 172.19.0.2 лежит в ней
       {'port': 53, 'action': 'hijack-dns'},
-      // icmp can't go over socks; route it locally
+      // icmp через socks не пройдёт, отправляем локально
       {'protocol': 'icmp', 'outbound': 'direct'},
       {'ip_cidr': ['172.19.0.0/30'], 'outbound': 'direct'},
     ];
 
-    // bypass tun for the cores and this app itself so they go direct:
-    //  - xray.exe / ephemeral ping xray: only dials the server, avoids double-tunnel
-    //  - sing-box.exe: don't route its own direct egress back into itself
-    //  - <app>.exe: our dart tcp-ping sockets, so latency reflects the local pc
-    // placed before split-tunnel rules so it wins regardless of routing mode.
-    // Windows process names carry `.exe`; on Linux they are the bare binary
-    // basename (sing-box takes it from the /proc/<pid>/exe path, not from
-    // comm, so long names are not cut at 15 characters). Keep Windows
-    // output byte-identical by only appending the suffix there.
+    // свои ядра и само приложение мимо TUN, раньше сплита. на Linux имя без .exe, sing-box берёт его из /proc/<pid>/exe
     final exe = isWindows ? '.exe' : '';
     final bypassProcessNames = <String>{
-      // Имена реальных бинарей, а не движков внутри них.
-      //
-      // `xray` и `sing-box` отдельными процессами на десктопе не существуют
-      // с тех пор, как оба переехали внутрь keqrnel: правило по ним не
-      // совпадало ни разу. Держало схему только правило по IP сервера ниже —
-      // а оно исчезает, стоит резолву адреса не удаться. Без обоих правил
-      // соединение ядра к серверу забирает auto_route, отдаёт его обратно в
-      // `proxy`, то есть в само ядро, и получается круг: туннель поднят,
-      // ошибок нет, трафика нет.
+      // реальные бинари: отдельных xray и sing-box на десктопе больше нет, правило по ним не совпадало,
+      // и без правила по IP сервера соединение ядра шло по кругу
       'keqrnel$exe',
-      // mihomo в TUN-режиме владеет адаптером сам, и этот конфиг ему не нужен;
-      // но он же исполняет сервер в proxy-режиме под нашим TUN.
       'mihomo$exe',
       'xray$exe',
       'sing-box$exe',
-      // Через варианты, а не .toLowerCase(): sing-box сравнивает process_name
-      // map-lookup'ом, без приведения регистра. Заниженное имя не совпадёт с
-      // реальным (переименованный портативный `KEQDIS.exe`), правило молча
-      // промахнётся — и tcp-пинг начнёт мерить локальный конец туннеля вместо
-      // сервера. Пользовательские правила сплит-туннеля так и делают.
+      // варианты, а не toLowerCase(): process_name сравнивается map-lookup'ом с регистром
       ...processNameMatchVariants(appProcessName.trim()),
     }.toList();
     rules.add({
@@ -421,9 +305,7 @@ class SingBoxTunConfigGen {
         if (variants.isEmpty) continue;
         rules.add({'process_name': variants, 'outbound': splitOutbound});
       }
-      // Запись с путём — «только этот файл». `process_path` сравнивает строку
-      // точно, а на Windows регистр пути у системы и у диалога выбора файла
-      // расходится, поэтому там — регулярка без учёта регистра.
+      // process_path сравнивает строку точно, а регистр пути у системы и диалога на Windows расходится
       if (paths.isNotEmpty) {
         rules.add({
           if (isWindows)
@@ -437,12 +319,7 @@ class SingBoxTunConfigGen {
       }
     }
 
-    // «Только выбранные»: их трафик правило выше уже отдало встроенному xray,
-    // а списки сайтов и «Всё остальное» он исполняет сам. Сюда доходят только
-    // невыбранные приложения, и они идут мимо туннеля целиком, как на Android,
-    // где VpnService их не берёт. Раньше они шли по спискам ниже и попадали в
-    // VPN по «Через VPN». Без единого имени процесса списки остаются, как
-    // было: иначе сплит молча стал бы «всё мимо VPN».
+    // невыбранные идут мимо туннеля целиком, как на Android. без единого имени списки остаются, иначе всё мимо VPN
     final selectedOnly = routingMode == AppRoutingMode.onlySelected &&
         managedProcessNames
             .any((name) => processNameMatchVariants(name).isNotEmpty);
@@ -454,11 +331,7 @@ class SingBoxTunConfigGen {
           outbound: 'block',
         );
       }
-      // С fake-ip назначение приходит доменом, и правилам по IP сравнивать не с
-      // чем. Настоящий адрес достаём, только если такие правила у пользователя
-      // есть: иначе каждое соединение снова ждало бы DNS, ради отмены которого
-      // fake-ip и включают. Назначением домен при этом остаётся — серверу уходит
-      // имя, а не адрес.
+      // с fake-ip настоящий адрес достаём, только если есть правила по IP, иначе каждое соединение снова ждёт DNS
       if (fakeIp &&
           (blockedIpsForSingBox.isNotEmpty ||
               directIpsForSingBox.isNotEmpty ||
@@ -469,20 +342,10 @@ class SingBoxTunConfigGen {
         rules.add({'ip_cidr': blockedIpsForSingBox, ...kSingboxBlockAction});
       }
 
-      // Адрес сервера мимо туннеля — иначе коннект ядра к нему заходит в круг.
-      //
-      // Только настоящий адрес: сюда приезжает результат резолва, а он при
-      // неудаче откатывается на исходную строку сервера, то есть на домен
-      // (`vpn.example.com`). Домен в `ip_cidr` — это `vpn.example.com/32`,
-      // невалидный префикс: sing-box не разбирает такой конфиг вовсе и выходит,
-      // то есть туннель не поднимается совсем. Пропустить правило хуже, чем
-      // уронить ядро, только на первый взгляд: круг ловит правило по имени
-      // процесса выше, а упавшее ядро не ловит ничего.
+      // только настоящий адрес: при неудачном резолве сюда приезжает домен, а в ip_cidr он роняет весь конфиг.
+      // круг в этом случае ловит правило по имени процесса выше
       if (_isRoutableIpTarget(serverIpToExclude)) {
-        // Маска по семейству адреса: `/32` на IPv6-адресе — это не «сам сервер»,
-        // а треть интернета (`2a03:…::1/32` → `2a03::/32`), пущенная мимо
-        // туннеля. `ip_cidr` у sing-box принимает и голый адрес, но у нас он
-        // приезжает уже с маской у половины вызовов, так что считаем её сами.
+        // /32 на IPv6 это треть интернета мимо туннеля, маску считаем по семейству
         final cidrs = serverIpToExclude.contains('/')
             ? [serverIpToExclude]
             : ['$serverIpToExclude/${serverIpToExclude.contains(':') ? 128 : 32}'];
@@ -507,8 +370,6 @@ class SingBoxTunConfigGen {
           '172.16.0.0/12',
           '192.168.0.0/16',
           '127.0.0.0/8',
-          // Локальный IPv6 — только когда мы его вообще забираем: иначе это
-          // мёртвые строки в конфиге у всех.
           if (captureIpv6) ...kLocalIpv6Cidrs,
         ],
         'outbound': 'direct',
@@ -525,24 +386,12 @@ class SingBoxTunConfigGen {
         rules.add({'ip_cidr': proxyIpsForSingBox, 'outbound': 'proxy'});
       }
 
-      // Выход IPv6 наружу закрыт — но после пользовательских правил: явное
-      // IPv6-правило пользователя остаётся сильнее умолчания.
-      //
-      // Смысл именно в закрытии, а не в проксировании: наш DNS отдаёт только
-      // A-записи, значит IPv6-адрес у приложения появляется лишь помимо нас
-      // (свой DoH браузера, литерал в коде). Закрытый выход возвращает такое
-      // соединение на IPv4 мгновенно — Happy Eyeballs делает это за миллисекунды,
-      // — тогда как отправленное в прокси оно висело бы до таймаута на сервере
-      // без IPv6. Локальный IPv6 сюда не попадает: он ушёл в `direct` выше.
+      // после пользовательских правил. закрываем, а не проксируем: закрытый выход Happy Eyeballs откатывает на IPv4 за миллисекунды
       if (captureIpv6) {
         rules.add({'ip_cidr': ['::/0'], ...kSingboxBlockAction});
       }
     }
 
-    // Финальное действие (catch-all). При per-app сплите режим сам диктует финал
-    // (onlySelected → direct: не выбранные приложения идут напрямую). В обычном
-    // режиме allProxy финал выбирает пользователь: proxy (глобал-прокси),
-    // direct (обход) или block.
     final finalOutbound = switch (settings.finalOutbound) {
       AppSettings.finalOutboundDirect => 'direct',
       AppSettings.finalOutboundBlock => 'block',
@@ -554,13 +403,8 @@ class SingBoxTunConfigGen {
       AppRoutingMode.allProxy => finalOutbound,
     };
 
-    // Финал ≠ proxy + geo-правила: не совпавшее с правилами sing-box уходило
-    // мимо xray, и `geosite:telegram → proxy` при финале «обход» не работал
-    // вообще (жалоба «геосайты не учитываются / не грузит ниче»). Отдаём остаток
-    // встроенному xray: он вычислит geo-правила, а его собственный catch-all —
-    // тот же finalOutbound, так что для не-geo трафика решение не меняется.
-    // Только в режиме allProxy: при пер-аппном сплите финал несёт смысл
-    // «невыбранные приложения идут напрямую», и его подменять нельзя.
+    // при финале не proxy geo-правила иначе не срабатывали: остаток отдаём встроенному xray, его catch-all тот же.
+    // только в allProxy, при сплите финал значит невыбранные напрямую
     if (needsXrayForGeo &&
         routingMode == AppRoutingMode.allProxy &&
         routeFinal != 'proxy') {
@@ -577,26 +421,15 @@ class SingBoxTunConfigGen {
       'password': socksPassword,
     };
 
-    // Direct-домены резолвим системным резолвером (local-dns): он знает
-    // корпоративные/LAN-зоны сплит-DNS, которых у публичного DoH нет — иначе
-    // домен из Direct-списка получает NXDOMAIN, хотя маршрут для него direct.
-    // hijack-dns при этом перехватывает все запросы (анти-leak, см. dns.final),
-    // поэтому выбор резолвера возможен только здесь, через dns.rules.
-    //
-    // Под тем же выключателем, что и у xray: настройка обещает одно поведение
-    // на оба ядра, а раньше здесь сплит стоял всегда — выключить его в TUN не
-    // получалось вовсе.
+    // direct-домены системным резолвером: корпоративных и LAN-зон публичный DoH не знает
     final directDnsParts = classifyDomains(directDomains);
     final fakeIpExclusions = classifyDomains(fakeIpFilterAsRules());
     final hosts = hostsServerEntries(settings);
     final dnsPolicies = policyDnsServers(settings);
     final dnsRules = <Map<String, dynamic>>[
-      // Свои адреса для доменов — первым правилом: их ядро обязано отдать
-      // раньше любого резолвера, иначе это не hosts, а подсказка.
+      // свои адреса первым правилом, раньше любого резолвера
       if (hosts.isNotEmpty)
         {'domain': hosts.keys.toList(), 'server': hostsServerTag},
-      // Резолвер для отдельных доменов — раньше раздельного резолва ниже:
-      // явный выбор человека важнее общего правила про direct-домены.
       for (final policy in dnsPolicies)
         if (policy.mask.startsWith('*.'))
           {
@@ -622,11 +455,7 @@ class SingBoxTunConfigGen {
             'domain_regex': directDnsParts.domainRegex,
           'server': 'local-dns',
         },
-      // Fake-ip — последним: всё, что разложено выше, получает настоящий
-      // адрес. Исключения идут тем же резолвером, что и без подмены. TTL —
-      // секунда, как у mihomo: своё умолчание sing-box — 600, и после
-      // отключения система ещё десять минут ходила бы по подменным адресам в
-      // никуда.
+      // fake-ip последним. TTL секунда, как у mihomo: с умолчанием 600 после отключения система ходила бы в никуда
       if (fakeIp) ...[
         {
           if (fakeIpExclusions.domain.isNotEmpty)
@@ -646,10 +475,7 @@ class SingBoxTunConfigGen {
     ];
 
     final tun = settings.tun;
-    // mips умеет только mihomo, а этот инбаунд исполняет sing-box внутри
-    // keqrnel: чужое имя стека роняет у него весь конфиг, а не одну опцию.
-    // Настройка при этом остаётся на месте: пользователь выбрал её для mihomo, и
-    // переключение ядра не должно её терять.
+    // mips умеет только mihomo, у sing-box чужое имя стека роняет весь конфиг. настройку не трогаем
     final stack = tun.stack == TunSettings.stackMips
         ? TunSettings.defaultStack
         : tun.stack;
@@ -657,34 +483,19 @@ class SingBoxTunConfigGen {
       'type': 'tun',
       'tag': tunInboundTag,
       'mtu': tun.mtu,
-      // Второй адрес — это и есть «забрать IPv6 в туннель»: sing-box ставит
-      // IPv6-маршруты только на интерфейс, у которого IPv6-адрес есть.
+      // второй адрес и есть захват IPv6: маршруты ставятся только на интерфейс с IPv6-адресом
       'address': [kTunInterfacePrefix, if (captureIpv6) kTunInterfaceIpv6Prefix],
-      // без auto_route трафик в TUN не попадает; off — только для ручных маршрутов
       'auto_route': tun.autoRoute,
-      // auto: on везде, кроме Windows — там strict_route breaks routing when
-      // another vpn (e.g. tailscale) is active.
       'strict_route': tun.strictRouteEnabled(windows: isWindows),
       'stack': stack,
-      // full-cone NAT считает только gvisor-netstack (в mixed он держит UDP)
       if (tun.endpointIndependentNat && stack != TunSettings.stackSystem)
         'endpoint_independent_nat': true,
       if (tun.udpTimeoutSec != TunSettings.defaultUdpTimeoutSec)
         'udp_timeout': '${tun.udpTimeoutSec}s',
     };
-    // Собственное имя интерфейса обязательно и на Windows. Без него sing-box
-    // берёт `CalculateInterfaceName("")` → «tun0», а wintun-адаптер получает
-    // GUID = MD5("wintun" + имя) — то есть тот же GUID, что у любого
-    // другого sing-box-клиента на этой машине (Happ, Nekoray, sing-box CLI).
-    // Дальше по коду sing-tun: CreateAdapter падает с ErrExist и делается
-    // OpenAdapter(имя) — мы молча забираем чужой адаптер и настраиваем на нём
-    // свои адреса и маршруты. Отсюда и «TUN запустился, ошибок нет, трафика
-    // нет», и падения через раз на машинах, где стоит второй такой клиент.
     tunInbound['interface_name'] = kTunInterfaceName;
 
-    // `final` у sing-box — только тег выхода, действия туда не записать. Блок
-    // остатка поэтому последнее правило без условий: до `final` после него не
-    // доходит ничего.
+    // в final действие не записать, поэтому блок остатка последним правилом без условий
     final blockRest = routeFinal == 'block';
     if (blockRest) rules.add({...kSingboxBlockAction});
 
@@ -712,18 +523,10 @@ class SingBoxTunConfigGen {
             },
         ],
         if (dnsRules.isNotEmpty) 'rules': dnsRules,
-        // Только A-записи, и «стратегия запросов» из настроек ядра сюда
-        // намеренно не переносится. AAAA в этом режиме некуда деть: при
-        // включённом блоке IPv6-утечки весь IPv6 уходит в `block` (см. правило
-        // ниже), а при выключенном он идёт мимо туннеля по системным
-        // маршрутам. В обоих случаях адрес из AAAA — это либо мёртвое
-        // соединение, либо утечка, поэтому его лучше не выдавать вовсе.
+        // только A: AAAA тут либо мёртвое соединение, либо утечка
         'strategy': 'ipv4_only',
         if (settings.xrayCore.dnsDisableCache) 'disable_cache': true,
-        // Клиентский DNS идёт через туннель (proxy-dns), а не через системный
-        // резолвер: иначе на машинах с Tailscale его перехватывает MagicDNS
-        // (100.100.100.100) и резолв ломается, плюс это утечка DNS мимо VPN.
-        // Исключение — direct-домены, их dns.rules выше шлют в local-dns.
+        // через туннель, а не системный резолвер: иначе DNS перехватывает MagicDNS Tailscale (100.100.100.100)
         'final': 'proxy-dns',
       },
       'inbounds': [tunInbound],
@@ -743,17 +546,11 @@ class SingBoxTunConfigGen {
     return const JsonEncoder.withIndent('  ').convert(map);
   }
 
-  /// Тег резолвера, который отдаёт свои адреса для доменов.
   static const hostsServerTag = 'keq-hosts';
 
-  /// Тег DNS-сервера подменных адресов (fake-ip).
   static const fakeIpServerTag = 'keq-fakeip';
 
-  /// Резолверы для отдельных доменов: свой сервер на каждую запись.
-  ///
-  /// Правило sing-box уводит запрос ровно в один тег, поэтому из строки берём
-  /// первый адрес, который ядро умеет поднять, а остальные в этом режиме не
-  /// участвуют — как и в общем списке резолверов, где работает только первый.
+  // правило уводит в один тег, поэтому берём первый адрес, который ядро поднимет
   static List<({String tag, Map<String, dynamic> server, String mask})>
       policyDnsServers(AppSettings settings) {
     final parsed = XrayCoreSettings.parseDnsPolicy(settings.xrayCore.dnsPolicy);
@@ -772,13 +569,7 @@ class SingBoxTunConfigGen {
     return out;
   }
 
-  /// Свои адреса для доменов в том виде, в каком их принимает sing-box.
-  ///
-  /// Берём только точные имена с адресами: у сервера типа `hosts` карта
-  /// «имя → адреса» и лукап по ней точный, масок он не знает вовсе, а
-  /// псевдоним (домен вместо адреса) там негде исполнить. Что не влезло,
-  /// называет [ignoredHostsEntries] — вызывающий пишет это в лог, потому что
-  /// молчаливо съеденная строка выглядит как «настройка не работает».
+  // у hosts-сервера sing-box лукап точный, масок и псевдонимов он не знает
   static Map<String, List<String>> hostsServerEntries(AppSettings settings) {
     final out = <String, List<String>>{};
     final parsed = XrayCoreSettings.parseDnsHosts(settings.xrayCore.dnsHosts);
@@ -790,8 +581,6 @@ class SingBoxTunConfigGen {
     return out;
   }
 
-  /// Строки поля «свои адреса для доменов», которые в этом режиме не
-  /// исполнятся: маски и псевдонимы.
   static List<String> ignoredHostsEntries(AppSettings settings) {
     final parsed = XrayCoreSettings.parseDnsHosts(settings.xrayCore.dnsHosts);
     return [
@@ -804,8 +593,6 @@ class SingBoxTunConfigGen {
   static bool _isIpLiteral(String value) =>
       InternetAddress.tryParse(value) != null;
 
-  /// Адреса из поля «свои DNS-серверы», как их ввела пользовательница. Пусто,
-  /// когда переключатель выключен: список тогда не участвует вовсе.
   static List<String> customDnsList(AppSettings settings) =>
       !settings.xrayCore.dnsUseCustom
           ? const <String>[]
@@ -815,14 +602,7 @@ class SingBoxTunConfigGen {
               .where((e) => e.isNotEmpty)
               .toList();
 
-  /// Что из этого списка в TUN не сработает.
-  ///
-  /// Резолвер тут ровно один: `dns.final` принимает один тег, а транспорта с
-  /// откатом на следующий сервер у ядра нет вовсе (реестр — udp/tcp/tls/https/
-  /// quic/h3/local/hosts/fakeip/dhcp). Поэтому работает первый пригодный адрес,
-  /// а остальные строки — включая непереводимые (`localhost`, `fakedns`) —
-  /// молча не участвуют. У xray список опрашивается по очереди, так что разница
-  /// заметна, и вызывающий пишет её в лог.
+  // dns.final принимает один тег, отката на следующий сервер у ядра нет, работает первый пригодный
   static List<String> ignoredCustomDnsServers(AppSettings settings) {
     var used = false;
     final ignored = <String>[];
@@ -836,20 +616,7 @@ class SingBoxTunConfigGen {
     return ignored;
   }
 
-  /// Переводит один DNS-адрес из xray-синтаксиса в объект sing-box dns-сервера
-  /// (формат 1.12+: `{type, server, server_port?, path?}`). Возвращает null,
-  /// когда адрес нельзя гонять как сетевой upstream через прокси
-  /// (localhost/fakedns/dhcp) — вызывающий тогда берёт дефолтный DoH.
-  ///
-  /// UDP через SOCKS хрупок (см. коммент выше про TCP:53), поэтому и «голый»
-  /// адрес, и udp://-схему форсируем в TCP.
-  ///
-  /// Суффикс `+local` («мимо роутинга» у xray) снимает `detour`: сервер без
-  /// него ядро набирает своим дефолтным диалером, то есть мимо туннеля —
-  /// ровно то, что человек и просил. Без этого настройка молча не работала: в
-  /// TUN системный DNS исполняет sing-box, и он гнал в туннель всё подряд.
-  /// Голый адрес без схемы остаётся проксированным: у xray это обычный UDP-
-  /// резолвер, который тоже идёт через роутинг.
+  // +local снимает detour, и сервер идёт мимо туннеля. голый адрес остаётся проксированным, как у xray
   static Map<String, dynamic>? _singBoxDnsServerFromXray(
     String raw, {
     String tag = 'proxy-dns',
@@ -858,13 +625,11 @@ class SingBoxTunConfigGen {
     if (trimmed.isEmpty) return null;
     final lower = trimmed.toLowerCase();
 
-    // Служебные xray-резолверы без сетевого upstream — их через прокси не гонишь.
     if (lower == 'localhost' || lower == 'fakedns' || lower.startsWith('dhcp')) {
       return null;
     }
 
-    // Тег исторический: сервер зовётся `proxy-dns` и когда идёт напрямую —
-    // на него смотрят `dns.final` и `default_domain_resolver`.
+    // тег исторический: proxy-dns и когда идёт напрямую, на него смотрят dns.final и default_domain_resolver
     Map<String, dynamic> server(String type, String host, int? port,
             {String? path, bool local = false}) =>
         {
@@ -876,8 +641,6 @@ class SingBoxTunConfigGen {
           if (!local) 'detour': 'proxy',
         };
 
-    // Схема вида `scheme://`. У xray scheme может нести суффикс (`https+local`,
-    // `tcp+local`, …) — базой считаем часть до '+'.
     final schemeMatch = RegExp(r'^([a-z][a-z0-9.+-]*)://').firstMatch(lower);
     if (schemeMatch != null) {
       final scheme = schemeMatch.group(1)!;
@@ -895,25 +658,19 @@ class SingBoxTunConfigGen {
           return server('tls', uri.host, port, local: local);
         case 'quic':
         case 'doq':
-          // `type: quic` в ядре не зарегистрирован (реестр транспортов у
-          // keqrnel — udp/tcp/tls/https/hosts/fakeip/local), и конфиг с ним не
-          // разбирается вовсе: «unknown transport type: quic» → ядро не
-          // стартует → TUN не поднимается. Берём DoT к тому же хосту: у всех,
-          // кто отдаёт DoQ, он есть, и шифрование сохраняется. Порт не
-          // переносим — у DoQ он свой (784/853), у DoT дефолтный 853.
+          // type: quic в ядре не зарегистрирован, и конфиг не разбирается. берём DoT к тому же хосту
           return server('tls', uri.host, null, local: local);
         case 'tcp':
           return server('tcp', uri.host, port, local: local);
         case 'udp':
         case 'dns':
-          // UDP over SOCKS ненадёжен → TCP
+          // UDP через SOCKS ненадёжен
           return server('tcp', uri.host, port, local: local);
         default:
           return null;
       }
     }
 
-    // Без схемы: голый ip / host / host:port / [ipv6]:port → TCP:53 через прокси.
     String host = trimmed;
     int? port;
     final bracketed = RegExp(r'^\[([0-9a-fA-F:]+)\]:(\d+)$').firstMatch(trimmed);
@@ -921,7 +678,7 @@ class SingBoxTunConfigGen {
       host = bracketed.group(1)!;
       port = int.parse(bracketed.group(2)!);
     } else if (RegExp(r'^[^:]+:\d+$').hasMatch(trimmed)) {
-      // Ровно один ':' с числовым портом — иначе это голый IPv6, не host:port.
+      // ровно одно двоеточие с числом это порт, иначе голый IPv6
       final idx = trimmed.lastIndexOf(':');
       host = trimmed.substring(0, idx).trim();
       port = int.parse(trimmed.substring(idx + 1));

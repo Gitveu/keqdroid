@@ -6,23 +6,14 @@ import 'package:path/path.dart' as p;
 
 import 'linux_appimage_updater.dart';
 
-/// Как установлена Linux-версия.
-///
-/// От этого зависит, какой файл релиза качать и кто вправе заменить
-/// установленное: AppImage и распакованный архив меняем сами, deb и rpm ставит
-/// пакетный менеджер, а пакет pacman (AUR или PKGBUILD из релиза) обновляет
-/// только pacman.
 enum LinuxInstallKind {
   appImage,
   deb,
   rpm,
   pacman,
 
-  /// Распакованный tar.gz в папке, куда можно писать.
   portable,
 
-  /// Распакованный tar.gz в папке только для чтения: заменить файлы нечем,
-  /// остаётся скачать архив браузером.
   readOnly,
 }
 
@@ -31,7 +22,6 @@ class LinuxInstall {
 
   static Future<LinuxInstallKind>? _detected;
 
-  /// Способ установки этого процесса; за время жизни он не меняется.
   static Future<LinuxInstallKind> detect() => _detected ??= classify(
         appImagePath: LinuxAppImageUpdater.currentAppImagePath(),
         executable: Platform.resolvedExecutable,
@@ -39,9 +29,7 @@ class LinuxInstall {
         writable: isWritableDir,
       );
 
-  /// Пакетный менеджер определяется по владельцу файла, а не по тому, какой
-  /// из них есть в системе: rpm ставят и на Debian, а tar.gz распаковывают
-  /// куда угодно.
+  // по владельцу файла: rpm ставят и на Debian
   @visibleForTesting
   static Future<LinuxInstallKind> classify({
     required String? appImagePath,
@@ -66,7 +54,7 @@ class LinuxInstall {
     try {
       return (await Process.run(tool, args)).exitCode == 0;
     } on ProcessException {
-      return false; // такого менеджера в системе нет
+      return false;
     }
   }
 
@@ -81,14 +69,11 @@ class LinuxInstall {
     }
   }
 
-  /// Система собрана из образа (Fedora Silverblue, Kinoite, Bazzite и
-  /// подобные): `/usr` там только для чтения, и `rpm -U` падает. Файл
-  /// `/run/ostree-booted` ostree создаёт при загрузке.
+  // на образных системах (Silverblue и подобные) /usr только для чтения, rpm -U падает
   @visibleForTesting
   static bool Function() imageBasedSystem =
       () => File('/run/ostree-booted').existsSync();
 
-  /// Почему пакет нельзя поставить самим; null — можно.
   @visibleForTesting
   static String? packageInstallBlocker(String package) =>
       package.endsWith('.rpm') && imageBasedSystem()
@@ -97,9 +82,6 @@ class LinuxInstall {
               'rpm-ostree, not installed with rpm.'
           : null;
 
-  /// Кладёт скачанный файл в «Загрузки» под именем [name] и возвращает путь.
-  /// Для случаев, когда заменить установленное нечем или нельзя: человек
-  /// поставит файл сам, а не получит молча ничего.
   static Future<String> saveToDownloads(
     String downloaded,
     String name, {
@@ -113,23 +95,17 @@ class LinuxInstall {
         dir = out;
       }
     } on ProcessException {
-      // нет xdg-user-dirs — остаётся домашний каталог
+      // нет xdg-user-dirs, остаётся домашний каталог
     }
     final target = p.join(dir, name.isEmpty ? p.basename(downloaded) : name);
-    // /tmp и домашний каталог часто на разных разделах, rename туда не ходит.
+    // /tmp и дом часто на разных разделах, rename туда не ходит
     await File(downloaded).copy(target);
     await File(downloaded).delete();
     if (executable) await Process.run('chmod', ['+x', target]);
     return target;
   }
 
-  /// Ставит скачанный deb или rpm через pkexec и перезапускает приложение.
-  /// `true` — процесс уходит на перезапуск, как у
-  /// [LinuxAppImageUpdater.applyInPlace].
-  ///
-  /// deb ставит apt-get, а не dpkg: он доставит зависимости, если их список
-  /// сменился. rpm ставит сам rpm: у dnf и zypper разные флаги на
-  /// неподписанный локальный пакет, а rpm есть у обоих.
+  // apt-get доставит зависимости, а rpm есть и у dnf, и у zypper с одинаковыми флагами
   static Future<bool> installPackage(
     String package, {
     Future<void> Function()? beforeRestart,
@@ -146,17 +122,15 @@ class LinuxInstall {
     try {
       result = await Process.run('pkexec', command);
     } on ProcessException {
-      await OpenFilex.open(package); // без pkexec остаётся установщик системы
+      await OpenFilex.open(package);
       return false;
     }
     switch (result.exitCode) {
       case 0:
         break;
-      case 126: // окно пароля закрыли
+      case 126:  // окно пароля закрыли
         return false;
       case 127:
-        // Нет агента polkit или политика не пустила: пакет верный, пусть его
-        // поставит установщик системы.
         await OpenFilex.open(package);
         return false;
       default:
@@ -171,8 +145,6 @@ class LinuxInstall {
     exit(0);
   }
 
-  /// Раскладывает скачанный tar.gz поверх папки приложения, когда оно выйдет,
-  /// и запускает заново.
   static Future<bool> applyPortable(
     String archive, {
     Future<void> Function()? beforeRestart,
@@ -189,7 +161,6 @@ class LinuxInstall {
           _tail(result.stderr) ?? 'Failed to extract the update archive',
         );
       }
-      // Релизный архив кладёт всё в каталог keqdroid/ (tool/package_linux.sh).
       final payload = p.join(staging.path, 'keqdroid');
       if (!File(p.join(payload, 'keqdroid')).existsSync()) {
         throw StateError('Update archive does not contain keqdroid');
@@ -226,9 +197,7 @@ log "=== package update installed, relaunching $EXE"
 setsid "$EXE" >/dev/null 2>&1 < /dev/null &
 ''';
 
-  // Файлы удаляются и кладутся заново, а не пишутся поверх: в запущенный
-  // исполняемый файл Linux писать не даёт (Text file busy), а ядро могло
-  // выйти позже самого приложения.
+  // удаляем и кладём заново: в запущенный исполняемый файл Linux писать не даёт (Text file busy)
   static const _portableScript = r'''
 SRC="$1"; DST="$2"; STAGING="$3"; ARCHIVE="$4"
 log "=== portable update: $SRC -> $DST"
@@ -242,12 +211,7 @@ setsid "$DST/keqdroid" >/dev/null 2>&1 < /dev/null &
 ''';
 }
 
-/// Запускает [body] отдельным процессом, который дождётся выхода приложения:
-/// заменять файлы и поднимать новую копию можно только после него, а новая
-/// копия ещё и упёрлась бы в замок единственного экземпляра.
-///
-/// `setsid` уводит процесс из нашей группы, чтобы `exit(0)` его не прихватил;
-/// где setsid нет (минимальные дистрибутивы), хватает отвязанного `sh`.
+// setsid уводит процесс из нашей группы, чтобы exit(0) его не прихватил
 Future<void> launchAfterExit(String body, List<String> args) async {
   final script = File(p.join(
     Directory.systemTemp.path,

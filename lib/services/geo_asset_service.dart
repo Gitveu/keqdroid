@@ -9,22 +9,15 @@ import '../tunnel/windows_core_paths.dart';
 import '../utils/geo_asset_index.dart';
 import '../utils/geo_rule_sanitizer.dart';
 
-/// Находит geoip.dat/geosite.dat там же, где их читает ядро, и чистит по ним
-/// списки маршрутизации перед генерацией конфига.
 class GeoAssetService {
   GeoAssetService._();
 
   static Future<GeoAssetIndex>? _cached;
 
-  /// Индекс кодов geo-баз. Кэшируется на процесс: файлы едут в сборке и в
-  /// рантайме не меняются, а разбор дёргается на каждое подключение.
   static Future<GeoAssetIndex> index() => _cached ??= _load();
 
-  /// Сбросить кэш индекса. Нужен после подмены базы на диске — иначе
-  /// санитайзер продолжит судить о правилах по старому списку кодов.
   static void invalidate() => _cached = null;
 
-  /// Только для тестов: сбросить кэш.
   static void resetCacheForTests() => invalidate();
 
   static Future<GeoAssetIndex> _load() async {
@@ -43,14 +36,10 @@ class GeoAssetService {
     }
   }
 
-  /// Каталог, из которого ядро читает geo-базы. Нужен ещё и панели
-  /// «Внутренности» — она показывает размеры и даты этих же файлов.
   static Future<String?> geoDir() => _geoDir();
 
   static Future<String?> _geoDir() async {
     if (Platform.isAndroid) {
-      // Нативная часть распаковывает базы в filesDir (XrayGeoAssets) и туда же
-      // указывает ядру XRAY_LOCATION_ASSET; path_provider отдаёт этот каталог.
       return (await getApplicationSupportDirectory()).path;
     }
     if (Platform.isWindows) return WindowsCorePaths.geoAssetDir();
@@ -58,15 +47,10 @@ class GeoAssetService {
     return null;
   }
 
-  /// Настройки для генераторов конфига без geo-правил, которых нет в базах.
-  /// Выброшенное пишем в лог — правило исчезает из маршрутизации молча, и это
-  /// единственный след, по которому можно понять, почему.
   static Future<AppSettings> sanitizeRules(AppSettings settings) async {
     final assets = await index();
     final result = stripUnknownGeoTokens(settings, assets);
     if (result.dropped.isNotEmpty) {
-      // Отдельная подсказка про урезанную базу: «правило исчезло» и «страны в
-      // базе нет, её надо догрузить» — разные диагнозы, а выглядят одинаково.
       final trimmedBase = !assets.hasFullGeoip &&
           result.dropped.any((t) => t.toLowerCase().startsWith('geoip:'));
       AppLogger.instance.warn(
@@ -80,7 +64,5 @@ class GeoAssetService {
     return result.settings;
   }
 
-  /// Полная ли база стран сейчас на диске — по ней экран «Внутренности»
-  /// решает, предлагать ли догрузку.
   static Future<bool> hasFullGeoip() async => (await index()).hasFullGeoip;
 }

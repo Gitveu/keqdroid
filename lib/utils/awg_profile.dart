@@ -1,15 +1,6 @@
 import 'dart:convert';
 
-/// Parsed WireGuard / AmneziaWG `.conf` profile.
-///
-/// Хранится в [ServerItem.config] как сырой текст `.conf`. Версию протокола
-/// (1.0/1.5/2.0/3.1) никто не объявляет — её задаёт набор ключей в
-/// `[Interface]`: обфускация пакетов (Jc/Jmin/Jmax, S1..S4, H1..H4, I1..I5) и,
-/// с AWG 3.1, защита уже поднятого туннеля (`HeaderProtectionKey`,
-/// `ContentPaddingAddition`, таймеры, `RandomTrailers`, `DisableCookies`).
-///
-/// В ядро профиль переводит MihomoConfigGen по ключу, поэтому каждый ключ AWG
-/// должен быть назван в [_uapiNames] — иначе он тихо потеряется по дороге.
+// каждый ключ AWG должен быть в _uapiNames, иначе он тихо потеряется по дороге в ядро
 class AwgProfile {
   final String? remark;
   final AwgInterface iface;
@@ -25,17 +16,7 @@ class AwgProfile {
 
   AwgPeer get peer => peers.first;
 
-  /// Ключи AmneziaWG в `[Interface]` (lowercase) → имя того же параметра в UAPI.
-  ///
-  /// Список закрытый, и это принципиально: незнакомый ключ ядро не пропускает
-  /// мимо, а роняет весь `IpcSet` («invalid UAPI device key»), то есть туннель
-  /// не поднимается вовсе. Всё, чего здесь нет, остаётся обычной строкой
-  /// `.conf` и до UAPI не доезжает — так же, как `Address` или `MTU`.
-  ///
-  /// Первая половина — обфускация пакетов (AWG 1.5/2.0), там имя совпадает с
-  /// ключом в нижнем регистре. Вторая — AWG 3.1, и вот там имена разные:
-  /// в конфиге слова, в UAPI snake_case, поэтому нужна таблица, а не
-  /// `toLowerCase()`.
+  // список закрытый: незнакомый ключ ядро не пропускает, а роняет весь IpcSet (invalid UAPI device key)
   static const _uapiNames = <String, String>{
     'jc': 'jc',
     'jmin': 'jmin',
@@ -53,7 +34,6 @@ class AwgProfile {
     'i3': 'i3',
     'i4': 'i4',
     'i5': 'i5',
-    // AWG 3.1: шифрование заголовков, добор длины и разброс таймеров.
     'headerprotectionkey': 'header_protection_key',
     'contentpaddingaddition': 'content_padding_addition',
     'rekeyaftertime': 'rekey_after_time',
@@ -66,7 +46,6 @@ class AwgProfile {
   };
 
   static bool isAwgConfig(String raw) {
-    // первая значимая строка (без ведущих комментариев/пустых) — [Interface]
     for (final rawLine in const LineSplitter().convert(raw)) {
       final line = rawLine.trim();
       if (line.isEmpty || line.startsWith('#') || line.startsWith(';')) continue;
@@ -92,7 +71,6 @@ class AwgProfile {
       final line = rawLine.trim();
       if (line.isEmpty) continue;
       if (line.startsWith('#') || line.startsWith(';')) {
-        // первый комментарий до секций — человекочитаемое имя
         leadingRemark ??= _extractRemark(line);
         continue;
       }
@@ -132,9 +110,6 @@ class AwgProfile {
       throw ArgumentError('AmneziaWG config: Interface.PrivateKey is required');
     }
 
-    // Значения проверяем здесь, а не при сборке конфига: на импорте ошибка видна в
-    // диалоге и рядом с местом, где конфиг правят, а на подключении — только
-    // как отказ ядра поднять устройство, одинаковый для любой опечатки.
     for (final entry in awgParams.entries) {
       _uapiValue(entry.key, entry.value);
     }
@@ -173,15 +148,10 @@ class AwgProfile {
     );
   }
 
-  /// Хост сервера из `Endpoint` первого пира (для пинга и direct-исключения).
   String get endpointHost => splitEndpoint(peer.endpoint).$1;
 
-  /// Порт сервера из `Endpoint` первого пира.
   int get endpointPort => splitEndpoint(peer.endpoint).$2;
 
-  /// Значение параметра в той форме, какую ждёт UAPI. Бросает [ArgumentError],
-  /// если значение не той формы: ядру такое отдавать нельзя, оно откажется
-  /// поднимать устройство и заодно потеряет все остальные параметры.
   static String _uapiValue(String key, String raw) {
     switch (key) {
       case 'headerprotectionkey':
@@ -207,13 +177,8 @@ class AwgProfile {
     }
   }
 
-  /// `PersistentKeepalive` из `.conf` в значение для UAPI.
-  ///
-  /// С AWG 3.1 это уже не число, а диапазон (`22-30`): ядро выбирает внутри
-  /// него случайное значение, чтобы keepalive не шёл ровно по метроному. Плюс
-  /// `off` из wg-quick, которого в UAPI нет вовсе. Разбор через `int.tryParse`
-  /// давал на обоих `null` — ключ уходил из UAPI целиком, и туннель молча
-  /// оставался без keepalive (за NAT это разрыв через минуту тишины).
+  // с AWG 3.1 это диапазон (22-30), плюс off из wg-quick. int.tryParse на обоих терял keepalive,
+  // и за NAT туннель рвался
   static String? _keepalive(String? raw) {
     final value = raw?.trim();
     if (value == null || value.isEmpty) return null;
@@ -221,7 +186,6 @@ class AwgProfile {
     return _uintRange(value, 'PersistentKeepalive');
   }
 
-  /// Диапазон AWG 3.1: `a` или `a-b`, обе границы в uint32 и `a <= b`.
   static String _uintRange(String raw, String name) {
     final value = raw.trim();
     final m = RegExp(r'^(\d{1,10})(?:-(\d{1,10}))?$').firstMatch(value);
@@ -236,9 +200,7 @@ class AwgProfile {
     );
   }
 
-  /// Флаг AWG 3.1. В UAPI это `strconv.ParseBool`, а в `.conf` пишут ещё и
-  /// `yes`/`on`: такие профили работали и раньше, и отказ на импорте потерял
-  /// бы рабочий сервер. В ядро флаг уезжает уже булевым (MihomoConfigGen).
+  // в .conf пишут ещё yes и on, такие профили работали и раньше
   static String _boolFlag(String raw, String name) {
     switch (raw.trim().toLowerCase()) {
       case 'true':
@@ -259,8 +221,7 @@ class AwgProfile {
     );
   }
 
-  /// 32-байтный ключ base64 → hex. В `.conf` `HeaderProtectionKey` записан так
-  /// же, как остальные ключи WG (его печатает `awg genkey`), а UAPI ждёт hex.
+  // в .conf ключ base64, как у остальных ключей WG, а UAPI ждёт hex
   static String _keyToHex(String raw, String name) {
     final value = raw.trim();
     try {
@@ -277,7 +238,6 @@ class AwgProfile {
 
   static String? _extractRemark(String commentLine) {
     var s = commentLine.replaceFirst(RegExp(r'^[#;]+'), '').trim();
-    // поддержка "# Name = Foo" / "# Name: Foo"
     final m = RegExp(r'^name\s*[:=]\s*(.+)$', caseSensitive: false).firstMatch(s);
     if (m != null) s = m.group(1)!.trim();
     return s.isEmpty ? null : s;
@@ -297,11 +257,8 @@ class AwgProfile {
         .toList();
   }
 
-  /// `host:port` / `[v6]:port` → (host, port). Публичный: пиры для ядра из него
-  /// собирает MihomoConfigGen.
   static (String, int) splitEndpoint(String endpoint) {
     final ep = endpoint.trim();
-    // IPv6 в скобках: [::1]:51820
     if (ep.startsWith('[')) {
       final close = ep.indexOf(']');
       if (close > 0) {
@@ -334,10 +291,6 @@ class AwgInterface {
   final List<String> dns;
   final int? mtu;
 
-  /// Параметры AmneziaWG, ключи в lowercase как в `.conf`: обфускация пакетов
-  /// (jc/jmin/jmax, s1..s4, h1..h4, i1..i5) и AWG 3.1 (headerprotectionkey,
-  /// contentpaddingaddition, таймеры, randomtrailers, disablecookies). Что
-  /// именно допустимо и как зовётся в ядре — [AwgProfile._uapiNames].
   final Map<String, String> awgParams;
 
   const AwgInterface({
@@ -355,8 +308,6 @@ class AwgPeer {
   final String endpoint;
   final List<String> allowedIps;
 
-  /// Секунды в форме, готовой для UAPI: `25`, диапазон `22-30` (AWG 3.1) или
-  /// `0` (в `.conf` он же `off`). Не число: диапазон в int не влезает.
   final String? persistentKeepalive;
 
   const AwgPeer({

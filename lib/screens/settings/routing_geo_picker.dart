@@ -1,7 +1,5 @@
 part of '../settings_tab.dart';
 
-/// Список доступных geo-кодов с поиском. Возвращает через `Navigator.pop`
-/// готовый токен (`geosite:telegram` / `geoip:ru`).
 class _GeoCodePickerSheet extends StatefulWidget {
   const _GeoCodePickerSheet({required this.index});
 
@@ -98,7 +96,6 @@ class _GeoCodePickerSheetState extends State<_GeoCodePickerSheet> {
                 .textTheme
                 .bodyMedium
                 ?.copyWith(color: AppTheme.text(context)),
-                // Рамка, заливка и цвета — из темы поля ввода.
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.search_rounded),
                   hintText: l10n.settingsRoutingGeoPickerSearchHint,

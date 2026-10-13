@@ -7,8 +7,7 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
 
   @override
   Future<List<Subscription>> build() async {
-    // фоновый WorkManager пишет в SharedPreferences из другого изолята,
-    // без reloadFromDisk() мы читаем устаревший кэш и lastUpdatedAt в UI не меняется
+    // WorkManager пишет в SharedPreferences из другого изолята, без reloadFromDisk кэш устаревший
     final listener = AppLifecycleListener(
       onResume: () {
         Future(() async {
@@ -20,8 +19,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     );
     ref.onDispose(listener.dispose);
     _syncTimer ??= Timer.periodic(const Duration(seconds: 60), (_) async {
-      // Окно скрыто (десктоп в трее) — перечитывать storage с диска незачем:
-      // UI не виден, а onResume выше и так делает полный синк при возврате.
       final ls = WidgetsBinding.instance.lifecycleState;
       if (ls == AppLifecycleState.hidden ||
           ls == AppLifecycleState.paused ||
@@ -29,7 +26,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
         return;
       }
       await _syncSubscriptionsFromStorage();
-      // сетевой auto-update гоняем только на onResume + WorkManager, не на каждый тик
     });
     ref.onDispose(() {
       _syncTimer?.cancel();
@@ -37,8 +33,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     });
 
     final subs = await ref.read(storageProvider).getSubscriptions();
-    // Проверяем сразу на старте: подписка могла истечь, пока приложение не
-    // запускали, и тогда никакого обновления, которое бы это заметило, не будет.
     unawaited(notifyExpired(subs));
     return subs;
   }
@@ -64,13 +58,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     await notifyExpired(latest);
   }
 
-  /// Разовое уведомление по каждой истёкшей подписке.
-  ///
-  /// Панель после окончания срока обычно продолжает отдавать те же серверы (или
-  /// просто перестаёт обновлять список) и не сообщает клиенту, что подписка
-  /// кончилась — обновление молча «ничего не меняет». Пользователь узнавал об
-  /// этом только когда серверы отваливались, поэтому говорим сами: один раз на
-  /// каждую дату окончания (продлили → expiresAt поменялся → скажем снова).
   Future<void> notifyExpired(List<Subscription> subs) async {
     final expired = subs
         .where((s) => s.expiresAt != null && s.isExpired)
@@ -105,8 +92,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     await storage.setExpiryNotified(notified);
   }
 
-  /// Локализация вне дерева виджетов: уведомление уходит из провайдера, где
-  /// BuildContext'а нет. Язык — из настроек, иначе системный, иначе английский.
   Future<AppLocalizations> _resolveLocalizations() async {
     final settings = await ref.read(storageProvider).getSettings();
     final candidates = <Locale>[
@@ -124,8 +109,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
 
   Future<void> _runInAppAutoUpdateTick({bool force = false}) async {
     if (ref.read(subscriptionReorderInProgressProvider)) return;
-    // fallback на случай когда WorkManager тормозит из-за Doze/OEM:
-    // пока приложение открыто, сами проверяем и обновляем due-подписки
     final now = DateTime.now();
     if (_autoUpdateRunning) return;
     if (!force &&
@@ -139,8 +122,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
       final due = await service.getDueForUpdate();
       if (due.isEmpty) return;
 
-      // батчами по 3 (как updateAll): залп по всем due-подпискам разом
-      // упирается в сеть и rate-limit панелей
       final results = <UpdateResult>[];
       for (var i = 0; i < due.length; i += 3) {
         final batch = due.skip(i).take(3).toList();
@@ -179,7 +160,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     try {
       await refresh(sub);
     } catch (e) {
-      // первое обновление упало — откатываем add, чтобы не висели пустые подписки
       await ref.read(storageProvider).deleteSubscription(sub.id);
       state = AsyncData(
         (state.value ?? []).where((s) => s.id != sub.id).toList(),
@@ -194,9 +174,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
 
   Future<void> remove(String id) async {
     await ref.read(storageProvider).deleteSubscription(id);
-    // Своя картинка карточки — файл в каталоге приложения, и запись о подписке
-    // его не уносит: без этого удалённые подписки копили бы картинки на диске
-    // до переустановки. Ошибку глушим — подписку удаляем в любом случае.
     unawaited(CardImageService.remove(id).catchError((_) {}));
     state = AsyncData(
       (state.value ?? []).where((s) => s.id != id).toList(),
@@ -259,14 +236,7 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     state = AsyncData(newList);
   }
 
-  /// Ставит расписание автообновления одной записью.
-  ///
-  /// Раньше выбор интервала при выключенном автообновлении делался парой
-  /// вызовов `toggleAutoUpdate` + `updateInterval`. Оба читают список из
-  /// состояния, меняют элемент и пишут обратно; без ожидания между ними второй
-  /// успевал прочитать список до записи первого и затирал включение — интервал
-  /// вставал, а подписка оставалась выключенной. Одна операция такую гонку
-  /// исключает по построению.
+  // одной записью: парой toggleAutoUpdate и updateInterval второй затирал первый
   Future<void> setUpdateSchedule(
     String id, {
     required bool autoUpdate,
@@ -294,11 +264,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     state = AsyncData(newList);
   }
 
-  /// перемещает подписку.
-  ///
-  /// fromReorderableList: true когда зовётся из ReorderableListView — там Flutter
-  /// даёт newIndex ещё до удаления элемента, так что при движении вниз вычитаем 1.
-  /// для кнопок ↑↓ передавай false.
   Future<void> reorder(
       int oldIndex,
       int newIndex, {
@@ -307,7 +272,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     final subs = <Subscription>[...(state.value ?? [])];
     if (oldIndex < 0 || oldIndex >= subs.length) return;
 
-    // ReorderableListView даёт newIndex до удаления — при движении вниз правим индекс
     if (fromReorderableList && newIndex > oldIndex) newIndex -= 1;
 
     final item = subs.removeAt(oldIndex);
@@ -315,19 +279,10 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     subs.insert(clampedNew, item);
     state = AsyncData(subs);
 
-    // сохраняем весь список разом, иначе upsert по одному не двигает порядок в storage
     await ref.read(storageProvider).saveSubscriptions(subs);
   }
 
-  /// Отдаёт выбор сервера подписке [ownerId]; null — никому.
-  ///
-  /// Подключение одно, и выбирать для него сервер может только одна подписка.
-  /// «Авто», включённое в двух сразу, значило бы, что одна из кнопок горит, а
-  /// сервером уже не управляет: сторож слушает только подписку активного
-  /// сервера.
   Future<void> handAutoSelectTo(String? ownerId) async {
-    // Выбор переходит из рук в руки — прежний «свой» сервер автовыбора к нему
-    // больше отношения не имеет: включённое заново «Авто» выбирает с нуля.
     await AutoSelectHomeStore.save(null);
     final subs = state.value ?? [];
     bool owns(Subscription s) => s.id == ownerId && s.autoSelectVisible;
@@ -344,10 +299,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     }
   }
 
-  /// меняет имя/URL подписки, серверы не трогаем
-  /// [resetName] — поле имени очистили: это не «не менять», а «вернуть
-  /// автоматическое». Отдельный флаг нужен потому, что `name: null` уже занято
-  /// смыслом «не трогать» — без него очистка поля молча ничего не делала.
   Future<void> editMeta(
     String id, {
     String? name,
@@ -377,8 +328,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     }
     final current = subs[idx];
     final effectiveUrl = url ?? current.url;
-    // Сброшенное имя сразу занимает название провайдера, если оно известно;
-    // иначе — хост, как при добавлении подписки.
     final autoName = current.providerTitle?.trim().isNotEmpty == true
         ? current.providerTitle!.trim()
         : (Uri.tryParse(effectiveUrl)?.host ?? current.name);
@@ -387,9 +336,6 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     final updated = current.copyWith(
       name: resetName ? autoName : (name ?? current.name),
       url: url ?? current.url,
-      // Имя, введённое руками, перестаёт быть автоматическим: с этого момента
-      // название от провайдера его больше не перетирает. Очистка поля —
-      // обратный переход.
       nameIsAuto: resetName ? true : (name != null ? false : null),
       fetchIdentity: fetchIdentity,
       cardThemeId: cardThemeId,
@@ -397,27 +343,16 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
       hiddenCardElements: hiddenCardElements,
       cardVeil: cardVeil,
       autoSelectVisible: autoSelectVisible,
-      // Спрятанная плашка не должна тихо оставлять автовыбор включённым:
-      // человек убрал переключатель с глаз и вправе считать, что сервер
-      // снова выбирает он.
       autoSelect: autoSelectVisible == false ? false : autoSelect,
     );
     await ref.read(storageProvider).upsertSubscription(updated);
     final newList = [...subs]..[idx] = updated;
     state = AsyncData(newList);
 
-    // Выбор своей картинки копирует файл сразу, а подтверждается только здесь:
-    // до сохранения на диске лежат обе — старая и новая. Сохранились — лишняя
-    // больше не нужна.
     unawaited(
       CardImageService.prune(id, updated.cardThemeId).catchError((_) {}),
     );
 
-    // Сменили ссылку или идентичность → перетягиваем серверы заново: с нового
-    // URL, а под новой идентичностью панель и по старому может отдать другой
-    // набор. Иначе подписка молча оставалась со старыми серверами. Делаем в
-    // фоне (как ручной refresh): на карточке крутится спиннер, ошибка ложится
-    // в subscriptionRefreshErrorsProvider, а не роняет шторку редактирования.
     if (urlChanged || identityChanged) {
       unawaited(refreshTracked(updated).catchError((_) {}));
     }

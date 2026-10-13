@@ -6,8 +6,7 @@
 
 namespace {
 
-// Число потоков процесса. Отдельного вызова для чужого процесса в Win32 нет,
-// а снимок списка процессов раз в десять минут ничего не стоит.
+// своего вызова для чужого процесса в Win32 нет, а снимок раз в десять минут ничего не стоит
 uint32_t ThreadCount(DWORD pid) {
   HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
   if (snapshot == INVALID_HANDLE_VALUE) return 0;

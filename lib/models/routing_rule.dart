@@ -1,6 +1,5 @@
 import 'package:uuid/uuid.dart';
 
-/// proxy / direct / block
 enum RuleAction { proxy, direct, block }
 
 extension RuleActionX on RuleAction {
@@ -18,7 +17,6 @@ extension RuleActionX on RuleAction {
   };
 }
 
-/// откуда матчим: домен, ip, geo, процесс
 enum RuleType { domain, ipCidr, geoip, geosite, processName }
 
 extension RuleTypeX on RuleType {
@@ -40,16 +38,15 @@ extension RuleTypeX on RuleType {
   };
 }
 
-/// «Своё правило» прежних версий. Хранится только до переноса в маршруты
-/// (`routesFromLegacy`); новых правил приложение не заводит.
+// своё правило прежних версий, живёт только до переноса в маршруты (routesFromLegacy)
 class RoutingRule {
   final String id;
   final String name;
   final RuleType type;
-  final List<String> values; // домены / ip / process names
+  final List<String> values;
   final RuleAction action;
   final bool enabled;
-  final int priority; // меньше = раньше применяется
+  final int priority;
 
   const RoutingRule({
     required this.id,

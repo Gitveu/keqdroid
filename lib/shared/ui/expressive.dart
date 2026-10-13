@@ -1,22 +1,9 @@
-/// Токены Material 3 Expressive.
-///
-/// Во Flutter 3.44 выразительного слоя нет вовсе: ни `MotionScheme`, ни shape
-/// morph, ни emphasized-типографики, ни button groups. Поэтому токены заводим
-/// сами — по структуре спеки, чтобы экраны перестали жить на произвольных
-/// числах (`fontSize: 11.5`, `BorderRadius.circular(14)`), из-за которых
-/// приложение и читается как «почти M3».
-///
-/// Пользоваться так: размеры текста брать из `Theme.of(context).textTheme`
-/// (усиленные варианты — через [ExpressiveText]), радиусы — из [ExpressiveShape],
-/// анимации — из [ExpressiveMotion].
+// во Flutter 3.44 слоя M3 Expressive нет, токены свои
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
-/// Шкала форм M3 Expressive. В отличие от M3 здесь есть промежуточные шаги
-/// (`largeIncreased`, `extraLargeIncreased`) и очень крупный `extraExtraLarge` —
-/// именно они дают выразительную разницу между «карточкой» и «героем».
 abstract final class ExpressiveShape {
   static const double none = 0;
   static const double extraSmall = 4;
@@ -28,12 +15,8 @@ abstract final class ExpressiveShape {
   static const double extraLargeIncreased = 32;
   static const double extraExtraLarge = 48;
 
-  /// Полное скругление (пилюля/круг) — у M3E это рабочая форма кнопок и
-  /// индикаторов выбора, а не исключение.
   static const double full = 9999;
 
-  /// Каким радиусом пилюля реально рисуется. Именно это значение лежит в готовых
-  /// `BorderRadius`, поэтому его знает и [pressedCorner].
   static const double _renderedFull = 999;
 
   static BorderRadius radius(double corner) =>
@@ -42,39 +25,25 @@ abstract final class ExpressiveShape {
   static RoundedRectangleBorder border(double corner) =>
       RoundedRectangleBorder(borderRadius: radius(corner));
 
-  /// Рамка текстового поля: свой токен формы (`extraSmall`) и одна линия.
   static OutlineInputBorder inputBorder(Color color, {double width = 1}) =>
       OutlineInputBorder(
         borderRadius: radius(extraSmall),
         borderSide: BorderSide(color: color, width: width),
       );
 
-  /// Форма для нажатого состояния: M3E морфит углы к более «сжатой» форме.
-  /// Морфинг делаем интерполяцией между двумя ShapeBorder — Flutter умеет
-  /// лерпить RoundedRectangleBorder, отдельный shape-morph API не нужен.
   static ShapeBorder pressedMorph(double corner, double t) =>
       ShapeBorder.lerp(border(corner), border(pressedCorner(corner)), t)!;
 
-  /// Углы нажатого состояния — всегда на шаг «квадратнее» исходных.
-  ///
-  /// Пилюлю не морфим: лерп от 9999 к конечному радиусу почти всю анимацию
-  /// остаётся визуально круглым, а потом схлопывается рывком.
   static double pressedCorner(double corner) => switch (corner) {
         full => full,
-        // В готовой геометрии пилюля приезжает не как [full], а как её
-        // отрисовочный радиус из [radius] — и морфить его нельзя ровно по той
-        // же причине. Без этой ветки нажатие на пилюлю сваливало её углы с 999
-        // до 20: почти вся анимация выглядит кругом, а в конце рывок.
+        // пилюля приходит радиусом 999, морфить её нельзя: почти вся анимация круглая, в конце рывок
         >= _renderedFull => corner,
         >= extraLarge => largeIncreased,
         >= large => medium,
         >= small => extraSmall,
-        // 0 и 4 уже предельно «квадратные», морфить некуда
         _ => corner,
       };
 
-  /// Поугловой вариант [pressedCorner] для сегментов группы, у которых
-  /// скругления по углам разные.
   static BorderRadius pressedRadius(BorderRadius base) => BorderRadius.only(
         topLeft: Radius.circular(pressedCorner(base.topLeft.x)),
         topRight: Radius.circular(pressedCorner(base.topRight.x)),
@@ -83,22 +52,9 @@ abstract final class ExpressiveShape {
       );
 }
 
-/// Шкала расстояний.
-///
-/// Заводится по тем же соображениям, что и [ExpressiveShape]: пока её не было,
-/// экраны жили на случайных числах — 10 встречалось 43 раза, рядом 6, 7, 14, 18,
-/// и ни один интервал не повторял другой осмысленно. Глаз читает такой ритм как
-/// «свёрстано», даже когда все цвета и формы взяты из ролей.
-///
-/// Значения лежат на сетке 4dp. Шаги совпадают со шкалой форм не случайно:
-/// отступ между карточками и радиус карточки в M3E — это одна и та же
-/// размерность, и когда они берутся из разных наборов чисел, группа перестаёт
-/// читаться как единое целое.
 abstract final class ExpressiveSpacing {
   static const double none = 0;
 
-  /// Шов внутри группы: щель видна, но сегменты не распадаются на карточки.
-  /// Единственное значение вне сетки 4dp — оно и не расстояние, а линия.
   static const double hairline = 2;
 
   static const double extraSmall = 4;
@@ -111,44 +67,23 @@ abstract final class ExpressiveSpacing {
   static const double extraExtraLarge = 48;
 }
 
-/// Размеры иконок.
-///
-/// Было девять разных: 18, 16, 20, 14, 10, 22, 17, 15, 8. Соседние значения
-/// (15 и 16, 17 и 18) не различимы как решение — они различимы только как
-/// разнобой: одинаковые по смыслу строки получали иконки разного кегля.
 abstract final class ExpressiveIconSize {
-  /// Внутри строки текста, в чипе, рядом с подписью.
   static const double inline = 16;
 
-  /// Плотные списки — основной размер приложения.
   static const double small = 18;
 
-  /// В цветном кружке ([ExpressiveIconBadge]) и в кнопках.
   static const double medium = 20;
 
-  /// Шапки, крупные действия.
   static const double large = 24;
 
-  /// Пустые состояния и «геройские» места.
   static const double extraLarge = 40;
 }
 
-/// Контейнерные роли цвета для «раскрашенных» элементов.
-///
-/// Спека делит их по назначению, а не по красоте: `secondary` — организующая
-/// группировка (выбранный пункт, тональные кнопки, чипы), `tertiary` —
-/// контрастный акцент, который должен выбиваться (теги, категории, «что-то
-/// изменилось»), `primary` — основное действие.
-///
-/// Нужна эта ротация ровно затем, чтобы экран не был стеной нейтрального
-/// серого: у M3E иерархию несёт цвет контейнера, а не оттенок тени.
 enum ExpressiveAccent {
   primary,
   secondary,
   tertiary;
 
-  /// Роли по кругу — для списков однородных пунктов, где смысловой разницы
-  /// между ними нет, а визуальная нужна.
   static ExpressiveAccent cycle(int index) =>
       values[index % values.length];
 
@@ -165,15 +100,6 @@ enum ExpressiveAccent {
       };
 }
 
-/// Пружинная схема движения M3 Expressive.
-///
-/// Групп две, как в спеке. Spatial — всё, что двигается и меняет размер:
-/// недодемпфированы, отсюда лёгкий отскок, в нём и вся выразительность. Effects
-/// — цвет, прозрачность, тень: задемпфированы критически, колебание яркости
-/// выглядело бы дефектом.
-///
-/// Значения подобраны по характеру ролей спеки (fast/default/slow), а не
-/// скопированы из закрытых токенов — при желании крутятся здесь одним местом.
 abstract final class ExpressiveMotion {
   static const spatialFast = SpringDescription(
     mass: 1,
@@ -207,19 +133,14 @@ abstract final class ExpressiveMotion {
     damping: 2 * 28.28,
   );
 
-  /// Длительности для мест, где пружину не применить (AnimatedContainer и
-  /// прочие implicit-анимации). Подобраны под ощущение соответствующих пружин.
   static const durationFast = Duration(milliseconds: 200);
   static const durationDefault = Duration(milliseconds: 350);
   static const durationSlow = Duration(milliseconds: 500);
 
-  /// Кривая-заменитель для implicit-анимаций: у M3 это emphasized easing —
-  /// медленный старт, быстрый разгон, мягкая остановка.
   static const emphasized = Cubic(0.2, 0.0, 0.0, 1.0);
   static const emphasizedDecelerate = Cubic(0.05, 0.7, 0.1, 1.0);
   static const emphasizedAccelerate = Cubic(0.3, 0.0, 0.8, 0.15);
 
-  /// Гонит [controller] к [target] пружиной, а не по кривой.
   static TickerFuture springTo(
     AnimationController controller,
     double target, {
@@ -230,28 +151,12 @@ abstract final class ExpressiveMotion {
       );
 }
 
-/// Типографика M3 Expressive: та же шкала ролей, что у M3, но у каждой роли
-/// есть усиленный вариант — именно вес, а не размер, делает интерфейс
-/// «экспрессивным».
-///
-/// Ключевая деталь спеки, которую легко потерять: выразительность живёт в
-/// дельте между базой и акцентом, а не в поднятой базе. Поэтому база здесь
-/// лёгкая (`TypeScaleTokens`: headline и titleLarge — Regular), а вес набирает
-/// только [emphasized]. Если поднять базу, дельта схлопывается в один шаг и
-/// экран снова читается «одним весом».
 extension ExpressiveText on TextTheme {
-  /// Усиленный вариант роли по `TypeScaleTokens`.
-  ///
-  /// Роль угадывать не нужно: у всей шкалы M3E правило одно — Regular→Medium,
-  /// Medium→Bold. Совпадения по кеглю не мешают (titleSmall и labelLarge оба
-  /// 14sp/Medium и оба усиливаются до Bold).
   TextStyle? emphasized(TextStyle? style) => style?.copyWith(
         fontWeight: switch (style.fontWeight) {
           FontWeight.w400 || null => FontWeight.w500,
           _ => FontWeight.w700,
         },
-        // Три роли меняют и трекинг: displayLarge −0.2→0, оба 16sp →0.15,
-        // bodyMedium 0.2→0.25. Остальные оставляют свой.
         letterSpacing: switch ((style.fontSize, style.fontWeight)) {
           (57, _) => 0,
           (16, _) => 0.15,
@@ -261,10 +166,7 @@ extension ExpressiveText on TextTheme {
       );
 }
 
-/// Шкала M3 Expressive. Размеры, интерлиньяж, трекинг и веса — по
-/// `TypeScaleTokens` из androidx.compose.material3.
 TextTheme buildExpressiveTextTheme(Brightness brightness) {
-  // База: display/headline/titleLarge/body — Regular; title/label — Medium.
   const regular = FontWeight.w400;
   const medium = FontWeight.w500;
 
@@ -287,8 +189,6 @@ TextTheme buildExpressiveTextTheme(Brightness brightness) {
   );
 }
 
-/// Компонентные темы по шкале форм. Собраны отдельно, чтобы `buildAppTheme`
-/// не превращался в простыню, а правки формы жили в одном месте.
 ({
   AppBarThemeData appBar,
   CardThemeData card,
@@ -308,26 +208,10 @@ TextTheme buildExpressiveTextTheme(Brightness brightness) {
   ProgressIndicatorThemeData progressIndicator,
   SliderThemeData slider,
 }) buildExpressiveComponentThemes(ColorScheme scheme) {
-  // Кнопки у M3E — пилюли: это самая заметная форма всего языка.
   final buttonShape = ExpressiveShape.border(ExpressiveShape.full);
   final buttonPadding = const EdgeInsets.symmetric(horizontal: 24, vertical: 16);
 
   return (
-    // Шапка экрана. Раньше её собирал каждый подэкран сам — пятнадцать копий
-    // `backgroundColor: bg, elevation: 0, iconTheme: …`, которые успели
-    // разъехаться. Здесь же лечится и потерянная обратная связь на прокрутке:
-    // с `elevation: 0` и прозрачным `surfaceTint` шапка вообще никак не
-    // отделялась от контента, и текст списка уезжал под заголовок.
-    //
-    // Отделяем сменой уровня поверхности, а не тенью с оттенком: иерархию в
-    // M3E несут `surfaceContainer`-уровни, и `AppBar` умеет резолвить цвет по
-    // состоянию `scrolledUnder` (см. `_resolveColor` в app_bar.dart).
-    //
-    // Это переключение бинарное — цвет меняется рывком, и смягчить его в теме
-    // нечем: `animateColor` живёт только на самом виджете `AppBar`, а у
-    // `SliverAppBar` его нет вовсе. Поэтому экраны берут заливку из
-    // `ExpressiveScrolledUnderBar`, где она привязана к смещению прокрутки.
-    // Здешнее значение остаётся страховкой для шапок, которые туда не обёрнуты.
     appBar: AppBarThemeData(
       backgroundColor: WidgetStateColor.resolveWith(
         (states) => states.contains(WidgetState.scrolledUnder)
@@ -350,8 +234,6 @@ TextTheme buildExpressiveTextTheme(Brightness brightness) {
       ),
     ),
     card: CardThemeData(
-      // Тональную подсветку не используем: иерархию в M3E несут уровни
-      // surfaceContainer и форма, а не тень с оттенком.
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       color: scheme.surfaceContainerHigh,
@@ -397,37 +279,13 @@ TextTheme buildExpressiveTextTheme(Brightness brightness) {
     textButton: TextButtonThemeData(
       style: TextButton.styleFrom(shape: buttonShape),
     ),
-    // Размер FAB — 68, ровно посередине между спековыми ступенями, и это
-    // отступление с причиной.
-    //
-    // Ladder у M3E такой: FAB 56, Medium 80, Large 96. Базовые 56 мелковаты для
-    // главного действия экрана (а маленький FAB на 40 спека и вовсе пометила
-    // «not recommended, use a larger size»), Medium на 80 — уже великоват и
-    // забирает внимание у списка. Между ними в шкале пусто, поэтому середина.
-    //
-    // Пропорции при этом остаются спековыми: глиф 24 из 68 — те же 35%, что у
-    // Medium (28 из 80), а угол 20 из 68 — те же 29%, что у базового FAB
-    // (16 из 56). То есть кнопка чужого размера, но не чужих пропорций.
-    //
-    // Размеры живут здесь, а не на экранах: FAB'ов в приложении три (серверы,
-    // подписки, раздельное туннелирование), и заданные по месту они разъехались
-    // бы на первой же правке — так уже было с глифом на 26 против глифа по
-    // умолчанию на 24.
-    //
-    // Подпись расширенного FAB спека увела с labelLarge на titleMedium — это в
-    // `buildAppTheme`, где уже собрана шкала с выбранным шрифтом.
     fab: FloatingActionButtonThemeData(
-      // У M3E FAB заметно менее круглый, чем у M2 — это узнаваемая деталь.
       shape: ExpressiveShape.border(ExpressiveShape.largeIncreased),
       sizeConstraints: const BoxConstraints.tightFor(width: 68, height: 68),
       extendedSizeConstraints: const BoxConstraints.tightFor(height: 68),
       extendedPadding: const EdgeInsets.symmetric(horizontal: 24),
       extendedIconLabelSpacing: 12,
       iconSize: ExpressiveIconSize.large,
-      // Тень у FAB — не украшение: он единственный элемент, который физически
-      // висит над прокручивающимся содержимым, и уровень 3 с подъёмом до 4 под
-      // курсором прописан в его состояниях. Ноль, стоявший здесь, экраны всё
-      // равно перебивали по месту.
       elevation: 3,
       focusElevation: 3,
       hoverElevation: 4,
@@ -437,7 +295,6 @@ TextTheme buildExpressiveTextTheme(Brightness brightness) {
       surfaceTintColor: Colors.transparent,
       backgroundColor: scheme.surfaceContainer,
       elevation: 0,
-      // Индикатор выбранного пункта — пилюля под иконкой (анатомия M3).
       indicatorShape: ExpressiveShape.border(ExpressiveShape.full),
       indicatorColor: scheme.secondaryContainer,
       labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
@@ -446,28 +303,11 @@ TextTheme buildExpressiveTextTheme(Brightness brightness) {
       shape: ExpressiveShape.border(ExpressiveShape.large),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     ),
-    // Поля ввода. Их тут не было вовсе, и каждый экран рисовал своё: где
-    // заливка с полной рамкой и радиусом 12 (это не filled и не outlined, а
-    // помесь), где свои цвета фокуса, где свои отступы. Отсюда и ощущение, что
-    // формы приложения собраны из разных наборов.
-    //
-    // Берём OUTLINED — второй из двух вариантов спеки. Он честнее внутри наших
-    // карточек: filled пришлось бы красить уровнем выше карточки, а на
-    // динамических тёмных темах эти уровни сходятся, и поле пропадало бы.
-    //
-    // Радиус — `extraSmall` (4), как велит токен формы текстового поля. Да, он
-    // заметно острее окружающих карточек: у M3 это осознанно, поле не должно
-    // читаться как ещё одна карточка.
     inputDecoration: InputDecorationThemeData(
       filled: false,
-      // 56dp контейнер по спеке набирается сам из отступов и кегля; здесь
-      // задаём только горизонтальные 16 (12 — когда есть иконки, это Flutter
-      // разруливает сам).
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: ExpressiveShape.inputBorder(scheme.outline),
       enabledBorder: ExpressiveShape.inputBorder(scheme.outline),
-      // Фокус — та же линия вдвое толще и цветом primary: это единственное
-      // состояние, которое обязано быть заметно боковым зрением.
       focusedBorder: ExpressiveShape.inputBorder(scheme.primary, width: 2),
       errorBorder: ExpressiveShape.inputBorder(scheme.error),
       focusedErrorBorder: ExpressiveShape.inputBorder(scheme.error, width: 2),
@@ -481,8 +321,6 @@ TextTheme buildExpressiveTextTheme(Brightness brightness) {
       prefixIconColor: scheme.onSurfaceVariant,
       suffixIconColor: scheme.onSurfaceVariant,
     ),
-    // Переключатель-сегменты: снаружи пилюля, выбранный сегмент —
-    // secondaryContainer, тем же цветом, что выбранное во всём приложении.
     segmentedButton: SegmentedButtonThemeData(
       style: SegmentedButton.styleFrom(
         shape: buttonShape,
@@ -493,25 +331,11 @@ TextTheme buildExpressiveTextTheme(Brightness brightness) {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),
     ),
-    // Полоса прогресса и слайдер: обновлённая спека вместо версии 2023.
-    //
-    // Флаг `year2023` во Flutter по умолчанию `true`, то есть виджеты рисуются
-    // по старой спецификации, пока не сказано обратное. Отсюда и брались
-    // сплошная полоса без зазора и круглая ручка слайдера — тот самый «старый
-    // дизайн», хотя тема везде M3.
-    //
-    // Что меняется: у полосы появляются скруглённые концы, зазор между
-    // пройденной и оставшейся частью и точка-стоп в конце; у слайдера ручка
-    // становится вертикальной палочкой, а трек — с зазором.
-    // Сам флаг помечен deprecated, и это не повод его не ставить: он временный
-    // и исчезнет, когда новый вид станет умолчанием. Пока он есть, «не
-    // использовать устаревшее» означало бы остаться на спеке 2023.
+    // флаг устаревший, но без него виджеты рисуются по спеке 2023
     // ignore: deprecated_member_use
     progressIndicator: const ProgressIndicatorThemeData(year2023: false),
     // ignore: deprecated_member_use
     slider: const SliderThemeData(year2023: false),
-    // Всплывающее меню — отдельная поверхность, а не «текст поверх экрана»:
-    // без своего контейнера пункты не читались как выбор.
     popupMenu: PopupMenuThemeData(
       color: scheme.surfaceContainer,
       surfaceTintColor: Colors.transparent,

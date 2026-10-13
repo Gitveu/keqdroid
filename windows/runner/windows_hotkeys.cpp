@@ -2,7 +2,7 @@
 
 namespace {
 
-// Arbitrary base away from other apps' common low ids; ids stay process-local.
+// подальше от низких id, их берут все
 constexpr int kHotkeyIdBase = 0xBE00;
 
 std::vector<std::string> g_registered_actions;
@@ -33,8 +33,7 @@ std::vector<std::string> KeqdroidApplyHotkeys(
       continue;
     }
     const int id = kHotkeyIdBase + static_cast<int>(g_registered_actions.size());
-    // MOD_NOREPEAT: держим клавишу — срабатывает один раз, а не как автоповтор
-    // (иначе toggle-действия мгновенно включались-выключались).
+    // MOD_NOREPEAT: удержание срабатывает один раз, иначе переключатели мигали вкл-выкл
     if (::RegisterHotKey(hwnd, id, spec.modifiers | MOD_NOREPEAT,
                          spec.virtual_key)) {
       g_registered_actions.push_back(spec.action);

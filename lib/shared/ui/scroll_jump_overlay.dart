@@ -4,37 +4,16 @@ import 'package:flutter/material.dart';
 
 import 'expressive.dart';
 
-/// Кружок «на другой конец списка», всплывающий во время прокрутки.
-///
-/// Длинный список подписки листается десятками свайпов, а прыгнуть на край на
-/// телефоне нечем — боковой навигатор десктопный. Чтобы кнопка не мешалась, она
-/// появляется только от настоящей прокрутки, только когда до цели ещё далеко
-/// ([minRemainingExtent]) и сама прячется через [idleTimeout].
-///
-/// Направление решает положение в списке: до середины — вниз, дальше — наверх.
-/// Кнопка «в конец» дальше первого нажатия бесполезна, а листать обратно
-/// пришлось бы теми же свайпами. Стрелка одна и та же, она разворачивается —
-/// видно, что это одна кнопка, а не другая на том же месте.
-///
-/// Слушатель стоит вокруг всего экрана, а не внутри списка: уведомления
-/// всплывают, и виджет остаётся независимым от того, как список собран.
 class ScrollJumpOverlay extends StatefulWidget {
   final Widget child;
 
-  /// Выключенная обёртка не вешает слушателя и не рисует кнопку. На десктопе
-  /// её роль исполняет боковой навигатор по группам.
   final bool enabled;
 
-  /// Подписи для тултипа и скринридера — по одной на направление.
   final String endLabel;
   final String topLabel;
 
-  /// Отступ кнопки от низа. Считает вызывающий: под ней бывает и панель
-  /// вкладок, и системные врезки.
   final double bottomInset;
 
-  /// Ниже этого расстояния до цели кнопка не нужна: докрутить проще, чем
-  /// целиться.
   final double minRemainingExtent;
 
   final Duration idleTimeout;
@@ -59,7 +38,6 @@ class _ScrollJumpOverlayState extends State<ScrollJumpOverlay> {
   Timer? _hideTimer;
   bool _visible = false;
 
-  /// Куда прыгать: `true` — к началу списка.
   bool _up = false;
 
   @override
@@ -69,8 +47,6 @@ class _ScrollJumpOverlayState extends State<ScrollJumpOverlay> {
   }
 
   bool _onScroll(ScrollNotification notification) {
-    // depth 0 — только сам список: вложенные горизонтальные ленты внутри
-    // карточек не должны поднимать кнопку списка.
     if (notification.depth != 0) return false;
     if (notification is! ScrollUpdateNotification &&
         notification is! ScrollEndNotification) {
@@ -83,13 +59,8 @@ class _ScrollJumpOverlayState extends State<ScrollJumpOverlay> {
     }
 
     final metrics = notification.metrics;
-    // Середина списка и есть переключатель направления: до неё ближе конец,
-    // после — начало.
     final middle = (metrics.minScrollExtent + metrics.maxScrollExtent) / 2;
     final up = metrics.pixels > middle;
-    // Расстояние считается до той цели, к которой кнопка сейчас ведёт: иначе
-    // у самого конца списка (где до конца уже близко) она пропадала бы ровно
-    // там, где стрелка наверх нужнее всего.
     final remaining = up
         ? metrics.pixels - metrics.minScrollExtent
         : metrics.maxScrollExtent - metrics.pixels;
@@ -126,9 +97,7 @@ class _ScrollJumpOverlayState extends State<ScrollJumpOverlay> {
         duration: const Duration(milliseconds: 420),
         curve: ExpressiveMotion.emphasized,
       );
-    } catch (_) {
-      // Список пересобрали прямо во время прыжка — молча, кнопка сама уйдёт.
-    }
+    } catch (_) {}
   }
 
   @override
@@ -145,8 +114,7 @@ class _ScrollJumpOverlayState extends State<ScrollJumpOverlay> {
             left: 0,
             right: 0,
             bottom: widget.bottomInset,
-            // IgnorePointer на невидимой кнопке: иначе она ловила бы тапы по
-            // тайлу под собой всё время, пока её не видно.
+            // невидимая кнопка иначе ловила бы тапы по тайлу под собой
             child: IgnorePointer(
               ignoring: !_visible,
               child: Center(
@@ -191,8 +159,6 @@ class _ScrollJumpButton extends StatelessWidget {
       message: label,
       waitDuration: const Duration(milliseconds: 600),
       child: Material(
-        // Не FAB: тот по рангу равен «добавить сервер» в углу, а это подсказка
-        // на время прокрутки. Отсюда и размер вдвое меньше, и тихая роль цвета.
         color: scheme.secondaryContainer,
         shape: const CircleBorder(),
         elevation: 2,
@@ -207,14 +173,9 @@ class _ScrollJumpButton extends StatelessWidget {
               button: true,
               label: label,
               child: AnimatedRotation(
-                // Разворот, а не подмена иконки: у M3 смена направления —
-                // движение, и одна повернувшаяся стрелка читается как «та же
-                // кнопка теперь ведёт обратно».
                 turns: up ? 0.5 : 0,
                 duration: ExpressiveMotion.durationFast,
                 curve: ExpressiveMotion.emphasized,
-                // Одинарная стрелка: двойная у M3 значит «до самого края через
-                // страницы» и стоит в пагинации, а здесь один прыжок.
                 child: Icon(
                   Icons.arrow_downward_rounded,
                   size: 20,

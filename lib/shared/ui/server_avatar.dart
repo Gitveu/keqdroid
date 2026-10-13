@@ -6,22 +6,12 @@ import '../../models/server_flag.dart';
 import 'app_theme.dart';
 import 'expressive_elements.dart';
 
-/// Чем красить кружок сервера, у которого нет флага.
-///
-/// Не константа: цвет протокола — опознавательный знак для тех, у кого много
-/// серверов, но на чужой палитре синий кружок выпадает из темы, и просили
-/// именно этого — чтобы подстраивался. Выбор живёт в настройках внешнего вида.
 enum ServerIconPalette {
-  /// Цвет протокола: синий vless, зелёный ss и так далее.
   protocol,
 
-  /// Тон акцента текущей темы — один на все протоколы.
   themed,
 }
 
-/// Выбор едет расширением темы, а не параметром виджета: [ServerAvatar] лежит
-/// в shared/ui, провайдеров не знает, и рисуют его в том числе те места, куда
-/// настройку пришлось бы тащить через три слоя (строка списка, узел цепочки).
 class ServerIconPaletteTheme extends ThemeExtension<ServerIconPaletteTheme> {
   const ServerIconPaletteTheme({this.palette = ServerIconPalette.themed});
 
@@ -35,7 +25,6 @@ class ServerIconPaletteTheme extends ThemeExtension<ServerIconPaletteTheme> {
   ServerIconPaletteTheme copyWith({ServerIconPalette? palette}) =>
       ServerIconPaletteTheme(palette: palette ?? this.palette);
 
-  /// Величина дискретная, промежуточных состояний нет — как и у формы иконок.
   @override
   ServerIconPaletteTheme lerp(
     ThemeExtension<ServerIconPaletteTheme>? other,
@@ -46,10 +35,6 @@ class ServerIconPaletteTheme extends ThemeExtension<ServerIconPaletteTheme> {
   }
 }
 
-/// Фон кружка без флага и цвет буквы на нём.
-///
-/// В режиме темы это тональная пара акцента — та же, что у контейнеров по
-/// всему приложению, поэтому кружок садится в палитру при любом пресете.
 ({Color background, Color foreground}) serverIconColors(
   BuildContext context,
   String protocol,
@@ -65,11 +50,6 @@ class ServerIconPaletteTheme extends ThemeExtension<ServerIconPaletteTheme> {
         ),
     };
 
-/// Цвет протокола сервера.
-///
-/// Оттенки свои (протокол — это идентичность сервера, роль схемы её не
-/// выражает), но гармонизированные: на динамической теме сырой `0xFF4A90D9`
-/// выпадал из палитры, потому что не имел к сиду никакого отношения.
 Color serverProtocolColor(BuildContext context, String protocol) =>
     switch (protocol) {
       'vless' => AppTheme.harmonize(context, const Color(0xFF4A90D9)),
@@ -80,43 +60,27 @@ Color serverProtocolColor(BuildContext context, String protocol) =>
       'hysteria' => AppTheme.harmonize(context, const Color(0xFF00897B)),
       'hysteria2' => AppTheme.harmonize(context, const Color(0xFF00695C)),
       'hy2' => AppTheme.harmonize(context, const Color(0xFF004D40)),
-      // Соседний оттенок к hysteria: тоже QUIC, тоже только на mihomo.
       'tuic' => AppTheme.harmonize(context, const Color(0xFF00838F)),
       'anytls' => AppTheme.harmonize(context, const Color(0xFF5E35B1)),
-      // Родня shadowsocks, оттенок оттуда же.
       'ssr' => AppTheme.harmonize(context, const Color(0xFF2E7D32)),
       'mieru' => AppTheme.harmonize(context, const Color(0xFFEF6C00)),
-      // Готовый конфиг ядра: протокол внутри может быть любым, поэтому цвет
-      // отдельный — «это конфиг целиком, со своим роутингом».
       'custom' => AppTheme.harmonize(context, const Color(0xFFF9A825)),
-      // Цепочка: протоколы узлов могут быть разными, поэтому цвет тоже свой.
       'chain' => AppTheme.harmonize(context, const Color(0xFF8E24AA)),
       _ => AppTheme.textLight(context),
     };
 
-/// Разобранные картинки флагов. Без общего кэша `fromSISource` разбирает ассет
-/// заново на каждый билд виджета (кэш пакета по умолчанию нулевого размера), а
-/// в списке серверов один и тот же флаг встречается десятками и переезжает при
-/// каждом скролле.
+// у пакета кэш нулевого размера, без своего fromSISource разбирал ассет на каждый билд
 final _flagArtCache = ScalableImageCache(size: 96);
 
-/// Ключ векторной картинки флага: сам виджет пакета — приватный подкласс, по
-/// типу его в тестах не найти.
 const flagArtKey = Key('serverAvatar_flagArt');
 
-/// Ключ нарисованного нами плоского флага — см. [_flatFlags].
 const flatFlagKey = Key('serverAvatar_flatFlag');
 
-/// Кругляш сервера: флажок, а без него — буква протокола на его цвете.
-///
-/// У цепочки во флажке страна выхода (её видят сайты), а число узлов
-/// приезжает значком в углу — см. [chainHops].
 class ServerAvatar extends StatelessWidget {
   final ServerFlag? flag;
   final String protocol;
   final double size;
 
-  /// Число узлов цепочки. null — обычный сервер, значка нет.
   final int? chainHops;
 
   const ServerAvatar({
@@ -133,8 +97,6 @@ class ServerAvatar extends StatelessWidget {
     final hops = chainHops;
     if (hops == null) return circle;
 
-    // Значок «сколько узлов» сидит на краю кружка: у цепочки флаг показывает
-    // только выход, и без счётчика её не отличить от обычного сервера.
     final badgeSize = size * 0.44;
     final scheme = Theme.of(context).colorScheme;
     return SizedBox(
@@ -175,10 +137,6 @@ class ServerAvatar extends StatelessWidget {
     );
   }
 
-  /// Аватарка подчиняется выбранной форме иконок: в списке серверов это самая
-  /// частая «иконка» приложения, и оставить её кругом, когда всё остальное
-  /// сменило форму, — то же самое, что лаунчер с одним неподчинившимся значком.
-  /// Значок-счётчик узлов в углу остаётся круглым: он не иконка, а бейдж.
   Widget _circle(BuildContext context) => SizedBox(
     width: size,
     height: size,
@@ -188,14 +146,12 @@ class ServerAvatar extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: switch (flag) {
-        // Картинка шире круга, поэтому cover — обрезаем по бокам, а не жмём.
         FlagArt(:final assetPath) => ScalableImageWidget.fromSISource(
           key: flagArtKey,
           si: ScalableImageSource.fromSI(rootBundle, assetPath),
           fit: BoxFit.cover,
           cache: _flagArtCache,
-          // Ассет пропал (пакет переехал) — лучше буква протокола, чем пустой
-          // круг: пакетный виджет в этом случае рисует белый квадрат с «?».
+          // без этого пакет рисует белый квадрат с вопросом
           onError: (_) => _protocolBadge(context),
         ),
         FlagGlyph(:final emoji) => _flagWithoutArt(context, emoji),
@@ -204,8 +160,6 @@ class ServerAvatar extends StatelessWidget {
     ),
   );
 
-  /// Флаг, которого нет в ассетах: известный рисуем сами плоским, остальные —
-  /// системным эмодзи.
   Widget _flagWithoutArt(BuildContext context, String emoji) {
     final flat = _flatFlags[emoji.replaceAll('\u{FE0F}', '')];
     return flat == null
@@ -218,8 +172,6 @@ class ServerAvatar extends StatelessWidget {
     return ColoredBox(
       color: colors.background,
       child: Center(
-        // У цепочки первая буква («C») ничего не сообщает и путается с custom —
-        // рисуем звенья.
         child: protocol == 'chain'
             ? Icon(
                 Icons.link_rounded,
@@ -239,8 +191,6 @@ class ServerAvatar extends StatelessWidget {
   }
 }
 
-/// Рисунок полотнища: горизонтальные полосы (сверху вниз) либо клетка, плюс
-/// необязательная эмблема поверх.
 class _FlatFlagArt {
   final List<Color> stripes;
   final String? emblem;
@@ -249,16 +199,8 @@ class _FlatFlagArt {
   const _FlatFlagArt(this.stripes, {this.emblem, this.chequered = false});
 }
 
-/// Плоские версии флагов, которых нет в `country_flags`.
-///
-/// Системный шрифт рисует эмодзи-флаг развевающимся на ветру — в ряду ровных
-/// прямоугольников из ассетов он выглядит кривым и «не тем элементом». Рисунок
-/// у этих полотнищ известный и простой, поэтому рисуем их сами: те же плоские
-/// прямоугольники во всю ширину кружка, что и у стран.
-///
-/// Ключ — эмодзи без вариационного селектора (U+FE0F): один и тот же флаг
-/// приходит и с ним, и без него. Эмблеме, наоборот, селектор нужен — иначе
-/// шрифт вправе нарисовать её текстовым чёрно-белым знаком.
+// системный эмодзи-флаг развевается и выбивается из ряда плоских, рисуем сами.
+// ключ без U+FE0F, а эмблеме селектор нужен, иначе шрифт нарисует её чёрно-белой
 const _flatFlags = <String, _FlatFlagArt>{
   // 🏳️ белый
   '\u{1F3F3}': _FlatFlagArt([Color(0xFFFAFAFA)]),
@@ -325,8 +267,7 @@ class _FlatFlagPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Полосы и клетки перекрываются на полпикселя: без этого между ними на
-    // дробном devicePixelRatio просвечивает волосяная щель.
+    // полосы перекрываются на полпикселя, иначе на дробном devicePixelRatio видна щель
     const bleed = 0.5;
 
     if (art.chequered) {
@@ -365,21 +306,10 @@ class _FlatFlagPainter extends CustomPainter {
   bool shouldRepaint(_FlatFlagPainter oldDelegate) => oldDelegate.art != art;
 }
 
-/// Флаг, которого нет ни в ассетах, ни в [_flatFlags] (🎌, флаги субъектов
-/// вроде 🏴󠁵󠁳󠁴󠁸󠁿) — рисуем сам эмодзи системным шрифтом. Подложка нужна
-/// прозрачным флагам, иначе на светлой теме от них остаётся один контур.
-///
-/// Эмодзи растянут так, чтобы заполнить кружок, а не сидеть картинкой в его
-/// середине: страновые флаги приходят картинкой и рисуются `BoxFit.cover`, и
-/// эмодзи-флаг рядом с ними иначе выглядит вдвое мельче и «не тем элементом».
-/// Лишнее по краям срезает `ClipOval` снаружи — ровно как у картинок.
 class _GlyphFlag extends StatelessWidget {
   final String emoji;
   final double size;
 
-  /// Во сколько раз кегль больше диаметра. Само полотнище занимает примерно
-  /// 0.7 высоты em-квадрата (остальное — внутренние поля шрифта), поэтому
-  /// «в размер кружка» — это заметно больше самого кружка.
   static const double _fillFactor = 1.45;
 
   const _GlyphFlag({required this.emoji, required this.size});
@@ -387,8 +317,7 @@ class _GlyphFlag extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ColoredBox(
     color: AppTheme.inset(context),
-    // OverflowBox снимает ограничение по размеру: без него Text ужимается до
-    // кружка и заполнения не выходит. Обрезку делает ClipOval у ServerAvatar.
+    // без OverflowBox Text ужмётся до кружка
     child: Center(
       child: OverflowBox(
         maxWidth: double.infinity,

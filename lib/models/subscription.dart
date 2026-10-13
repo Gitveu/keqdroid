@@ -4,18 +4,7 @@ import 'subscription_card_layout.dart';
 import 'subscription_card_theme.dart';
 
 
-/// Чем клиент представляется панели при загрузке одной подписки.
-///
-/// Панели с привязкой по HWID считают устройства по заголовкам запроса
-/// (`x-hwid`, `x-device-os`, `x-device-model`, `x-ver-os`) и по User-Agent.
-/// Здесь эти значения задаются на подписку, а не на приложение: у разных
-/// провайдеров разные требования, и общий на всех HWID означал бы, что ради
-/// одной подписки придётся ломать привязку остальных.
-///
-/// Пустое поле = «как у приложения»: подставится настоящее значение устройства.
 class SubscriptionFetchIdentity {
-  /// Подмена включена. Отдельно от заполненности полей: выключить её, не
-  /// потеряв набранные значения, — обычное дело при отладке привязки.
   final bool enabled;
 
   final String? hwid;
@@ -61,8 +50,6 @@ class SubscriptionFetchIdentity {
         if (osVersion != null) 'osVersion': osVersion,
       };
 
-  /// Значения, которые реально уходят в запрос. Выключенная подмена не даёт
-  /// ничего, даже если поля заполнены.
   String? get activeHwid => enabled ? hwid : null;
   String? get activeUserAgent => enabled ? userAgent : null;
   String? get activeDeviceOs => enabled ? deviceOs : null;
@@ -76,7 +63,6 @@ class SubscriptionFetchIdentity {
       deviceOs != null ||
       osVersion != null;
 
-  /// Подмена включена, но ни одно поле не задано — запрос уйдёт обычным.
   bool get isActive => enabled && hasCustomFields;
 
   @override
@@ -105,66 +91,30 @@ class Subscription {
   final DateTime? expiresAt;
   final bool autoUpdate;
   final int serverCount;
-  final int updateIntervalHours; // свой интервал авто-обновления
-  final String? userAgent; // User-Agent, под которым панель отдала payload
+  final int updateIntervalHours;
+  final String? userAgent;
 
-  /// Имя сервиса, как его называет сама панель (заголовок `profile-title`).
-  ///
-  /// Храним отдельно от [name] даже когда оно же и подставлено: если
-  /// пользовательница дала подписке своё имя, карточка всё равно может
-  /// показать, чей это сервис на самом деле.
   final String? providerTitle;
 
-  /// Объявление провайдера (`announce`) — техработы, смена адреса и подобное.
   final String? announce;
 
-  /// Ссылки на поддержку (`support-url`) и на страницу подписки
-  /// (`profile-web-page-url`).
   final String? supportUrl;
   final String? webPageUrl;
 
-  /// Имя подставлено автоматически, а не введено руками.
-  ///
-  /// Отличать это обязательно: авто-имя можно молча заменить на название от
-  /// провайдера, а введённое пользовательницей — нельзя ни при каких условиях.
   final bool nameIsAuto;
 
-  /// Чем клиент представляется этой панели: HWID, User-Agent, device-заголовки.
   final SubscriptionFetchIdentity fetchIdentity;
 
-  /// Оформление карточки: id из [kSubscriptionCardThemes]. Пусто — обычная
-  /// карточка. Выбирается в редакторе подписки.
   final String cardThemeId;
 
-  /// Показывать ли ту же подложку в шапке группы серверов этой подписки.
-  ///
-  /// По умолчанию да: связь между карточкой и её серверами и есть смысл затеи.
-  /// Но список серверов — рабочий экран, и картинка в каждой шапке кому-то там
-  /// мешает; при этом цвета, выведенные из неё, остаются в любом случае —
-  /// выключается именно картинка, а не оформление группы целиком.
   final bool cardThemeInServers;
 
-  /// Что убрано с карточки. Пусто — карточка показывает всё, что знает.
   final Set<SubscriptionCardElement> hiddenCardElements;
 
-  /// Насколько притушена картинка подложки — и на карточке, и в шапке группы.
   final CardVeil cardVeil;
 
-  /// Показывать ли в шапке списка серверов переключатель «Авто».
-  ///
-  /// Настройка вида карточки, а не поведения: выключенный переключатель просто
-  /// не занимает места у тех, кто сервер выбирает руками. Само [autoSelect]
-  /// при этом не трогается — спрятать плашку и выключить автовыбор это разные
-  /// действия, и совмещать их значит терять чужой выбор за компанию.
   final bool autoSelectVisible;
 
-  /// Выбирает ли сервер в этой подписке приложение, а не человек.
-  ///
-  /// Включённый автовыбор не делает ничего особенного с подключением: сервер
-  /// выбирается тот же и отмечается в списке так же, разница только в том,
-  /// кто его выбрал. Ручной тап по серверу автовыбор гасит — иначе непонятно,
-  /// кто в доме хозяин: человек ткнул в один сервер, а через минуту его увезло
-  /// на другой.
   final bool autoSelect;
 
 
@@ -231,14 +181,10 @@ class Subscription {
     announce: json['announce'] as String?,
     supportUrl: json['supportUrl'] as String?,
     webPageUrl: json['webPageUrl'] as String?,
-    // Миграция подписок, заведённых до появления флага: при создании пустое
-    // имя заполнялось хостом из URL, поэтому совпадение с хостом и означает
-    // «имя автоматическое». Иначе оно введено руками и трогать его нельзя.
+    // старые подписки без флага: имя по умолчанию было хостом из URL
     nameIsAuto:
         json['nameIsAuto'] as bool? ?? (name == Uri.tryParse(url)?.host),
     cardThemeId: json['cardThemeId'] as String? ?? '',
-    // Отсутствует — значит подписку завели до появления флага: показываем,
-    // как показывали бы новой. Выключенное состояние пишется явно.
     cardThemeInServers: json['cardThemeInServers'] as bool? ?? true,
     hiddenCardElements:
         SubscriptionCardElement.setFromJson(json['cardHidden']),
@@ -272,8 +218,6 @@ class Subscription {
     if (webPageUrl != null) 'webPageUrl': webPageUrl,
     'nameIsAuto': nameIsAuto,
     if (cardThemeId.isNotEmpty) 'cardThemeId': cardThemeId,
-    // Только выключенное: значение по умолчанию в каждой записи — лишний шум
-    // в файле, а «нет ключа» и так читается как «включено».
     if (!cardThemeInServers) 'cardThemeInServers': false,
     if (hiddenCardElements.isNotEmpty)
       'cardHidden': [for (final e in hiddenCardElements) e.name],
@@ -335,19 +279,8 @@ class Subscription {
         fetchIdentity: fetchIdentity ?? this.fetchIdentity,
       );
 
-  /// Записывает косметику из заголовков ответа панели.
-  ///
-  /// Отдельно от [copyWith] потому, что здесь важно уметь обнулять: `copyWith`
-  /// трактует null как «не трогать», и снятое провайдером объявление висело бы в
-  /// карточке вечно. Здесь значения ровно такие, какими пришли в последнем
-  /// успешном ответе. [name] заменяется только если стоит автоматическое — имя,
-  /// введённое руками, не перетирается никогда.
-  ///
-  /// Конструктор вызывается вручную, поэтому новое поле модели надо добавить и
-  /// сюда. Забытое поле сборку не ломает: оно берёт значение по умолчанию, и
-  /// настройка молча слетает на каждом обновлении подписки — так уже терялись
-  /// [hiddenCardElements], [cardVeil] и «Авто». Сторожит это тест, сравнивающий
-  /// `toJson()` целиком, — если новое поле задано в нём не по умолчанию.
+  // новое поле модели добавлять и сюда, иначе оно слетает при каждом обновлении подписки
+  // copyWith не годится: для него null значит не трогать, а снятое объявление надо стирать
   Subscription withProfileHeaders({
     required String? title,
     required String? announce,
@@ -385,36 +318,27 @@ class Subscription {
     );
   }
 
-  /// Название сервиса, если оно отличается от того, что стоит в заголовке
-  /// карточки. Пусто, когда показывать нечего или это одно и то же.
   String? get providerSubtitle {
     final title = providerTitle?.trim();
     if (title == null || title.isEmpty || title == name) return null;
     return title;
   }
 
-  // total=0 от провайдера = безлимит
   bool get isUnlimited => totalBytes != null && totalBytes! == 0;
 
   double? get usagePercent {
-    if (isUnlimited) return null;           // безлимит — прогресс-бар не нужен
+    if (isUnlimited) return null;
     if (totalBytes == null || totalBytes! <= 0) return null;
     if (usedBytes == null) return null;
     return (usedBytes! / totalBytes!).clamp(0.0, 1.0);
   }
 
-  /// Потрачено — отдельно от лимита, чтобы карточка могла набрать это крупно.
-  ///
-  /// Склеенная строка `641.7 / ∞ GiB` не даёт сделать главное: показатель,
-  /// ради которого на карточку и смотрят, обязан отличаться размером, а не
-  /// стоять тем же кеглем, что и всё остальное.
   String? get usedDisplay {
     if (usedBytes == null && totalBytes == null) return null;
     const gib = 1024 * 1024 * 1024;
     return '${((usedBytes ?? 0) / gib).toStringAsFixed(1)} GiB';
   }
 
-  /// Лимит рядом с [usedDisplay]: `∞` или, например, `10 GiB`.
   String? get limitDisplay {
     if (usedBytes == null && totalBytes == null) return null;
     if (isUnlimited || totalBytes == null) return '∞';
@@ -423,11 +347,8 @@ class Subscription {
   }
 
   String get usageLabel {
-    // лимит вообще не пришёл — ∞ не рисуем
     if (usedBytes == null && totalBytes == null) return '—';
-    // провайдер считает в гибибайтах (1024³), делим так же, чтобы цифры сошлись
     const gib = 1024 * 1024 * 1024;
-    // total=0 → безлимит, показываем сколько потрачено вместо голого "∞"
     if (isUnlimited) {
       final usedGib = ((usedBytes ?? 0) / gib).toStringAsFixed(1);
       return '$usedGib / ∞ GiB';
@@ -443,15 +364,9 @@ class Subscription {
   bool get isExpired =>
       expiresAt != null && expiresAt!.isBefore(DateTime.now());
 
-  /// Показывать ли эту часть карточки.
-  ///
-  /// Спрашивать надо так, а не `!hiddenCardElements.contains(...)` на
-  /// месте: список того, что можно убрать, закрыт ([SubscriptionCardElement]),
-  /// и предупреждения об ошибках в него не входят — прятать их нельзя.
   bool showsCard(SubscriptionCardElement element) =>
       !hiddenCardElements.contains(element);
 
-  /// Какому готовому набору отвечает текущий состав карточки.
   SubscriptionCardPreset get cardPreset =>
       SubscriptionCardPreset.of(hiddenCardElements);
 }

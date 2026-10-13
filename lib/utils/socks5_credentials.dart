@@ -19,10 +19,6 @@ class Socks5Credentials {
 
   bool get isInitialized => _username.isNotEmpty && _password.isNotEmpty;
 }
-/// Токен для постоянных кред локального прокси (режим «Прокси»).
-///
-/// Отдельно от сессионных, которые генерирует натив: те живут одно
-/// подключение, эти вписывают руками в стороннее приложение.
 String randomProxyToken(int length) {
   const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789';
   final rnd = Random.secure();

@@ -6,11 +6,6 @@ import 'package:keqdroid/shared/ui/accent_edge_card.dart';
 import 'package:keqdroid/shared/ui/app_theme.dart';
 import 'package:keqdroid/shared/ui/expressive.dart';
 
-/// Одна строка экрана «Соединения»: куда идёт трафик, каким инбаундом пришёл,
-/// по какому правилу ушёл и чем это кончилось.
-///
-/// Живёт в вертикальном списке, то есть высота приходит неограниченной —
-/// внутри не должно быть ничего, что растягивается по входящим constraint'ам.
 class ConnectionTile extends StatelessWidget {
   const ConnectionTile({
     super.key,
@@ -22,8 +17,6 @@ class ConnectionTile extends StatelessWidget {
   final ConnectionEntry entry;
   final bool showProcess;
 
-  /// false — источник вообще не знает правил (access-лог ниже уровня Info):
-  /// пустое правило тогда значит «неизвестно», а не «сработал catch-all».
   final bool ruleInfoAvailable;
 
   Color _verdictColor(BuildContext context) => switch (entry.verdict) {
@@ -51,7 +44,6 @@ class ConnectionTile extends StatelessWidget {
     return '${(value / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
-  /// Только имя исполняемого файла: полный путь съедает всю строку.
   static String _processName(String raw) {
     if (raw.isEmpty) return '';
     final normalized = raw.replaceAll('\\', '/');
@@ -64,9 +56,6 @@ class ConnectionTile extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final color = _verdictColor(context);
     final process = _processName(entry.process);
-    // «Правила нет» и «правило неизвестно» — разные вещи, и путать их нельзя:
-    // соединение, отданное встроенному движку, до сих пор показывалось как
-    // «без правила, ушло в прокси», хотя движок мог увести его в direct.
     final rule = entry.decidedByCore
         ? (ruleInfoAvailable
             ? l10n.connectionsRuleViaCoreUnseen
@@ -98,8 +87,6 @@ class ConnectionTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              // Сколько соединений свёрнуто в строку: к одному хосту их разом
-              // бывает десяток, и по строке на каждое экран читать невозможно.
               if (entry.count > 1) ...[
                 _chip(context, '×${entry.count}', AppTheme.accent(context)),
                 const SizedBox(width: 6),

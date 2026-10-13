@@ -27,24 +27,17 @@ String _formatVpnDuration(Duration? d) {
   return '${s}s';
 }
 
-// Скорость и объём трафика под кнопкой подключения (все платформы; данные
-// приходят в VpnState раз в секунду — те же, что видит уведомление на Android).
 class _ConnectionStats extends ConsumerWidget {
   const _ConnectionStats({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Видимость чипов настраивается в Appearance: трафик (скорость + объём),
-    // время подключения и разбивка трафика по каналам.
     final (showTraffic, showTime, showSplit) = ref.watch(
       settingsNotifierProvider.select((async) {
         final s = async.value ?? const AppSettings();
         return (s.showTrafficStats, s.showConnectionTime, s.showTrafficSplit);
       }),
     );
-    // Два вида одного и того же: общие чипы или раздельные. Вместе они не
-    // включаются (см. `AppSettings.withTrafficStats`), так что «или» здесь
-    // читается как «трафик показываем хоть каким-нибудь из двух».
     final showAnyTraffic = showTraffic || showSplit;
     if (!showAnyTraffic && !showTime) return const SizedBox.shrink();
 
@@ -56,10 +49,6 @@ class _ConnectionStats extends ConsumerWidget {
       }),
     );
 
-    // Разбивка идёт своим каналом, а не через VpnState: её умеет считать одно
-    // ядро из нескольких, и наливать её в общее состояние туннеля значило бы
-    // тащить через все бэкенды поле, которое почти везде пустое.
-    // `null` — ядро разбивку не отдаёт, и чипы остаются обычными.
     final split = showSplit ? ref.watch(trafficSplitProvider).value : null;
 
     final l10n = context.l10n;
@@ -69,10 +58,6 @@ class _ConnectionStats extends ConsumerWidget {
         metrics: [
           if (showAnyTraffic) ...[
             if (split != null) ...[
-              // Ячейка на канал, а не на показатель: приём, отдача и объём
-              // туннеля стоят вместе и вместе же отвечают на вопрос «а сюда
-              // вообще что-нибудь идёт». Разложенные по показателям, они
-              // заставляли искать вторую половину ответа в соседней ячейке.
               _channelMetric(
                 l10n,
                 tag: l10n.statsSplitVpnTag,
@@ -119,7 +104,6 @@ class _ConnectionStats extends ConsumerWidget {
   }
 }
 
-/// Ячейка одного канала: приём, отдача и принятый объём.
 StatMetric _channelMetric(
   AppLocalizations l10n, {
   required String tag,
@@ -145,18 +129,12 @@ StatMetric _channelMetric(
         StatLine(
           icon: Icons.data_usage_rounded,
           label: l10n.statsSplitTotalLabel,
-          // Обе стороны вместе: на прогоне отдачи счётчик одного приёма стоит
-          // на месте, и маршрут выглядит мёртвым при живом трафике.
           value: _formatVpnBytes(traffic.total),
           template: _kBytesTemplate,
         ),
       ],
     );
 
-/// Самые широкие значения, какие может показать каждый чип.
-///
-/// Ширина слота считается по ним, а не по тому, что приехало в эту секунду:
-/// иначе чип дышит на каждом обновлении, а вместе с ним переезжает и весь ряд.
 const _kRateTemplate = '999.9 MB/s';
 const _kBytesTemplate = '999.99 GB';
 const _kDurationTemplate = '59m 59s';

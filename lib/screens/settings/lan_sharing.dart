@@ -11,8 +11,6 @@ class _LanSharingCard extends ConsumerStatefulWidget {
 class _LanSharingCardState extends ConsumerState<_LanSharingCard> {
   String? _localIp;
 
-  /// Включённый межсетевой экран Linux: при нём раздача молча не работает,
-  /// пока порты не открыты (см. LinuxFirewalls).
   LinuxFirewall? _firewall;
   late TextEditingController _socksCtrl;
   late TextEditingController _httpCtrl;
@@ -105,9 +103,6 @@ class _LanSharingCardState extends ConsumerState<_LanSharingCard> {
     );
     final ip = _localIp ?? '...';
 
-    // Включённое состояние показываем цветом иконки-контейнера, а не рамкой:
-    // у M3E `tertiary` — это ровно роль «обратите внимание, тут что-то
-    // изменилось», а группа сама держит форму сегмента.
     final iconAccent =
         isLan ? ExpressiveAccent.tertiary : ExpressiveAccent.secondary;
 
@@ -198,8 +193,6 @@ class _LanSharingCardState extends ConsumerState<_LanSharingCard> {
                           ?.copyWith(color: AppTheme.textLight(context)),
                     ),
                     const SizedBox(height: 2),
-                    // Команда целиком своей строкой: её выделяют и вставляют
-                    // в терминал, а посреди фразы она рвалась переносом.
                     SelectableText(
                       LinuxFirewalls.openCommand(_firewall!, [
                         settings.lanSocksPort,

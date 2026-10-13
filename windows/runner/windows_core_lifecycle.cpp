@@ -43,11 +43,8 @@ bool EnsureCoreJobObject() {
   if (g_core_job != nullptr) {
     return true;
   }
-  // Безымянный job — принципиально. С именем ("KeqDroidCoreJob") новый
-  // экземпляр приложения (перезапуск с правами администратора при переходе
-  // proxy → TUN) открывал ТОТ ЖЕ объект: пока жив его второй хэндл,
-  // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE при выходе старого экземпляра не
-  // срабатывает, и ядро старой сессии остаётся висеть, занимая порты.
+  // job безымянный: с именем перезапуск с правами открывал тот же объект, KILL_ON_JOB_CLOSE не срабатывал,
+  // и ядро старой сессии висело на портах
   g_core_job = ::CreateJobObjectW(nullptr, nullptr);
   if (g_core_job == nullptr) {
     return false;
@@ -91,18 +88,13 @@ bool IsKeqdisCoreProcess(DWORD pid) {
   bool is_core = false;
   if (::QueryFullProcessImageNameW(process, 0, path, &size)) {
     const std::wstring image(path);
-    // Список обязан покрывать ВСЕ ядра, которые приложение запускает: не
-    // названное здесь осиротевшее ядро переживает падение/убийство приложения,
-    // держит локальные порты и wintun-адаптер, и следующая сессия падает
-    // («порт занят», «TUN не поднялся»), а снимать процесс приходится руками.
-    // mihomo.exe сюда завезли вместе с самим ядром — до этого он в списке не
-    // числился и как раз оставался висеть.
+    // здесь все ядра, которые приложение запускает: неназванная сирота держит порты и wintun, и следующая сессия падает.
+    // mihomo.exe долго в списке не было, он и висел
     is_core = EndsWithIgnoreCase(image, L"keqrnel.exe") ||
               EndsWithIgnoreCase(image, L"mihomo.exe") ||
               EndsWithIgnoreCase(image, L"xray.exe") ||
               EndsWithIgnoreCase(image, L"sing-box.exe") ||
-              // wireproxy.exe приложение больше не запускает (AmneziaWG едет
-              // через mihomo), но сирота от прошлой версии переживает обновление.
+              // wireproxy.exe больше не запускаем, но сирота от прошлой версии переживает обновление
               EndsWithIgnoreCase(image, L"wireproxy.exe");
   }
   ::CloseHandle(process);
@@ -167,17 +159,15 @@ int KillOrphanCoresFromPidFile() {
   int killed = 0;
   std::vector<DWORD> survivors;
   for (const DWORD pid : pids) {
-    // Проверка образа обязательна: pid мог быть переиспользован системой под
-    // чужой процесс, и TerminateProcess по нему был бы диверсией.
+    // pid могли отдать чужому процессу, TerminateProcess по нему был бы диверсией
     if (!IsKeqdisCoreProcess(pid)) {
-      continue;  // мёртв или уже не наш — просто забываем
+      continue;  // мёртв или уже не наш, забываем
     }
     if (TerminatePid(pid)) {
       ++killed;
       continue;
     }
-    // Живое наше ядро, но снять не вышло — обычно оно elevated, а мы нет.
-    // Оставляем в файле: следующий запуск с правами администратора доберёт.
+    // живое ядро с правами, а мы без: оставляем в файле, следующий запуск админом доберёт
     survivors.push_back(pid);
   }
 

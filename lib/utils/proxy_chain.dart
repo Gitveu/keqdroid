@@ -1,30 +1,14 @@
 import 'dart:convert';
 
-/// Цепочка прокси: устройство идёт в первый узел, тот во второй, и так до
-/// последнего — его адрес и видят сайты.
-///
-/// Собирается через `sockopt.dialerProxy`: тег аутбаунда, через который этот
-/// аутбаунд дозванивается до своего сервера. Роутинг тут не спрашивают, поэтому
-/// правила «домен → proxy/direct» на внутренние звенья не действуют. Соседний
-/// `outbound.proxySettings.tag` не подходит — он выбрасывает собственный
-/// транспорт узла (REALITY, XHTTP), а оба поля разом ядро не принимает.
-///
-/// В списке серверов цепочка лежит обычным ServerItem с
-/// `keqchain://<base64url(json)>` в конфиге: так ей задаром достаются пинг,
-/// сортировка, трей и хранение. У каждого узла свой id сервера и снимок его
-/// ссылки — узел может уехать вместе с подпиской, и тогда цепочка работает по
-/// снимку (см. [refreshed]).
+// через sockopt.dialerProxy: proxySettings.tag выбрасывает собственный транспорт узла (REALITY, XHTTP),
+// а оба поля разом ядро не принимает
 class ProxyChainConfig {
   static const String scheme = 'keqchain';
   static const String _prefix = '$scheme://';
 
-  /// Разумный потолок. Каждое звено — это ещё один полный proxy-хоп: задержка
-  /// складывается, и после 4–5 узлов цепочка обычно уже неюзабельна.
   static const int maxHops = 8;
 
-  /// Протоколы, которые умеют быть узлом. `awg` исполняет только mihomo, а
-  /// цепочку собирает xray; `custom` — это целый конфиг со своим роутингом,
-  /// `chain` — сама цепочка; вкладывать их некуда.
+  // awg исполняет только mihomo, а цепочку собирает xray
   static const Set<String> hopProtocols = {
     'vless',
     'vmess',
@@ -42,18 +26,14 @@ class ProxyChainConfig {
 
   const ProxyChainConfig({required this.name, required this.hops});
 
-  /// Быстрая отсечка по схеме — её зовут на каждую перерисовку тайла.
   static bool looksLikeChain(String raw) =>
       raw.trimLeft().toLowerCase().startsWith(_prefix);
 
-  /// null — это не цепочка или она битая. Причину для пользователя даёт
-  /// [describeProblem].
   static ProxyChainConfig? tryParse(String raw) {
     if (!looksLikeChain(raw)) return null;
     final Object? decoded;
     try {
-      // normalize добивает padding и приводит алфавит к стандартному —
-      // декодер dart:convert принимает оба, но без выравнивания длины падает.
+      // normalize добивает padding: без выравнивания длины декодер падает
       decoded = jsonDecode(
         utf8.decode(base64.decode(base64.normalize(_payloadOf(raw)))),
       );
@@ -85,8 +65,6 @@ class ProxyChainConfig {
     );
   }
 
-  /// Почему строка не годится цепочкой — для сообщения пользователю.
-  /// null — годится.
   static String? describeProblem(String raw) {
     if (!looksLikeChain(raw)) return 'Not a proxy chain link';
     final parsed = tryParse(raw);
@@ -103,8 +81,6 @@ class ProxyChainConfig {
   static String _payloadOf(String raw) {
     final trimmed = raw.trim();
     final body = trimmed.substring(_prefix.length);
-    // Хвост после '#' — на случай, если ссылку прогнали через обработчик,
-    // дописывающий фрагмент с именем: полезная нагрузка всё равно в base64.
     final hash = body.indexOf('#');
     return (hash >= 0 ? body.substring(0, hash) : body)
         .replaceAll(RegExp(r'\s+'), '');
@@ -123,29 +99,16 @@ class ProxyChainConfig {
           },
       ],
     });
-    // Без '=' на конце: padding в URI выглядит мусором, а декодер его
-    // восстанавливает сам (base64.normalize в tryParse).
     return '$_prefix${base64Url.encode(utf8.encode(json)).replaceAll('=', '')}';
   }
 
   ProxyChainConfig copyWith({String? name, List<ProxyChainHop>? hops}) =>
       ProxyChainConfig(name: name ?? this.name, hops: hops ?? this.hops);
 
-  /// Узел, к которому подключается само устройство.
   ProxyChainHop get entry => hops.first;
 
-  /// Узел, чей адрес видят сайты.
   ProxyChainHop get exit => hops.last;
 
-  /// Подтягивает актуальные ссылки узлов из списка серверов.
-  ///
-  /// Подписка на обновлении переписывает ссылки своих серверов (ротация
-  /// reality-параметров, смена порта), и снимок в цепочке протухает. Узлы,
-  /// которых в списке уже нет, остаются на снимке — цепочка продолжает
-  /// работать по последней известной ссылке.
-  ///
-  /// Возвращает `this`, если менять нечего: вызывающий по этому и решает,
-  /// нужна ли запись в хранилище.
   ProxyChainConfig refreshed(
     Map<String, ({String config, String name})> live,
   ) {
@@ -170,14 +133,10 @@ class ProxyChainConfig {
 }
 
 class ProxyChainHop {
-  /// Сервер из списка, с которого узел скопирован. null — узла в списке нет
-  /// (удалён вместе с подпиской или добавлен из чужой цепочки).
   final String? serverId;
 
-  /// Имя на момент сборки цепочки — им подписан узел, пока сервер не найден.
   final String name;
 
-  /// Снимок ссылки сервера. Именно из него собирается аутбаунд.
   final String config;
 
   const ProxyChainHop({

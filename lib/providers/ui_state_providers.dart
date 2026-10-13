@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Lightweight [Notifier] helpers replacing legacy [StateProvider].
-
 abstract class StringSetNotifier extends Notifier<Set<String>> {
   @override
   Set<String> build() => {};
@@ -65,11 +63,6 @@ class VpnServerSwitchInProgressNotifier extends Notifier<bool> {
   void set(bool value) => state = value;
 }
 
-/// desktop: правда ли окно на экране. На Windows его выставляет нативный трей
-/// (onWindowVisibility) при скрытии/восстановлении окна — Flutter-lifecycle на
-/// SW_HIDE отдаёт лишь `inactive`, поэтому это отдельный авторитетный сигнал,
-/// глушащий волну-анимацию и опрос трафика в фоне. По умолчанию true (и на
-/// платформах без трея так и остаётся).
 class DesktopWindowVisibleNotifier extends Notifier<bool> {
   @override
   bool build() => true;
@@ -128,15 +121,6 @@ final desktopWindowVisibleProvider =
   DesktopWindowVisibleNotifier.new,
 );
 
-/// Видно ли пользователю UI на десктопе. Ложь, когда окно скрыто в трее —
-/// тогда глобальный TickerMode (app.dart) глушит все анимации (волна,
-/// kawaii-оверлей), а vpnEngine — секундный опрос трафика, чтобы не жечь CPU
-/// в фоне.
-///
-/// Раньше сюда входило и «открыт попап меню трея»: меню рисовал Flutter в том
-/// же окне, и на время показа окно считалось видимым. Меню стало нативным — его
-/// рисует Windows, наше окно при этом остаётся скрытым, и глушить его анимации
-/// правильно.
 final desktopUiVisibleProvider = Provider<bool>((ref) {
   return ref.watch(desktopWindowVisibleProvider);
 });

@@ -1,8 +1,3 @@
-/// Which native core backs the active VPN session.
-///
-/// `xray`   — обычный пайплайн (xray читает туннель сам, на десктопе за ним sing-box).
-/// `mihomo` — то же место в схеме, но SOCKS5 поднимает mihomo: TUN по-прежнему
-///            держит VpnService, а читает его само ядро. Им же едет AmneziaWG.
 enum VpnBackend {
   xray,
   mihomo,

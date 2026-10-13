@@ -5,14 +5,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
-/// Плавная прокрутка колёсиком мыши на десктопе.
-///
-/// По умолчанию Flutter на каждый «щелчок» колеса мгновенно перепрыгивает
-/// (`forcePixels`) — получается «лесенка». Здесь прокрутка колёсиком ведётся
-/// одной непрерывной активностью, которая каждый кадр экспоненциально
-/// подтягивает позицию к цели. Цель можно дополнять новыми щелчками на лету —
-/// поэтому и обычное колесо (редкие крупные дельты), и «умные»/тачпадные мыши
-/// (поток мелких дельт каждый кадр) скроллятся плавно, без рывков ползунка.
 const _desktopPlatforms = {
   TargetPlatform.windows,
   TargetPlatform.linux,
@@ -22,7 +14,6 @@ const _desktopPlatforms = {
 bool get _isDesktopPlatform =>
     !kIsWeb && _desktopPlatforms.contains(defaultTargetPlatform);
 
-// Постоянная времени сглаживания (сек). Чем меньше — тем «резче» догоняет цель.
 const double _kSmoothTau = 0.09;
 
 class SmoothScrollController extends ScrollController {
@@ -59,8 +50,6 @@ class _SmoothScrollPosition extends ScrollPositionWithSingleContext {
     super.debugLabel,
   });
 
-  // Активность плавного колеса, пока она живёт. Обнуляется, когда её сменяет
-  // любая другая активность (драг, баллистика, idle) — см. onDisposed.
   _SmoothWheelActivity? _wheel;
 
   @override
@@ -86,11 +75,7 @@ class _SmoothScrollPosition extends ScrollPositionWithSingleContext {
   }
 }
 
-/// Непрерывная активность: каждый кадр применяет долю накопленного «остатка»
-/// прокрутки относительно текущей позиции (экспоненциальное сглаживание, не
-/// зависящее от частоты кадров). Относительный остаток, а не абсолютная цель —
-/// чтобы в ленивых списках с разной высотой элементов уточнение
-/// `maxScrollExtent` на лету не дёргало позицию.
+// относительный остаток, а не абсолютная цель: в ленивых списках maxScrollExtent уточняется на лету
 class _SmoothWheelActivity extends ScrollActivity {
   _SmoothWheelActivity(
     super.delegate, {
@@ -120,18 +105,17 @@ class _SmoothWheelActivity extends ScrollActivity {
 
     if (_remaining.abs() < 0.5) {
       _velocity = 0.0;
-      delegate.goBallistic(0.0); // завершает активность -> idle
+      delegate.goBallistic(0.0);
       return;
     }
 
     double step = _remaining * (1 - math.exp(-dt / _kSmoothTau));
-    if (step.abs() > _remaining.abs()) step = _remaining; // не перешагиваем остаток
+    if (step.abs() > _remaining.abs()) step = _remaining;
     _remaining -= step;
     _velocity = step / dt;
 
     final double overscroll = delegate.setPixels(_position.pixels + step);
     if (overscroll.abs() > 0.5) {
-      // Упёрлись в край списка — гасим остаток, чтобы не «висеть» на границе.
       _remaining = 0.0;
       delegate.goBallistic(0.0);
     }
@@ -154,14 +138,6 @@ class _SmoothWheelActivity extends ScrollActivity {
   }
 }
 
-/// Создаёт скролл-контроллер и отдаёт его в [builder], чтобы навесить на
-/// конкретный скролл-вью. На десктопе это [SmoothScrollController] (плавное
-/// колесо), на остальных платформах — `null` (поведение по умолчанию,
-/// никакого контроллера принудительно не навязываем).
-///
-/// Контроллер навешивается ровно на один список — вложенные скроллы (например
-/// `GridView` внутри `ListView`) не затрагиваются, поэтому конфликтов
-/// «несколько позиций на одном контроллере» не возникает.
 class SmoothScroll extends StatefulWidget {
   final Widget Function(BuildContext context, ScrollController? controller)
       builder;

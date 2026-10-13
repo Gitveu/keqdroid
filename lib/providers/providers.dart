@@ -74,9 +74,6 @@ import 'ui_state_providers.dart';
 
 export 'ui_state_providers.dart';
 
-// Состояние приложения разложено по темам, но остаётся одной библиотекой:
-// импортируют отсюда десятки мест, и приватные хелперы вроде
-// _resolveFirstAddress ниже нужны сразу нескольким частям.
 part 'routes_provider.dart';
 part 'rule_lists_provider.dart';
 part 'servers_provider.dart';
@@ -84,9 +81,6 @@ part 'settings_providers.dart';
 part 'subscriptions_provider.dart';
 part 'vpn_state_provider.dart';
 
-/// Резолвит первый IP-адрес хоста (таймаут 5с), либо null если не вышло.
-/// direct-правило роутинга и URL/speed-пинг хотят идти по IP, а не по домену,
-/// когда DNS сам уходит через прокси.
 Future<String?> _resolveFirstAddress(String host) async {
   try {
     final addresses =
@@ -100,9 +94,6 @@ final storageProvider = Provider<StorageService>((ref) {
   throw UnimplementedError('Override storageProvider before runApp');
 });
 
-/// Режим сортировки серверов внутри группы (ключ = id подписки / '__manual__',
-/// значение = ServerSortMode.name). Персистится, чтобы выбор переживал
-/// перезапуск приложения (в отличие от сворачивания групп).
 class ServerSortModesNotifier extends Notifier<Map<String, String>> {
   @override
   Map<String, String> build() =>
@@ -119,18 +110,11 @@ final serverSortModesProvider =
   ServerSortModesNotifier.new,
 );
 
-/// Порт локального HTTP-инбаунда ядра, если через него сейчас можно выйти в
-/// сеть; null — идти напрямую.
-///
-/// Считается на каждый запрос, а не при сборке сервиса: сервис подписок живёт
-/// всё время работы приложения, а VPN за это время включают и выключают.
 int? _activeLocalHttpProxyPort(Ref ref, StorageService storage) {
   final vpnConnected =
       ref.read(vpnStateProvider).value?.status == VpnStatus.connected;
   if (!vpnConnected) return null;
-  // Порт активной сессии, а не из настроек: когда настроенный был занят,
-  // ядро слушает подменённый (см. [LocalPortPlan]). Сессионные порты ставит
-  // только десктоп — на Android подмены нет, там настройка и есть правда.
+  // порт сессии: если настроенный был занят, ядро слушает другой
   return ActiveLocalPorts().httpPort ??
       storage.cachedSettings?.httpPort ??
       const AppSettings().httpPort;
@@ -138,27 +122,16 @@ int? _activeLocalHttpProxyPort(Ref ref, StorageService storage) {
 
 final subscriptionServiceProvider = Provider<SubscriptionService>((ref) {
   final storage = ref.read(storageProvider);
-  // Без этого обновление подписки уходит мимо туннеля: на Android пакет
-  // приложения исключён из TUN, и заблокированный провайдером домен подписки
-  // остаётся недоступен при включённом VPN — при том что в браузере
-  // открывается.
+  // пакет приложения исключён из TUN, без локального прокси обновление идёт мимо VPN
   return SubscriptionService(
     storage,
     localProxyPort: () => _activeLocalHttpProxyPort(ref, storage),
   );
 });
 
-/// Выход текущего подключения: адрес и страна, которыми его видят сайты.
-/// null — подключения нет или трассировка не ответила.
-///
-/// Спрашивается раз на подключение и на смену сервера: выход меняется только
-/// с ними, а опрос по таймеру тратил бы трафик и батарею впустую.
-///
-/// Неответ повторяется. После повторного входа в приложение на Android новый
-/// изолят видит «подключено» раньше, чем подтянет из сервиса пароль локального
-/// входа, и первый запрос получал 407 — флаг так и не появлялся. Ответ держится,
-/// пока живы подключение и сервер: шапка пересобирается при возврате на
-/// вкладку, и без этого флаг пропадал бы на время каждого нового запроса.
+// спрашиваем раз на подключение и смену сервера: выход меняется только с ними.
+// неответ повторяем: новый изолят на Android видит подключено раньше, чем получит пароль входа, и первый запрос ловил 407.
+// ответ держим до смены подключения: шапка пересобирается на каждом возврате, и флаг пропадал бы
 final exitIpProvider = FutureProvider.autoDispose<ExitIp?>((ref) async {
   final connected = ref.watch(
     vpnStateProvider.select((a) => a.value?.status == VpnStatus.connected),
@@ -182,8 +155,7 @@ final exitIpProvider = FutureProvider.autoDispose<ExitIp?>((ref) async {
   return null;
 });
 
-/// Сам запрос выхода через локальный вход на [int] порту; тесты подменяют его,
-/// чтобы не ходить в сеть.
+// тесты подменяют, чтобы не ходить в сеть
 final exitIpLookupProvider = Provider<Future<ExitIp?> Function(int)>(
   (ref) => (port) => ExitIpService.lookup(proxyPort: port),
 );
@@ -197,14 +169,8 @@ const _exitIpRetryPauses = [
 final vpnEngineProvider = Provider<VpnEngine>((ref) {
   final engine = VpnEngine();
   engine.init();
-  // Окно скрыто/свёрнуто (десктоп неделями живёт в трее) — секундный опрос
-  // счётчиков трафика никому не виден, глушим его, чтобы не жечь CPU в фоне.
-  // Два входа: (1) Flutter-lifecycle (`hidden`/`paused` — реальное сворачивание/
-  // фон), (2) нативный трей на Windows через desktopWindowVisibleProvider — трей
-  // SW_HIDE движок отдаёт лишь как `inactive`, поэтому lifecycle его не ловит.
-  // Опрашиваем, только когда окно и на переднем плане, и реально видимо.
-  // `inactive` на десктопе = окно видимо, но без фокуса — опрос продолжается.
-  // Статус-события (ошибка, disconnect от вотчдога) идут независимо от этого.
+  // трей на Windows прячет окно, а движок отдаёт это как inactive,
+  // поэтому видимость берём ещё и из натива
   var lifecycleForeground = true;
   var uiVisible = true;
   void applyPolling() =>
@@ -227,31 +193,15 @@ final vpnEngineProvider = Provider<VpnEngine>((ref) {
   return engine;
 });
 
-/// Кэш иконок процессов: живёт на всё приложение, а не на экран, — иначе
-/// повторный вход в раздельное туннелирование доставал бы те же иконки заново.
 final appIconCacheProvider = Provider<AppIconCache>(
   (ref) => AppIconCache(ref.read(vpnEngineProvider).getAppIcon),
 );
 
-/// Интервал самопроверки обновлений на живом процессе: десктоп неделями висит
-/// в трее без перезапуска, и без перепроверки новый релиз виден только вручную.
 const _updateRecheckInterval = Duration(hours: 6);
 
-// Подписка только на факт «подключён ли VPN» через select, не на весь VpnState:
-// телеметрия эмитит состояние каждую секунду, и watch целиком ре-ранил бы
-// провайдер на каждый эмит — checkForUpdate выжирал бы анонимный лимит GitHub
-// (60 запросов/час). Дополнительно от спама сетью защищает in-memory троттлинг
-// в UpdateService (не чаще раза в 30 минут).
-/// Системный акцент (Material You) как запасной сид «динамических цветов», когда
-/// плагин dynamic_color молчит на не-Pixel устройствах. `null` — цвета из плагина
-/// доступны, платформа не Android, или Android < 12. Читается один раз при старте.
 final systemAccentColorProvider = StreamProvider<Color?>((ref) async* {
   Color? select(SystemAccentCandidates candidates) {
     final picked = pickSystemAccent(candidates);
-    // В лог, потому что иначе «тема не следует за системой» неотличимо от «сид
-    // пришёл, но прошивка отдаёт константу»: и то и другое выглядит как всегда
-    // одинаковый цвет. Источник важен не меньше значения — по нему видно, на
-    // какой ступени цепочки прошивка сдалась.
     AppLogger.instance.debug(
       picked == null
           ? 'System accent unavailable, using brand seed'
@@ -263,31 +213,20 @@ final systemAccentColorProvider = StreamProvider<Color?>((ref) async* {
   }
 
   yield select(await VpnNativeBridge.getSystemAccentCandidates());
-  // Смена обоев запускает извлечение цвета уже после нашего чтения на старте:
-  // без подписки «поставил обои — приложение прежнего цвета» лечилось бы
-  // только перезапуском.
   await for (final candidates in VpnNativeBridge.systemAccentChanges) {
     yield select(candidates);
   }
 });
 
-/// Коды, которые реально лежат в поставляемых geoip.dat/geosite.dat.
-///
-/// Нужен экрану роутинга: правило с кодом, которого нет в базе, ядро не
-/// игнорирует — оно роняет весь конфиг, поэтому такие токены выкидываются перед
-/// стартом. Раньше молча, теперь их видно в UI. Индекс кэширован в
-/// [GeoAssetService] на процесс, так что провайдер дешёвый.
 final geoAssetIndexProvider = FutureProvider<GeoAssetIndex>((ref) async {
   return GeoAssetService.index();
 });
 
 final updateInfoProvider = FutureProvider<UpdateInfo?>((ref) async {
-  // периодический ре-чек; таймер перевзводится на каждый ре-ран провайдера
   final timer = Timer(_updateRecheckInterval, ref.invalidateSelf);
   ref.onDispose(timer.cancel);
 
-  // после заморозки процесса (Android в фоне) таймеры не тикают — на resume
-  // проверяем давность последнего чека
+  // в замороженном процессе таймеры стоят, поэтому проверяем ещё и на resume
   final lifecycle = AppLifecycleListener(
     onResume: () {
       final last = UpdateService.lastAutoCheckAt;
@@ -306,8 +245,7 @@ final updateInfoProvider = FutureProvider<UpdateInfo?>((ref) async {
   return UpdateService.checkForUpdate(
     force: false,
     viaLocalProxy: vpnConnected,
-    // Порт активной сессии, а не из настроек: когда настроенный был занят или
-    // изъят системой, ядро слушает подменённый (см. [LocalPortPlan]).
+    // порт сессии: если настроенный был занят, ядро слушает другой
     httpPort: ActiveLocalPorts().httpPortOr(settings.httpPort),
   );
 });

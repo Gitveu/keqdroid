@@ -1,14 +1,6 @@
 part of '../settings_tab.dart';
 
-/// Панель «Внутренности»: что за ядра стоят, какой они версии, какие geo-базы,
-/// что происходит в текущей сессии и на чём всё запущено.
-///
-/// Данные собираются на открытие экрана и пересобираются, когда подключение
-/// поднялось или упало, — чтобы PID и порты не остались от прошлой жизни.
-///
-/// Следим именно за статусом, а не за всем состоянием: в нём едет телеметрия
-/// трафика, и она меняется раз в секунду. Пересборка на каждый тик означала бы
-/// перечитывание десятков мегабайт бинарей ядра ежесекундно.
+// только статус: в состоянии раз в секунду едет телеметрия, а пересборка перечитывает бинари ядер
 final _appInternalsProvider = FutureProvider.autoDispose<AppInternals>((
   ref,
 ) async {
@@ -66,16 +58,9 @@ class _AppInternalsScreen extends ConsumerWidget {
     AppInternals data,
   ) {
     return [
-      // Экран называется «О приложении», и начинаться он должен с того, ради
-      // чего его чаще всего и открывают, — версии. Ядра и сессия ниже: это
-      // уже подробности для тех, кто пришёл за ними.
       ExpressiveSectionHeader(l10n.settingsInternalsBuild),
       ExpressiveGroup(children: _buildRows(l10n, data.build)),
 
-      // Режим — выше ядер: он отвечает на более крупный вопрос («забирать ли
-      // весь трафик устройства»), чем то, каким бинарём исполнять сервер.
-      // Только на Android: на десктопе тот же выбор живёт в боковой панели,
-      // рядом с кнопкой подключения, и второй его копии тут не нужно.
       if (Platform.isAndroid) ...[
         ExpressiveSectionHeader(l10n.settingsTunnelModeSection),
         const ExpressiveGroup(
@@ -106,9 +91,6 @@ class _AppInternalsScreen extends ConsumerWidget {
       else ...[
         ExpressiveGroup(
           children: [
-            // «Само» — первым: это умолчание и правильный ответ для почти
-            // всех. Ручной выбор ниже нужен ровно для обычных ссылок, всё
-            // остальное исполняет то ядро, на языке которого написано.
             if (mihomoShipsHere) const _AutoCoreTile(),
             for (final core in data.cores)
               if (_selectableCore(core) case final vpnCore?)
@@ -117,8 +99,6 @@ class _AppInternalsScreen extends ConsumerWidget {
                 _CoreTile(core: core),
           ],
         ),
-        // Подсказка стоит под группой, а не внутри: внутри она была бы
-        // сегментом без заливки и рвала бы containment посередине списка.
         if (mihomoShipsHere)
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
@@ -129,9 +109,6 @@ class _AppInternalsScreen extends ConsumerWidget {
                   ),
             ),
           ),
-        // Выбранное ядро не исполняет активный сервер — говорим об этом прямо
-        // здесь. Без плашки настройка выглядела сломанной: выбран mihomo, а
-        // строкой ниже, в «Текущей сессии», честно стоит libxray.
         if (_coreMismatch(ref) case final skip?) ...[
           const SizedBox(height: 8),
           ExpressiveNotice(
@@ -146,8 +123,6 @@ class _AppInternalsScreen extends ConsumerWidget {
       ExpressiveGroup(
         children: [
           for (final base in data.geoBases) _GeoTile(base: base),
-          // Догрузка полной базы стран — только там, где вшита урезанная.
-          // На десктопе рядом с бинарником лежит полная, качать нечего.
           if (GeoBaseDownloader.isSupported && _geoipIsTrimmed(data.geoBases))
             const _GeoDownloadTile(),
         ],
@@ -156,8 +131,6 @@ class _AppInternalsScreen extends ConsumerWidget {
       ExpressiveSectionHeader(l10n.settingsInternalsSession),
       ExpressiveGroup(children: _sessionRows(context, l10n, data.session)),
 
-      // Журнал — последним: сюда приходят, когда что-то уже сломалось. Там же
-      // и записи системы о закрытиях процесса.
       ExpressiveSectionHeader(l10n.settingsAdvancedGroupDiagnostics),
       ExpressiveGroup(
         children: [
@@ -282,20 +255,11 @@ class _AppInternalsScreen extends ConsumerWidget {
   }
 }
 
-/// Ядро: имя и роль сверху, версия крупно, движки внутри и файл — мелко.
-///
-/// Если ядро выбирается ([selected] не null), плитка становится и переключателем
-/// — с кружком выбора справа от имени. Выбор живёт здесь, а не отдельным
-/// списком сверху, потому что решение принимают именно по этим данным: версия,
-/// дата сборки, есть ли бинарь вообще.
 class _CoreTile extends StatelessWidget {
   final CoreInfo core;
 
-  /// null — ядро не участвует в выборе (десктопные бинари).
   final bool? selected;
 
-  /// Заменяет подпись роли: у двух прокси-движков она одинаковая и в момент
-  /// выбора бесполезна — важнее, чем они друг от друга отличаются.
   final String? subtitle;
 
   final VoidCallback? onTap;
@@ -325,9 +289,6 @@ class _CoreTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              // Иконка у всех ядер одна: они и есть одно и то же — ядро.
-              // Разные значки на соседних строках читались как разные сущности
-              // и «случайные картинки», хотя различает их подпись роли.
               ExpressiveIconBadge(
                 icon: Icons.memory_rounded,
                 accent: core.missing
@@ -367,9 +328,6 @@ class _CoreTile extends StatelessWidget {
               ],
             ],
           ),
-          // Версия — своей строкой во всю ширину, а не прижатой вправо: у
-          // псевдоверсии xray длина такая, что в колонке справа она ломалась
-          // пополам, и три плитки подряд выглядели как три разных вёрстки.
           const SizedBox(height: 10),
           SelectableText(
             version,
@@ -379,8 +337,6 @@ class _CoreTile extends StatelessWidget {
                   : AppTheme.accent(context),
             ),
           ),
-          // Для keqrnel это главное: своей версии у него нет, а вопрос
-          // «какой внутри xray» задают именно про него.
           if (core.engines.isNotEmpty) ...[
             const SizedBox(height: 6),
             for (final engine in core.engines.entries)
@@ -415,8 +371,7 @@ class _CoreTile extends StatelessWidget {
       if (core.modified != null) formatFileDate(core.modified!),
       if (core.goVersion != null) core.goVersion!,
     ];
-    // Размер, дата и версия Go — одна техническая строка: без изоляции в
-    // персидском число отрывалось от «MiB» и уезжало в конец.
+    // без изоляции в фарси число отрывалось от MiB
     return ltrIsolate(parts.join(' · '));
   }
 
@@ -428,8 +383,6 @@ class _CoreTile extends StatelessWidget {
       };
 }
 
-/// Урезана ли база стран — по числу кодов в ней самой, а не по флажку в
-/// настройках: флажок разъедется с диском, коды и есть диск.
 bool _geoipIsTrimmed(List<GeoBaseInfo> bases) {
   for (final b in bases) {
     if (b.name != 'geoip.dat') continue;
@@ -438,11 +391,6 @@ bool _geoipIsTrimmed(List<GeoBaseInfo> bases) {
   return false;
 }
 
-/// Кнопка догрузки полной базы стран.
-///
-/// Стоит прямо под строками гео-баз, потому что решение принимается по ним же:
-/// человек видит «кодов: 4» и рядом объяснение с кнопкой, а не ищет настройку
-/// в другом месте.
 class _GeoDownloadTile extends ConsumerStatefulWidget {
   const _GeoDownloadTile();
 
@@ -468,8 +416,6 @@ class _GeoDownloadTileState extends ConsumerState<_GeoDownloadTile> {
         },
       );
       if (!mounted) return;
-      // Панель читает размеры и число кодов при построении, поэтому после
-      // подмены базы её надо перечитать — иначе останется «кодов: 4».
       ref.invalidate(_appInternalsProvider);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -520,8 +466,6 @@ class _GeoTile extends StatelessWidget {
   }
 }
 
-/// Одна прошлая смерть процесса: когда, от чего и был ли включён VPN. Ради
-/// последнего секция и заведена — строки, где он был включён, выделены.
 class _ProcessExitRow extends StatelessWidget {
   final ProcessExit exit;
   const _ProcessExitRow({required this.exit});
@@ -554,10 +498,6 @@ class _ProcessExitRow extends StatelessWidget {
       };
 }
 
-/// Лучший результат в пасхалке — и единственный её след на экране.
-///
-/// До первой партии строки нет вовсе: пустой «рекорд: 0» выдал бы игру тому,
-/// кто её ещё не нашёл, и находить стало бы нечего.
 class _KeqtrisBestRow extends ConsumerWidget {
   const _KeqtrisBestRow();
 
@@ -578,21 +518,12 @@ class _KeqtrisBestRow extends ConsumerWidget {
   }
 }
 
-/// Строка версии приложения. Она же — вход в пасхалку.
-///
-/// Пять нажатий подряд открывают тетрис. Счётчик сбрасывается, если между
-/// нажатиями прошло больше секунды: иначе случайные тычки по строке за неделю
-/// накопились бы в «сюрприз» на ровном месте, и он перестал бы быть находкой.
-///
-/// Ничем не подсвечена намеренно. Подсказка «нажми ещё три раза» превращает
-/// пасхалку в кнопку.
 class _VersionRow extends ConsumerStatefulWidget {
   const _VersionRow({required this.label, required this.value});
 
   final String label;
   final String value;
 
-  /// Сколько нажатий открывает игру.
   static const int tapsToOpen = 5;
 
   @override
@@ -627,8 +558,6 @@ class _VersionRowState extends ConsumerState<_VersionRow> {
           bestScore: storage.getKeqtrisBest(),
           haptics: haptics,
           labels: _keqtrisLabels(Localizations.localeOf(context).languageCode),
-          // Рекорд пишем на диск только когда он побит: партия, не дотянувшая
-          // до лучшей, хранилищу неинтересна.
           onGameOver: (score) {
             if (score > storage.getKeqtrisBest()) {
               unawaited(storage.setKeqtrisBest(score));
@@ -637,7 +566,6 @@ class _VersionRowState extends ConsumerState<_VersionRow> {
         ),
       ),
     );
-    // Вернулись с игры — пусть строка перерисуется с новым рекордом.
     if (mounted) setState(() {});
   }
 
@@ -651,9 +579,6 @@ class _VersionRowState extends ConsumerState<_VersionRow> {
   }
 }
 
-/// Подписи игры. Заводить ради пасхалки ключи в пяти ARB-файлах несоразмерно,
-/// поэтому две локали живут здесь, а всё остальное получает английский по
-/// умолчанию из самого пакета.
 KeqtrisLabels _keqtrisLabels(String language) => switch (language) {
   'ru' => const KeqtrisLabels(
     score: 'СЧЁТ',
@@ -668,14 +593,6 @@ KeqtrisLabels _keqtrisLabels(String language) => switch (language) {
   _ => const KeqtrisLabels(),
 };
 
-/// Строка «подпись — значение» стопкой: подпись сверху мелким, значение под ней
-/// во всю ширину.
-///
-/// Не в две колонки, потому что значения тут длинные и заранее неизвестной
-/// длины — имя пакета, версия ОС, «SOCKS 2080 · HTTP 2081». В колонке они
-/// жались, переносились по слогам и рвали имя пакета посреди слова. Значение
-/// выделяемое: панель для того и есть, чтобы её содержимое можно было куда-то
-/// отправить.
 class _InternalsRow extends StatelessWidget {
   final String label;
   final String value;
@@ -693,9 +610,6 @@ class _InternalsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return ExpressiveGroupTile(
-      // Ширину задаём явно: колонка тянется по содержимому, и без этого
-      // плитки сжимались каждая под свой текст и вставали лесенкой по центру
-      // группы. Раньше ширину держал Expanded внутри Row.
       child: SizedBox(
         width: double.infinity,
         child: Column(
@@ -734,11 +648,6 @@ class _InternalsRow extends StatelessWidget {
   }
 }
 
-/// Причина, по которой выбранное ядро не возьмёт активный сервер, или null —
-/// возьмёт (либо выбран xray, который умеет всё).
-///
-/// Считается по активному серверу, а не по всему списку: ядро выбирается для
-/// подключения, а подключение идёт к нему одному.
 VpnCoreSkip? _coreMismatch(WidgetRef ref) {
   final server = ref.watch(serversProvider).activeServer;
   if (server == null) return null;
@@ -765,9 +674,6 @@ String _coreMismatchText(AppLocalizations l10n, VpnCoreSkip skip) =>
       VpnCoreSkip.platform => l10n.settingsCoreSkipPlatform,
     };
 
-/// Пароль локального прокси и сами креды. Видна только в режиме «Прокси»: в
-/// режиме VPN в локальный прокси ходит только само приложение, и креды ему
-/// передаются мимо человека.
 class _ProxyAuthTile extends ConsumerWidget {
   const _ProxyAuthTile();
 
@@ -826,9 +732,6 @@ class _ProxyAuthTile extends ConsumerWidget {
               Switch(value: on, onChanged: toggle),
             ],
           ),
-          // Креды показываем только когда они есть: до первого подключения в
-          // этом режиме их ещё не создавали, и пустые строки читались бы как
-          // «пароль пустой».
           if (on && user.isNotEmpty && pass.isNotEmpty) ...[
             const SizedBox(height: 12),
             _InternalsRow(label: l10n.settingsProxyAuthUser, value: user),
@@ -840,13 +743,6 @@ class _ProxyAuthTile extends ConsumerWidget {
   }
 }
 
-/// Выбор режима: полноценный VPN или только локальный прокси.
-///
-/// Два слова взяты не наугад. «VPN» — то, чем режим является для системы:
-/// именно его показывает ключик в статусбаре и диалог разрешения. «Прокси» —
-/// то, чем становится приложение без туннеля: локальный SOCKS/HTTP, к которому
-/// приложения подключаются сами. Слово «TUN» тут не звучит — это
-/// имена наших внутренностей, а не то, что выбирает человек.
 class _TunnelModeTile extends ConsumerWidget {
   final ConnectionMode mode;
 
@@ -859,9 +755,7 @@ class _TunnelModeTile extends ConsumerWidget {
     final settingsValue = ref.watch(
       settingsNotifierProvider.select((a) => a.value),
     );
-    // Пока режим не выбирали руками, показываем VPN — то, что и будет
-    // подключено (см. TunnelSessionBuilder.resolveMode). Иначе экран показывал
-    // бы «Прокси», а подключался VPN.
+    // пока режим не выбирали руками, подключится VPN, его и показываем
     final current = (settingsValue?.connectionModeChosen ?? false)
         ? ConnectionMode.fromStorage(settingsValue?.connectionMode)
         : ConnectionMode.tun;
@@ -927,11 +821,6 @@ class _TunnelModeTile extends ConsumerWidget {
   }
 }
 
-/// «Само»: ядро выбирает формат сервера, а не пользователь.
-///
-/// Отдельной плиткой, а не переключателем над списком: выбор здесь один и тот
-/// же — из чего исполнять сервер, — и все его варианты должны стоять в одном
-/// ряду, иначе «авто» читается как ещё одна настройка поверх выбранного ядра.
 class _AutoCoreTile extends ConsumerWidget {
   const _AutoCoreTile();
 
@@ -996,11 +885,6 @@ class _AutoCoreTile extends ConsumerWidget {
   }
 }
 
-/// Ядра, между которыми пользователь выбирает: имя файла → значение
-/// [AppSettings.vpnCore].
-///
-/// Имена платформенные, но роль одна: слева — то, что исполняет конфиги xray
-/// (на десктопе это keqrnel, внутри которого тот же xray), справа — mihomo.
 const _selectableCores = <String, String>{
   'libxray.so': AppSettings.vpnCoreXray,
   'keqrnel.exe': AppSettings.vpnCoreXray,
@@ -1010,23 +894,12 @@ const _selectableCores = <String, String>{
   'mihomo': AppSettings.vpnCoreMihomo,
 };
 
-/// Значение [AppSettings.vpnCore] для плитки — или null, если это ядро не
-/// выбирают. Отсутствующий бинарь выбрать нельзя: выбирать нечего.
 String? _selectableCore(CoreInfo core) =>
     core.missing ? null : _selectableCores[core.name];
 
-/// Плитка ядра, которая заодно выбирает его.
-///
-/// Смена на живом подключении ничего не переподключает — новое ядро поднимется
-/// на следующем коннекте, о чём и говорит подпись под группой.
-///
-/// Цепочки и готовые xray-конфиги остаются на xray независимо от выбора: они
-/// описаны в терминах xray, и переводить их в mihomo нечего (см.
-/// vpn_state_provider).
 class _SelectableCoreTile extends ConsumerWidget {
   final CoreInfo core;
 
-  /// Значение [AppSettings.vpnCore], которое ставит эта плитка.
   final String value;
 
   const _SelectableCoreTile({required this.core, required this.value});

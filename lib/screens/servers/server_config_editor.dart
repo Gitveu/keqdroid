@@ -23,10 +23,6 @@ import '../../utils/error_messages.dart';
 import '../../utils/raw_share_uri.dart';
 import '../../utils/server_field_rules.dart';
 
-/// GUI-редактор конфигурации сервера: разбирает share-ссылку (vless / vmess /
-/// trojan / ss / hysteria2) на поля по протоколу, даёт править их формой с
-/// дропдаунами и собирает ссылку обратно, сохраняя незнакомые query-параметры
-/// как есть. AWG/SSR и нераспознанные конфиги редактируются как сырой текст.
 class ServerConfigEditorScreen extends ConsumerStatefulWidget {
   final String serverId;
 
@@ -42,16 +38,12 @@ class _ServerConfigEditorScreenState
   ServerItem? _server;
   String _protocol = 'unknown';
 
-  // uri-протоколы (vless/trojan/ss/hysteria*)
   RawShareUri? _uri;
-  // vmess: payload целиком, незнакомые ключи сохраняются
   Map<String, dynamic>? _vmess;
   bool _vmessPortWasInt = false;
   String _vmessSecurityKey = 'scy';
 
-  // ss: исходная форма userInfo (base64 sip002 или plain method:password)
   bool _ssBase64 = false;
-  // hysteria: где лежал auth в исходной ссылке
   bool _hyAuthInQuery = false;
 
   final Map<String, TextEditingController> _text = {};
@@ -59,13 +51,12 @@ class _ServerConfigEditorScreenState
   final Map<String, bool> _toggle = {};
 
   bool _rawMode = false;
-  bool _rawOnly = false; // awg/ssr/unknown — только сырой текст
+  bool _rawOnly = false;
   late final TextEditingController _rawCtrl = TextEditingController();
 
   String? _error;
   bool _saving = false;
-  // снапшот для dirty-проверки: без правок сохранение не пересобирает ссылку
-  // (пересборка могла бы поменять percent-encoding и зря взвести override)
+  // без правок ссылку не пересобираем: пересборка меняет percent-encoding и зря взводит override
   late String _initialSnapshot;
 
   @override
@@ -76,7 +67,6 @@ class _ServerConfigEditorScreenState
     if (server != null) {
       final parseError = _initFromConfig(server.config);
       if (parseError != null) {
-        // непарсибельный конфиг — редактируем как текст
         _rawOnly = true;
         _rawMode = true;
         _rawCtrl.text = server.config;
@@ -97,7 +87,6 @@ class _ServerConfigEditorScreenState
   TextEditingController _ctrl(String id, [String initial = '']) =>
       _text.putIfAbsent(id, () => TextEditingController(text: initial));
 
-  /// Разбирает конфиг в поля формы. null — успех, иначе причина фолбэка в raw.
   String? _initFromConfig(String rawConfig) {
     final config = rawConfig.trim();
     final lower = config.toLowerCase();
@@ -141,9 +130,7 @@ class _ServerConfigEditorScreenState
         break;
       case 'trojan':
         _ctrl('userInfo', uri.userInfo);
-        // У trojan TLS подразумевается самим протоколом, и ссылки сплошь не
-        // пишут `security` — пустое значение означает здесь именно tls, а не
-        // «без защиты» (так же считает и генератор конфига).
+        // у trojan пустой security значит tls, ссылки его обычно не пишут
         final trojanSecurity = uri.takeParam('security');
         _drop['security'] =
             trojanSecurity.isEmpty ? 'tls' : trojanSecurity;
@@ -190,22 +177,17 @@ class _ServerConfigEditorScreenState
     }
 
     if (protocol == 'vless' || protocol == 'trojan') {
-      // общие TLS-поля
       _ctrl('sni', uri.takeParam('sni'));
       _drop['fp'] = uri.takeParam('fp');
       _ctrl('alpn', uri.takeParam('alpn'));
       _ctrl('ech', uri.takeParam('ech'));
       _toggle['insecure'] = _takeInsecure(uri);
-      // Проверки сертификата сверх обычной: закреплённый отпечаток и имя,
-      // по которому его сверять. Оба уезжают в tlsSettings генератором.
       _ctrl('pcs', uri.takeParam('pcs'));
       _ctrl('vcn', uri.takeParam('vcn'));
-      // reality: у trojan он тоже бывает, ветка разбора общая
       _ctrl('pbk', uri.takeParam('pbk'));
       _ctrl('sid', uri.takeParam('sid'));
       _ctrl('spx', uri.takeParam('spx'));
       _ctrl('pqv', uri.takeParam('pqv'));
-      // транспорт
       final type = uri.takeParam('type');
       _drop['type'] = type.isEmpty ? 'tcp' : type;
       _ctrl('path', uri.takeParam('path'));
@@ -293,8 +275,6 @@ class _ServerConfigEditorScreenState
     }
   }
 
-  // ---------- сборка конфига обратно ----------
-
   String _buildConfig() {
     if (_rawMode) return _rawCtrl.text.trim();
     if (_protocol == 'vmess') return _buildVmess();
@@ -343,8 +323,6 @@ class _ServerConfigEditorScreenState
       case 'trojan':
         uri.userInfo = _v('userInfo');
         final trojanSecurity = _drop['security'] ?? 'tls';
-        // `tls` не пишем: он у trojan и так по умолчанию, а лишний параметр в
-        // ссылке — повод пометить сервер как изменённый на ровном месте.
         add('security', trojanSecurity == 'tls' ? '' : trojanSecurity);
         add('sni', _v('sni'));
         add('fp', _drop['fp'] ?? '');
@@ -404,12 +382,6 @@ class _ServerConfigEditorScreenState
     return uri.build(managedParams: managed);
   }
 
-  /// Параметры транспорта в ссылку.
-  ///
-  /// Пишутся только те, что относятся к выбранному транспорту. Остальные
-  /// исчезают сами: при разборе их забрал `takeParam`, а обратно в ссылку
-  /// уезжает только то, что здесь названо. Поэтому смена ws на grpc не тащит
-  /// за собой путь и хост.
   void _addTransportParams(void Function(String, String) add) {
     final type = _drop['type'] ?? 'tcp';
     add('type', type);
@@ -485,8 +457,6 @@ class _ServerConfigEditorScreenState
     return 'vmess://${base64.encode(utf8.encode(json))}';
   }
 
-  // ---------- dirty / save ----------
-
   String _snapshot() {
     if (_rawMode) return 'raw:${_rawCtrl.text}';
     final sb = StringBuffer();
@@ -511,7 +481,6 @@ class _ServerConfigEditorScreenState
     if (server == null) return;
 
     if (_snapshot() == _initialSnapshot) {
-      // ничего не менялось — не пересобираем ссылку (и не взводим override)
       Navigator.of(context).pop();
       return;
     }
@@ -545,7 +514,6 @@ class _ServerConfigEditorScreenState
 
     if (!mounted) return;
 
-    // сервер активен и туннель поднят — применяем правку переподключением
     final isActive =
         ref.read(serversProvider).activeServerId == widget.serverId;
     final status = ref.read(vpnStateProvider).value?.status;
@@ -575,12 +543,9 @@ class _ServerConfigEditorScreenState
 
   void _toggleRawMode() {
     if (_rawOnly) return;
-    // если правок ещё не было, «чистота» переезжает через переключение
-    // режима: baseline пересчитывается, и no-op сохранение остаётся no-op
     final wasClean = _snapshot() == _initialSnapshot;
     setState(() {
       if (_rawMode) {
-        // назад в форму: перечитываем поля из текста
         final err = _reparse(_rawCtrl.text.trim());
         if (err != null) {
           _error = err;
@@ -595,8 +560,6 @@ class _ServerConfigEditorScreenState
         } catch (_) {
           built = _server?.config ?? '';
         }
-        // без правок показываем исходную ссылку как есть, а не пересборку
-        // (пересборка может слегка поменять percent-encoding)
         _rawCtrl.text = wasClean ? (_server?.config ?? built) : built;
         _rawMode = true;
       }
@@ -604,8 +567,6 @@ class _ServerConfigEditorScreenState
     });
   }
 
-  /// Полный ре-парс конфига (после ручной правки текста): чистит состояние
-  /// формы и заполняет заново. null — успех.
   String? _reparse(String config) {
     final l10n = AppLocalizations.of(context)!;
     final validation = ServersNotifier.validateServerConfig(config);
@@ -621,15 +582,12 @@ class _ServerConfigEditorScreenState
     _vmess = null;
     final err = _initFromConfig(config);
     if (err != null) {
-      // текст валиден для добавления, но форма его не понимает (awg и т.п.)
       _rawOnly = true;
       _rawMode = true;
       return l10n.serverEditorRawOnlyNote;
     }
     return null;
   }
-
-  // ---------- UI ----------
 
   @override
   Widget build(BuildContext context) {
@@ -751,12 +709,6 @@ class _ServerConfigEditorScreenState
     );
   }
 
-  /// Что в наборе полей не сойдётся у ядра.
-  ///
-  /// Плашка, а не запрет: правила описывают ядро, а ссылку мог выдать сервер,
-  /// живущий по своим (тот же REALITY поверх ws умеет mihomo). Поэтому здесь
-  /// сказано, что именно не так, а решение остаётся за человеком — молча
-  /// переписывать чужую ссылку хуже, чем показать причину.
   Widget? _issuesNotice(AppLocalizations l10n) {
     if (_rawMode) return null;
     final issues = serverRuleIssues(
@@ -873,10 +825,6 @@ class _ServerConfigEditorScreenState
     );
   }
 
-  /// Приводит JSON к читаемому виду с отступами.
-  ///
-  /// Готовый конфиг почти всегда приходит одной строкой — из подписки или из
-  /// буфера обмена, — и править его в таком виде невозможно.
   void _formatRawJson() {
     final text = _rawCtrl.text.trim();
     try {
@@ -889,15 +837,12 @@ class _ServerConfigEditorScreenState
         );
       });
     } on Object {
-      // Кнопка гаснет на невалидном JSON, но состояние могло смениться между
-      // кадром и нажатием — молча ничего не делаем, а не роняем экран.
+      // кнопка гаснет на битом JSON, но между кадром и нажатием он мог смениться
     }
   }
 
   Widget _rawSection(AppLocalizations l10n) {
     final raw = _rawCtrl.text;
-    // Готовый конфиг Xray — это JSON в сотни строк, и окно на 10 строк без
-    // проверки синтаксиса делало правку формальной возможностью, а не рабочей.
     final isJson = CustomXrayConfig.looksLikeJson(raw);
     final problem = isJson ? CustomXrayConfig.describeProblem(raw) : null;
     final green = AppTheme.green(context);
@@ -909,8 +854,6 @@ class _ServerConfigEditorScreenState
         TextField(
           controller: _rawCtrl,
           textDirection: technicalInputDirection,
-          // JSON редактируется во весь доступный экран, share-ссылка — нет:
-          // ей хватает пары строк.
           maxLines: isJson ? 26 : 10,
           minLines: isJson ? 14 : 4,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -939,8 +882,6 @@ class _ServerConfigEditorScreenState
                 ),
               ),
               const SizedBox(width: 8),
-              // Форматирование доступно, пока JSON вообще разбирается: чинить
-              // отступы полезно и в конфиге, который ещё не полон.
               TextButton.icon(
                 onPressed: _rawJsonParses(raw) ? _formatRawJson : null,
                 icon: const Icon(Icons.format_align_left_rounded, size: 16),
@@ -1010,11 +951,7 @@ class _ServerConfigEditorScreenState
             l10n.serverEditorEncryption,
             hint: 'none',
           ),
-        // Vision предлагается только в рабочем сочетании: на xhttp и ws ядро
-        // отвечает «XTLS only supports TLS and REALITY directly», то есть
-        // сервер просто не подключается. Уже выставленное чужое значение
-        // список сохраняет (см. _dropdown) — чтобы его было видно и можно было
-        // убрать.
+        // vision на xhttp и ws ядро отвергает: XTLS only supports TLS and REALITY directly
         if (_protocol == 'vless')
           _dropdown(
             'flow',
@@ -1035,11 +972,6 @@ class _ServerConfigEditorScreenState
         _securityFields(l10n, reality: true),
       );
 
-  /// Поля защиты — одни и те же у vless, trojan и vmess.
-  ///
-  /// [reality] — предлагать ли REALITY. У vmess его нет в самой ссылке
-  /// (json-формат сложился до него), у остальных он зависит ещё и от
-  /// транспорта: ws, httpupgrade и mkcp его не несут.
   List<Widget> _securityFields(
     AppLocalizations l10n, {
     required bool reality,
@@ -1050,8 +982,6 @@ class _ServerConfigEditorScreenState
         reality ? securityOptionsFor(transport) : const ['none', 'tls'];
     final options = [
       ...allowed,
-      // Чужое значение не теряем: ссылка могла прийти из клиента, который
-      // умеет то, чего здесь нельзя выбрать.
       if (!allowed.contains(security)) security,
     ];
     return [
@@ -1080,20 +1010,11 @@ class _ServerConfigEditorScreenState
     ];
   }
 
-  /// Trojan. Раньше секция была «всегда TLS», хотя ядро берёт у него и
-  /// REALITY (матрица «протокол × защита» в документации транспорта), и такие
-  /// ссылки существуют.
   Widget _tlsSection(AppLocalizations l10n) => _section(
         l10n.serverEditorSectionSecurity,
         _securityFields(l10n, reality: true),
       );
 
-  /// Транспорт и его параметры.
-  ///
-  /// Список одинаков у vless, vmess и trojan: ядро собирает их одним и тем же
-  /// сборщиком (`_buildStreamSettings`). Раньше половина транспортов здесь не
-  /// показывалась — сервер на httpupgrade или mkcp редактировать было нечем,
-  /// хотя приложение их исполняет.
   Widget _transportSection(AppLocalizations l10n) {
     final type = normalizeTransport(_drop['type'] ?? 'tcp');
     return _section(
@@ -1135,8 +1056,7 @@ class _ServerConfigEditorScreenState
           _textField('authority', l10n.serverEditorAuthority),
         ],
         if (type == 'kcp') ...[
-          // Имена заголовков — те, что знает mkcp-legacy; с любым другим ядро
-          // роняет конфиг целиком (config_gen._mkcpHeaders).
+          // других имён заголовков mkcp ядро не знает и роняет конфиг
           _dropdown(
             'headerType',
             l10n.serverEditorHeaderType,
@@ -1207,8 +1127,7 @@ class _ServerConfigEditorScreenState
               'chacha20-poly1305',
             ],
           ),
-          // REALITY в vmess-ссылке передать нечем: у json-формата нет для него
-          // полей, и ядро получило бы вместо него обычный TLS.
+          // в vmess-ссылке REALITY передать нечем
           ..._securityFields(l10n, reality: false),
         ],
       );
@@ -1386,18 +1305,7 @@ class _ServerConfigEditorScreenState
     );
   }
 
-  // ---------- строительные блоки ----------
-
-  /// Секция: заголовок над карточкой, как на остальных экранах настроек.
-  ///
-  /// Раньше это была своя карточка с рамкой и серой подписью внутри — вид из
-  /// доэкспрессивных времён, единственный такой в приложении. Карточка теперь
-  /// общая ([ExpressiveCard]) и заголовок общий ([ExpressiveSectionHeader]),
-  /// поэтому редактор больше не выпадает из остального интерфейса.
-  ///
-  /// [ExpressiveCard] внутри — `Material`, и это важно: `SwitchListTile`
-  /// (allowInsecure) рисует чернила на ближайшем Material-предке, а на крашеном
-  /// `DecoratedBox` Flutter роняет ассерт про невидимые всплески.
+  // внутри нужен Material: SwitchListTile рисует чернила на ближайшем Material-предке
   Widget _section(String title, List<Widget> children) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1414,11 +1322,6 @@ class _ServerConfigEditorScreenState
     );
   }
 
-  /// Поле ввода: заливка вместо рамки.
-  ///
-  /// Обводка на каждом поле поверх обведённой же карточки давала сетку из
-  /// прямоугольников; в M3 заполненное поле отделяется от карточки тоном, а
-  /// рамка остаётся только у поля в фокусе.
   InputDecoration _inputDecoration({String? label, String? hint}) {
     final scheme = Theme.of(context).colorScheme;
     return InputDecoration(
@@ -1450,8 +1353,6 @@ class _ServerConfigEditorScreenState
     );
   }
 
-  /// Выбор из двух-трёх вариантов — связанной группой кнопок, а не списком:
-  /// все варианты видны сразу, и выбор меняется одним касанием.
   Widget _segmented(
     String id,
     String label,
@@ -1478,9 +1379,6 @@ class _ServerConfigEditorScreenState
               for (final (value, text) in options)
                 ExpressiveSegment(value: value, label: text),
             ],
-            // Чужое значение (ссылка из другого клиента) в группу не влезает —
-            // тогда показываем первое, но в модели его не трогаем: сохранение
-            // не должно молча переписывать то, чего мы не поняли.
             selected: options.any((o) => o.$1 == current)
                 ? current
                 : options.first.$1,
@@ -1516,10 +1414,6 @@ class _ServerConfigEditorScreenState
     );
   }
 
-  /// Дропдаун по [id] из `_drop`; если текущее значение не из [options],
-  /// оно добавляется в список (незнакомые значения не теряем).
-  /// [textFallbackId] — «дропдаун поверх текстового поля»: значения читаются
-  /// и пишутся в текстовый контроллер (метод шифрования ss).
   Widget _dropdown(
     String id,
     String label,
@@ -1529,10 +1423,6 @@ class _ServerConfigEditorScreenState
     final isText = textFallbackId != null;
     final current = isText ? _v(textFallbackId) : (_drop[id] ?? '');
 
-    // Строка пункта выпадающего списка. `DropdownButton` текущее значение никак
-    // не помечает — просто прокручивает к нему, поэтому меню читалось как набор
-    // подписей, по которым непонятно, что уже выбрано. Выбранный пункт берёт
-    // secondaryContainer и галочку — как везде в приложении.
     Widget dropdownRow(BuildContext ctx, String text, {required bool selected}) {
       final scheme = Theme.of(ctx).colorScheme;
       final textTheme = Theme.of(ctx).textTheme;
@@ -1588,8 +1478,7 @@ class _ServerConfigEditorScreenState
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: DropdownButtonFormField<String>(
-        // key от значения: после ре-парса из raw-режима FormField пересоздаётся
-        // и подхватывает новое значение (initialValue сам по себе не обновляется)
+        // ключ от значения: initialValue сам не обновляется после ре-парса
         key: ValueKey('dd-$id-$current'),
         initialValue: current,
         isExpanded: true,
@@ -1604,9 +1493,6 @@ class _ServerConfigEditorScreenState
           color: AppTheme.textLight(context),
         ),
         decoration: _inputDecoration(label: label),
-        // Закрытое поле — голый текст, без обёртки подсветки: её вертикальные
-        // отступы не влезали в высоту, отведённую InputDecorator'ом, и строка
-        // обрезалась снизу. Выделение живёт только в раскрытом списке.
         selectedItemBuilder: (context) => [
           for (final o in opts)
             Align(

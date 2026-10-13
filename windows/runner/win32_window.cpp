@@ -237,8 +237,7 @@ Win32Window::MessageHandler(HWND hwnd,
         MoveWindow(child_content_, rect.left, rect.top, rect.right - rect.left,
                    rect.bottom - rect.top, TRUE);
       }
-      // Maximize via titlebar button/double-click has no WM_EXITSIZEMOVE, so
-      // persist the placement here. (Interactive resize is covered below.)
+      // у разворачивания кнопкой нет WM_EXITSIZEMOVE, сохраняем здесь
       if (wparam == SIZE_MAXIMIZED) {
         KeqdroidSaveWindowPlacement(hwnd);
       }
@@ -246,9 +245,7 @@ Win32Window::MessageHandler(HWND hwnd,
     }
 
     case WM_EXITSIZEMOVE:
-      // User finished dragging/resizing. Programmatic SetWindowPos (e.g. the
-      // tray popup reshaping this window) never enters a size-move loop, so
-      // this only ever captures real user-chosen bounds.
+      // SetWindowPos из кода (меню трея) в цикл перетаскивания не входит, сюда попадают только границы, выбранные человеком
       KeqdroidSaveWindowPlacement(hwnd);
       break;
 

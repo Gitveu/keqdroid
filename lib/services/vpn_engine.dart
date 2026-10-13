@@ -1,5 +1,3 @@
-// фасад над TunnelBackend: android (VpnService) и windows (Xray / Xray→sing-box).
-
 import '../tunnel/connection_mode.dart';
 import '../tunnel/tunnel_backend.dart';
 import '../tunnel/tunnel_backend_factory.dart';
@@ -21,7 +19,6 @@ class VpnEngine {
   VpnEngine._internal({TunnelBackend? backend})
       : _backend = backend ?? createTunnelBackend();
 
-  /// For tests / dependency injection via [vpnEngineProvider] override.
   factory VpnEngine.withBackend(TunnelBackend backend) =>
       VpnEngine._internal(backend: backend);
 
@@ -31,7 +28,6 @@ class VpnEngine {
 
   void dispose() => _backend.dispose();
 
-  /// Android: переподписаться на EventChannel после onResume / сбоя стрима.
   void refreshStateStream() {
     final backend = _backend;
     if (backend is AndroidTunnelBackend) {
@@ -39,17 +35,12 @@ class VpnEngine {
     }
   }
 
-  /// Десктоп: пауза/возобновление секундного опроса счётчиков трафика,
-  /// пока окно скрыто (трей/свёрнуто) — телеметрию никто не видит.
   void setTrafficStatsPollingEnabled(bool enabled) =>
       _backend.setTrafficStatsPollingEnabled(enabled);
 
   Future<({String username, String password})> fetchSocksCredentials() =>
       _backend.fetchSocksCredentials();
 
-  /// Android: креды локальных инбаундов уже работающей сессии. На десктопе
-  /// ядра — дочерние процессы приложения и туннель не переживает изолят,
-  /// восстанавливать нечего — null.
   Future<({String username, String password})?>
       fetchActiveSocksCredentials() async {
     final backend = _backend;
@@ -62,7 +53,6 @@ class VpnEngine {
   Future<void> startSession(TunnelSessionRequest request) =>
       _backend.startSession(request);
 
-  /// Android: TUN через VpnService, пакеты читает само ядро.
   Future<void> startVpn(
     String xrayConfig, {
     int socksPort = 2080,
@@ -109,11 +99,9 @@ class VpnEngine {
         keepAlive: keepAlive,
       );
 
-  /// Кумулятивные счётчики сессии для сторожа автовыбора; null на Android.
   Future<({int down, int up})?> sessionTrafficCounters() =>
       _backend.sessionTrafficCounters();
 
-  /// Замер батча одним ядром; `null` — платформа так не умеет.
   Future<List<({
         String id,
         bool success,

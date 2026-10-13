@@ -10,40 +10,25 @@ import 'expressive.dart';
 import 'expressive_group.dart';
 import 'haptics.dart';
 
-/// Строка приложения — сегмент списка M3E. Общая у сплита и у шторки «Кто»
-/// маршрута: одно и то же приложение выглядит одинаково везде.
-///
-/// Была карточка с собственной рамкой: невыбранная в полупрозрачный
-/// `outlineVariant`, выбранная — в акцент толщиной 1.5px поверх заливки на 10%
-/// альфы. Рамка на каждой строке и есть тот самый шум, от которого у M3E
-/// уходят к контейнерам: теперь строку отделяет заливка, а выбор несут морф
-/// формы и `secondaryContainer` — ровно как у строк серверов.
 class AppListTile extends StatelessWidget {
   final AppInfo app;
   final bool checked;
 
-  /// Цвет отметки выбора; null — строка без отметки (выбирать нечего).
   final Color? markColor;
 
-  /// Форма сегмента: считает её список — только он знает, где у строки сосед,
-  /// а где край группы.
+  // форму считает список: только он знает, где у строки сосед, а где край группы
   final BorderRadius radius;
 
-  /// Поля сегмента внутри шага списка; из них набирается зазор между строками.
   final EdgeInsets margin;
 
   final VoidCallback? onTap;
 
-  /// Кэш иконок приходит сверху, один на список: строка с собственным
-  /// `ConsumerStatefulWidget` тащила бы за собой ещё и область зависимостей
-  /// Riverpod, а строк бывают сотни.
+  // кэш иконок сверху: свой ConsumerStatefulWidget на строке тащил бы область зависимостей Riverpod, а строк сотни
   final AppIconCache iconCache;
 
-  /// Шаг списка вместе с зазором — от него живёт `SliverFixedExtentList`.
-  /// 40dp иконки и две строки текста укладываются в 72 с полями по 8.
+  // 40dp иконки и две строки текста с полями по 8. на этом шаге живёт SliverFixedExtentList
   static const double height = 72;
 
-  /// Размер индикатора выбора: XSmall-контейнер иконки M3E.
   static const double _markSize = 24;
 
   const AppListTile({
@@ -88,7 +73,6 @@ class AppListTile extends StatelessWidget {
             splashColor: scheme.primary.withValues(alpha: 0.2),
             highlightColor: scheme.primary.withValues(alpha: 0.08),
             child: Padding(
-              // Отступ leading-слота по спеке списка — 16dp от края контейнера.
               padding: const EdgeInsets.symmetric(
                 horizontal: ExpressiveSpacing.large,
               ),
@@ -116,9 +100,7 @@ class AppListTile extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            // Процесс запущен — точка, а не «●» в плашке:
-                            // символ жил на своей типографике и прыгал по
-                            // базовой линии между шрифтами тем.
+                            // точка, а не символ: символ прыгал по базовой линии между шрифтами тем
                             if (app.isRunning) ...[
                               const SizedBox(width: ExpressiveSpacing.small),
                               Container(
@@ -157,8 +139,6 @@ class AppListTile extends StatelessWidget {
   }
 }
 
-/// Отметка выбора. Цвет решает список: у сплита он смысловой — «в туннель»
-/// и «мимо него» перепутать дорого.
 class AppSelectionMark extends StatelessWidget {
   final bool checked;
   final Color color;
@@ -198,15 +178,11 @@ class AppSelectionMark extends StatelessWidget {
   }
 }
 
-/// Иконка приложения. exe-иконки на Windows подгружаются лениво, вне горячего
-/// пути списка.
 class AppIconView extends StatefulWidget {
   final String? iconBase64;
   final String appName;
   final String? iconPath;
 
-  /// Кэш приходит сверху, а не берётся из провайдера здесь: строка списка не
-  /// должна тащить за собой область зависимостей Riverpod ради одного чтения.
   final AppIconCache cache;
 
   const AppIconView({
@@ -226,9 +202,7 @@ class _AppIconViewState extends State<AppIconView> {
 
   AppIconCache get _cache => widget.cache;
 
-  /// Путь, по которому мы сейчас числимся в очереди кэша: по нему же и
-  /// отписываемся. Хранить отдельно от `widget.iconPath` обязательно — в
-  /// `dispose` виджет может уже нести другой путь.
+  // отписываемся по сохранённому пути: в dispose виджет может нести уже другой
   String? _pendingPath;
 
   @override
@@ -275,13 +249,7 @@ class _AppIconViewState extends State<AppIconView> {
     _cache.release(path);
   }
 
-  /// Иконка через общий кэш.
-  ///
-  /// Раньше каждая строка при появлении дёргала нативную выемку сама, без
-  /// кэша: на быстрой прокрутке поток платформы разбирал десятки таких
-  /// вызовов подряд, и список рвало. Уже добытая иконка теперь ставится
-  /// сразу, без кадра с буквой-заглушкой, а строка, улетевшая с экрана до
-  /// своей очереди, запрос забирает.
+  // через общий кэш: без него на быстрой прокрутке поток платформы разбирал десятки выемок подряд, и список рвало
   void _loadIcon() {
     final path = widget.iconPath;
     if (path == null || path.isEmpty) return;
@@ -296,7 +264,6 @@ class _AppIconViewState extends State<AppIconView> {
     });
   }
 
-  /// Leading-слот строки по спеке списка M3E.
   static const double _size = 40;
 
   @override
@@ -310,12 +277,9 @@ class _AppIconViewState extends State<AppIconView> {
           height: _size,
           fit: BoxFit.cover,
           gaplessPlayback: true,
-          // Иконка приезжает крупнее слота (нативная часть просит 128 и
-          // спускается вниз), поэтому здесь она уменьшается — а на уменьшении
-          // качество фильтра как раз и видно.
+          // иконка приезжает крупнее слота (128), а на уменьшении качество фильтра и видно
           filterQuality: FilterQuality.medium,
-          // Декодируем под фактический размер слота: исходные иконки бывают до
-          // 512×512, полноразмерный декод раздувал image cache в разы.
+          // декод под размер слота: иконки бывают до 512×512, полный декод раздувал image cache
           cacheWidth: (_size * MediaQuery.devicePixelRatioOf(context)).round(),
           errorBuilder: (context, error, stackTrace) => _fallback(context),
         ),
@@ -324,9 +288,7 @@ class _AppIconViewState extends State<AppIconView> {
     return _fallback(context);
   }
 
-  /// Приложение без иконки — буква в контейнере роли, а не акцент на 30%
-  /// альфы: полупрозрачность сводилась с заливкой строки, и на выбранной
-  /// кружок съезжал в другой оттенок.
+  // буква в контейнере роли: полупрозрачный акцент сводился с заливкой строки, и на выбранной съезжал оттенок
   Widget _fallback(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(

@@ -14,8 +14,6 @@ enum BackupSection {
   subscriptions,
   servers,
 
-  /// Настройки приложения — только те, что имеют смысл на другой машине.
-  /// См. [SettingsBackupService.portableSettingKeys].
   appSettings,
 }
 
@@ -44,16 +42,8 @@ class KeqdisBackup {
         : jsonEncode(obj);
   }
 
-  /// Файл бэкапа целиком, байтами.
-  ///
-  /// Всё после первого законченного объекта отбрасывается. Такой хвост
-  /// оставлял экспорт на Android до того, как запись стала обрезать файл:
-  /// новый бэкап поверх более длинного старого ложился в начало целиком, а за
-  /// ним шёл конец прежнего. Сам бэкап в таком файле цел, терять его незачем.
-  ///
-  /// Режем до декодирования UTF-8: граница хвоста приходится на любой байт
-  /// старого файла, в том числе на середину кириллической буквы или флага в
-  /// имени сервера, и такой файл падал бы ещё на декодировании.
+  // после первого объекта бывает хвост старого файла: экспорт на Android раньше не обрезал файл.
+  // режем до декодирования UTF-8, граница хвоста бывает посреди буквы
   static KeqdisBackup parse(List<int> bytes) {
     Object? parsed;
     try {
@@ -64,7 +54,6 @@ class KeqdisBackup {
       try {
         parsed = jsonDecode(utf8.decode(bytes.sublist(0, end)));
       } on FormatException {
-        // Ошибка про настоящее место поломки полезнее, чем про обрезок.
         Error.throwWithStackTrace(error, stackTrace);
       }
       AppLogger.instance.warn(
@@ -82,10 +71,6 @@ class KeqdisBackup {
   static const _openers = {_braceOpen, 0x5B}, _closers = {0x7D, 0x5D};
   static const _whitespace = {0x20, 0x09, 0x0A, 0x0D};
 
-  /// Длина первого объекта верхнего уровня, если файл с него начинается и он
-  /// закрывается. Скобки внутри строк не считаются — в бэкапе ими полны
-  /// правила маршрутизации. Считать по байтам можно: в UTF-8 байты ASCII
-  /// никогда не встречаются внутри многобайтовых символов.
   static int? _leadingObjectEnd(List<int> bytes) {
     var i = 0;
     while (i < bytes.length && _whitespace.contains(bytes[i])) {
@@ -138,38 +123,22 @@ class KeqdisBackup {
 class SettingsBackupService {
   static const int currentVersion = 1;
 
-  /// Ключи [AppSettings.toJson], которые уезжают в бэкап.
-  ///
-  /// Список белый, и это принципиально. Всё остальное описывает конкретную
-  /// машину и её сеть — локальные порты, LAN-раздача вместе с её паролем,
-  /// параметры TUN, режим подключения, десктопные флаги вроде автозапуска, —
-  /// и на другой машине оно в лучшем случае бессмысленно, а в худшем ломает
-  /// подключение молча. Пароль LAN здесь ещё и потому, что бэкап — обычный
-  /// json-файл, которым легко поделиться.
-  ///
-  /// Новое поле настроек сюда само не попадает: чтобы забытое поле не осталось
-  /// незамеченным, тест требует разложить каждый ключ `toJson()` либо сюда,
-  /// либо в свой список машинно-зависимых.
+  // белый список: остальное описывает машину и её сеть. тест требует разложить каждый ключ toJson()
   static const portableSettingKeys = <String>{
-    // маршрутизация
     'directRules',
     'proxyRules',
     'blockedRules',
     'finalOutbound',
-    // ядро и DNS
     'xrayCore',
     'vpnCore',
     'fakeIp',
-    // поведение
     'autoConnectLastServer',
     'shareDeviceHwid',
     'notifySubscriptionUpdates',
-    // пинг
     'pingType',
     'pingTestTarget',
     'pingTestUrlCustom',
     'pingKeepAlive',
-    // внешний вид
     'darkTheme',
     'followSystemTheme',
     'themePresetId',
@@ -188,7 +157,6 @@ class SettingsBackupService {
     'waveLatencyColor',
     'showSpeedInNotification',
     'showUptimeInNotification',
-    // язык
     'appLanguageCode',
   };
 
@@ -208,9 +176,6 @@ class SettingsBackupService {
     if (sections.contains(BackupSection.subscriptions)) {
       final subs = await storage.getSubscriptions();
       data['subscriptions'] = subs.map((s) => s.toJson()).toList();
-      // Тема, вуаль и состав карточки — обычные поля подписки и уезжают строкой
-      // выше. Своя картинка — файл в каталоге приложения, и без её байтов на
-      // новой машине от оформления остаётся только несуществующий id.
       final images = await CardImageService.exportForThemes(
         subs.map((s) => s.cardThemeId),
       );
@@ -271,8 +236,7 @@ class SettingsBackupService {
           .whereType<Map>()
           .map((e) => Subscription.fromJson(Map<String, dynamic>.from(e)))
           .toList();
-      // Картинки раскладываем до подписок: иначе первый кадр списка рисуется по
-      // теме, файла которой ещё нет на диске, и карточка мигает обычной.
+      // картинки раньше подписок, иначе первый кадр нарисует карточку без файла
       final images = backup.data['cardImages'];
       if (images is Map) {
         await CardImageService.importAll({
@@ -297,7 +261,6 @@ class SettingsBackupService {
       await storage.saveServers(servers);
 
       final activeId = raw['activeServerId'] as String?;
-      // Only set active server if it exists after import.
       if (activeId != null && servers.any((s) => s.id == activeId)) {
         await storage.setActiveServerId(activeId);
       } else if (activeId == null) {
@@ -308,15 +271,12 @@ class SettingsBackupService {
     if (sections.contains(BackupSection.appSettings)) {
       final raw = backup.data['appSettings'];
       if (raw is! Map) throw FormatException('Invalid appSettings section');
-      // Поверх нынешних, а не вместо них: в бэкапе лежит только переносимая
-      // часть, и остальное (порты, LAN, TUN, режим подключения) обязано остаться
-      // от этой машины.
+      // поверх нынешних: порты, LAN, TUN и режим остаются от этой машины
       final merged = (await storage.getSettings()).toJson();
       for (final key in portableSettingKeys) {
         if (raw.containsKey(key)) merged[key] = raw[key];
       }
-      // Копии до 26.09.2026 хранят fake-ip под старым именем, когда он был
-      // настройкой одного mihomo.
+      // до 26.09.2026 fake-ip лежал под именем mihomoFakeIp
       if (!raw.containsKey('fakeIp') && raw.containsKey('mihomoFakeIp')) {
         merged['fakeIp'] = raw['mihomoFakeIp'];
       }
@@ -325,10 +285,8 @@ class SettingsBackupService {
     }
   }
 
-  /// Маршруты из копии. Копии до маршрутов несут три списка, и они
-  /// переносятся так же, как при обновлении. Такая копия описывает только
-  /// общие маршруты и заменяет только их: маршрутов отдельных приложений и
-  /// на другие серверы в ней быть не могло, и стирать их импортом незачем.
+  // копии до маршрутов несут три списка и заменяют только общие маршруты:
+  // маршрутов отдельных приложений и на другие серверы там быть не могло, и стирать их незачем
   static Future<void> _applyRoutes(
     StorageService storage,
     Object? rawRoutes,

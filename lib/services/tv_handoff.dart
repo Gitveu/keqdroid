@@ -4,16 +4,8 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-/// Подписка с телефона на телевизор по домашней сети.
-///
-/// Телевизор на экране приёма поднимает HTTP-сервер и показывает QR со своим
-/// адресом и разовым ключом; keqdroid на телефоне сканирует код и шлёт ссылку
-/// прямо туда. Вводить ссылку пультом не приходится, облако не нужно.
-///
-/// Единственный HTTP приложения не через локальный инбаунд: адресат в той же
-/// Wi-Fi-сети, а с выходного сервера VPN её не видно.
+// единственный HTTP приложения мимо локального инбаунда: телевизор в той же Wi-Fi, с выхода VPN её не видно
 
-/// Код из QR телевизора: `keqdroid://tv-send?h=<адрес>&p=<порт>&t=<ключ>`.
 class TvPairing {
   const TvPairing({
     required this.host,
@@ -33,10 +25,7 @@ class TvPairing {
         queryParameters: {'h': host, 'p': '$port', 't': token},
       ).toString();
 
-  /// null — это не код телевизора.
-  ///
-  /// Адрес обязан быть частным IPv4: подложенный QR иначе увёл бы подписку, а
-  /// она секрет, на любой сервер в интернете.
+  // только частный IPv4: подложенный QR иначе увёл бы подписку на любой сервер
   static TvPairing? parse(String raw) {
     final uri = Uri.tryParse(raw.trim());
     if (uri == null ||
@@ -68,10 +57,7 @@ bool isPrivateIpv4(String host) {
       (b[0] == 192 && b[1] == 168);
 }
 
-/// Адрес телевизора в домашней сети — его печатаем в QR.
-///
-/// Туннель VPN тоже интерфейс с частным адресом (у нас 172.19.0.1), но
-/// телефону до него не достучаться: такие пропускаем, Wi-Fi и кабель — вперёд.
+// у туннеля тоже частный адрес, но телефону до него не достучаться
 String? pickLanAddress(Iterable<({String name, String address})> candidates) {
   const tunnels = ['tun', 'ppp', 'wg', 'ipsec', 'rmnet', 'dummy'];
   final usable = [
@@ -100,8 +86,7 @@ Future<String?> findLanAddress() async {
   ]);
 }
 
-/// Что прислал телефон. Идентичность устройства не передаётся: телевизор —
-/// другое устройство, и панель должна видеть его самим собой.
+// идентичность не передаём: телевизор другое устройство
 class TvSubscriptionOffer {
   const TvSubscriptionOffer({
     required this.url,
@@ -138,19 +123,11 @@ class TvSubscriptionOffer {
   }
 }
 
-/// Ответ телевизора: null — подписка принята, иначе текст ошибки, который
-/// телефон покажет человеку.
 typedef TvOfferHandler = Future<String?> Function(TvSubscriptionOffer offer);
 
-/// Сервер экрана приёма. Живёт, только пока экран открыт.
-///
-/// Слушает все адреса телевизора, а не только напечатанный в QR: бывают и
-/// кабель, и Wi-Fi сразу. Без ключа из QR (128 бит) запрос отклоняется, так
-/// что соседи по сети подписку не подкинут.
 class TvReceiveServer {
   TvReceiveServer._(this._server, this.pairing, this._onOffer) {
-    // Обрыв посреди ответа (телефон ушёл из сети) — не повод для отчёта о
-    // падении: необработанная ошибка здесь ушла бы в Crashlytics как фатальная.
+    // обрыв посреди ответа иначе ушёл бы в Crashlytics как фатальный
     _server.listen(
       (request) => unawaited(_handle(request).catchError((Object _) {})),
       onError: (Object _) {},
@@ -227,7 +204,7 @@ class TvReceiveServer {
     return utf8.decode(bytes.takeBytes());
   }
 
-  // Сравнение без раннего выхода: по времени ответа ключ не подобрать.
+  // без раннего выхода, чтобы ключ не подобрать по времени ответа
   static bool _sameToken(Object? got, String want) {
     if (got is! String || got.length != want.length) return false;
     var diff = 0;
@@ -250,13 +227,10 @@ class TvReceiveServer {
 }
 
 enum TvSendFailure {
-  /// Телевизор не ответил: другая сеть или экран приёма уже закрыт.
   unreachable,
 
-  /// Ключ не подошёл — экран приёма открыли заново, код на нём новый.
   expired,
 
-  /// Телевизор получил ссылку, но подписку не добавил.
   rejected,
 }
 
@@ -265,18 +239,12 @@ class TvSendException implements Exception {
 
   final TvSendFailure failure;
 
-  /// Почему телевизор не добавил подписку, его словами.
   final String? message;
 
   @override
   String toString() => 'TvSendException($failure, $message)';
 }
 
-/// Шлёт подписку на телевизор и ждёт, пока он её загрузит: ошибку загрузки
-/// человек увидит на телефоне, который держит в руках.
-///
-/// Мимо прокси: пакет приложения из туннеля исключён, сокет и так идёт в
-/// домашнюю сеть напрямую, а `DIRECT` не отдаёт запрос системному прокси.
 Future<void> sendToTv(
   TvPairing tv,
   TvSubscriptionOffer offer, {
@@ -299,7 +267,6 @@ Future<void> sendToTv(
     try {
       message = (jsonDecode(body) as Map)['error'] as String?;
     } catch (_) {}
-    // Без текста отказ бывает от другой версии протокола — хоть код ответа.
     throw TvSendException(
       TvSendFailure.rejected,
       message ?? 'HTTP ${response.statusCode}',

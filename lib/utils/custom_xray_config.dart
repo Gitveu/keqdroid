@@ -5,22 +5,11 @@ import 'geo_asset_index.dart';
 import 'geo_rule_sanitizer.dart';
 import 'removed_tls_fields.dart';
 
-/// Готовый конфиг xray в роли сервера — то, что провайдеры кладут в подписку
-/// вместо ссылки: свои аутбаунды, свой роутинг, свой dns (в v2rayNG такой
-/// сервер называется CUSTOM, имя лежит в корневом `remarks`).
-///
-/// Инбаунды автора не берём никогда: локальные порты и креды диктует
-/// приложение — их ждёт нативная часть (на Android само ядро, sing-box внутри
-/// keqrnel на десктопе поднимает те же порты из xray-конфига). Всё остальное —
-/// роутинг, dns, цепочки аутбаундов — остаётся авторским: в этом весь смысл
-/// такого сервера.
 class CustomXrayConfig {
   CustomXrayConfig._(this.json);
 
-  /// Разобранный конфиг. Копия: [buildSessionConfig] правит её на месте.
   final Map<String, dynamic> json;
 
-  /// Аутбаунды без адреса сервера — от них нечего брать как endpoint.
   static const _localOutboundProtocols = {
     'freedom',
     'blackhole',
@@ -28,19 +17,12 @@ class CustomXrayConfig {
     'loopback',
   };
 
-  /// Корневые ключи, по которым конфиг узнаётся как xray-конфиг, а не как
-  /// произвольный json из подписки (метаданные, ответ панели и т.п.).
   static const _requiredKey = 'outbounds';
 
-  /// Имя сервера: v2rayNG держит его в корне конфига, и ядро лишний ключ
-  /// игнорирует. Порядок — от самого распространённого к редкому.
   static const _remarkKeys = ['remarks', 'remark', 'ps', 'name', 'label'];
 
-  /// Быстрая отсечка «это вообще json-объект, а не ссылка».
   static bool looksLikeJson(String raw) => raw.trimLeft().startsWith('{');
 
-  /// Разбирает конфиг. null — это не пригодный xray-конфиг (не json, нет
-  /// аутбаундов, sing-box). Причину для пользователя даёт [describeProblem].
   static CustomXrayConfig? tryParse(String raw) {
     if (!looksLikeJson(raw)) return null;
     final Object? decoded;
@@ -57,15 +39,11 @@ class CustomXrayConfig {
   static CustomXrayConfig? _fromMap(Map<String, dynamic> map) {
     final outbounds = _outboundsOf(map);
     if (outbounds.isEmpty) return null;
-    // sing-box описывает аутбаунд полем `type`, xray — `protocol`. Похожие
-    // конфиги, но наше ядро исполняет только второй. Одного `protocol` мало:
-    // у SSR-узла sing-box оно тоже есть, там это протокол обфускации.
+    // у sing-box аутбаунд по type, у xray по protocol, а protocol у SSR-узла sing-box значит обфускацию
     if (!outbounds.any(_isXrayOutbound)) return null;
     return CustomXrayConfig._(map);
   }
 
-  /// Причина, почему json не годится сервером — для сообщения пользователю.
-  /// null — годится.
   static String? describeProblem(String raw) {
     if (!looksLikeJson(raw)) return 'Not a JSON object';
     final Object? decoded;
@@ -90,8 +68,6 @@ class CustomXrayConfig {
   static bool _isXrayOutbound(Map<String, dynamic> outbound) =>
       outbound.containsKey('protocol') && !outbound.containsKey('type');
 
-  /// Все конфиги из одного payload: объект — один, массив — по элементу.
-  /// Возвращает исходные json-строки (компактные), пригодные как config сервера.
   static List<String> extractConfigs(String raw) {
     final text = raw.trim();
     if (text.isEmpty) return const [];
@@ -117,11 +93,8 @@ class CustomXrayConfig {
     return const [];
   }
 
-  /// Конфиг как текст для хранения/редактирования: с отступами, чтобы правка
-  /// вручную в редакторе была читаемой.
   String encode() => const JsonEncoder.withIndent('  ').convert(json);
 
-  /// Имя из корневого `remarks` (v2rayNG-совместимо). Пусто — имени нет.
   String get remarks {
     for (final key in _remarkKeys) {
       final value = json[key];
@@ -130,9 +103,6 @@ class CustomXrayConfig {
     return '';
   }
 
-  /// Аутбаунд, который ядро считает основным: у xray это первый в списке (он
-  /// же дефолтный, когда ни одно правило не совпало), но `freedom`/`blackhole`
-  /// в начале списка встречаются — их пропускаем.
   Map<String, dynamic>? get primaryOutbound {
     final outbounds = _outboundsOf(json);
     for (final outbound in outbounds) {
@@ -143,15 +113,12 @@ class CustomXrayConfig {
     return outbounds.isEmpty ? null : outbounds.first;
   }
 
-  /// Тег основного аутбаунда — им пингуем (весь трафик пробы уходит туда).
   String get primaryOutboundTag {
     final tag = primaryOutbound?['tag']?.toString().trim() ?? '';
     return tag.isEmpty ? 'proxy' : tag;
   }
 
-  /// Адрес и порт сервера из основного аутбаунда. Нужны не для красоты:
-  /// по адресу идёт tcp-пинг и исключение сервера из TUN на десктопе
-  /// (`serverIpToExclude`), иначе коннект ядра к серверу зайдёт в петлю.
+  // по адресу tcp-пинг и исключение сервера из TUN, иначе коннект ядра к серверу уйдёт в петлю
   ({String address, int port}) get endpoint {
     for (final outbound in _outboundsOf(json)) {
       final protocol = outbound['protocol']?.toString().toLowerCase() ?? '';
@@ -165,12 +132,6 @@ class CustomXrayConfig {
   String get address => endpoint.address;
   int get port => endpoint.port;
 
-  /// Авторский `dns`-блок — если он есть и в нём действительно есть серверы.
-  /// `null` значит «резолвить нечем», и генератор подставляет свой (см.
-  /// параметр `dns` у [buildSessionConfig]).
-  ///
-  /// Сам по себе он больше не единственный источник: [mergeDns] дописывает
-  /// после него наш резерв.
   Map<String, dynamic>? get authorDns {
     final raw = json['dns'];
     if (raw is! Map) return null;
@@ -179,20 +140,8 @@ class CustomXrayConfig {
     return _asStringMap(raw);
   }
 
-  /// Авторский dns-блок с нашими резолверами, дописанными в конец.
-  ///
-  /// Автор остаётся первым и решает всё, пока отвечает: xray опрашивает серверы
-  /// по порядку. Хвост нужен, когда авторский резолвер недостижим, а туннель
-  /// жив, — так ломается связка «российский входной узел плюс публичный
-  /// резолвер по UDP»: DPI режет исходящий `udp:1.1.1.1:53`, и подключённый
-  /// туннель не резолвит ничего. Наш хвост ходит DoH по 443, тем же
-  /// транспортом, который на таком узле работает.
-  ///
-  /// Записи с `domains` в хвост не идут: это части нашей раскладки, и в чужом
-  /// блоке они были бы уже не резервом, а вмешательством. Дубликаты по адресу
-  /// отсекаются, но разный транспорт к одному адресу дубликатом не считается —
-  /// в нём весь смысл. `disableFallback` автора не трогаем: с ним резерв просто
-  /// останется лежать, и это его выбор.
+  // хвост для случая, когда авторский резолвер недостижим: DPI режет udp:1.1.1.1:53 на российском входе,
+  // а наш DoH идёт по 443. записи с domains в хвост не идут
   static Map<String, dynamic>? mergeDns(
     Map<String, dynamic>? author,
     Map<String, dynamic>? fallback,
@@ -220,28 +169,12 @@ class CustomXrayConfig {
     };
   }
 
-  /// Адрес dns-сервера в любой из форм xray: строкой или объектом с `address`.
   static String _dnsServerAddress(Object? server) {
     if (server is String) return server.trim();
     if (server is Map) return server['address']?.toString().trim() ?? '';
     return '';
   }
 
-  /// Конфиг для сессии: авторские аутбаунды, роутинг и dns плюс наши инбаунды и
-  /// уровень логов.
-  ///
-  /// [prependRules] решают раньше авторских — сейчас это только защита
-  /// LAN-инбаундов: они слушают 0.0.0.0, правил для наших тегов у автора нет, и
-  /// пропущенное вперёд авторское правило увело бы запрос из интернета в туннель
-  /// раньше запрета. [appendRules] идут после и ловят только то, чего не поймал
-  /// автор, — то есть почти ничего, если у него есть catch-all.
-  ///
-  /// [logLevel] из настроек: без `info` ядро не печатает решения роутинга, и
-  /// экран «Соединения» остаётся без правил. [dns] подставляется, только если
-  /// своего у автора нет, — иначе ядро уходит в системный резолвер, которого на
-  /// Android не существует, и не резолвится даже адрес сервера. [geoIndex]
-  /// чистит коды, которых нет в поставляемых базах: один такой роняет разбор
-  /// всего конфига (см. geo_rule_sanitizer).
   Map<String, dynamic> buildSessionConfig({
     required List<Map<String, dynamic>> inbounds,
     required String logLevel,
@@ -251,7 +184,6 @@ class CustomXrayConfig {
     GeoAssetIndex? geoIndex,
   }) {
     final out = Map<String, dynamic>.from(json);
-    // Наше поле имени ядру не нужно — не оставляем ему повода спорить.
     for (final key in _remarkKeys) {
       out.remove(key);
     }
@@ -287,9 +219,6 @@ class CustomXrayConfig {
     return out;
   }
 
-  /// Конфиг для эфемерного пинга: авторские аутбаунды (вместе с цепочкой), но
-  /// роутинг наш — вся проба уходит в основной аутбаунд, иначе авторское
-  /// правило могло бы увести её напрямую и «пинг сервера» мерил бы не сервер.
   Map<String, dynamic> buildPingConfig({
     required List<Map<String, dynamic>> inbounds,
     required List<Map<String, dynamic>> rules,
@@ -334,9 +263,6 @@ class CustomXrayConfig {
     ];
   }
 
-  /// Адрес сервера из аутбаунда. Форм несколько: `vnext` (vless/vmess),
-  /// `servers` (trojan/ss/socks/http), плоские `address`/`port` (так пишет наш
-  /// генератор под xray 26+) и `peers[].endpoint` (wireguard).
   static ({String address, int port})? _endpointOf(
     Map<String, dynamic> outbound,
   ) {
@@ -378,7 +304,6 @@ class CustomXrayConfig {
     return (address: address, port: port);
   }
 
-  /// `host:port` / `[v6]:port` из wireguard-endpoint.
   static ({String address, int port})? _splitHostPort(String raw) {
     final value = raw.trim();
     if (value.isEmpty) return null;
@@ -391,12 +316,6 @@ class CustomXrayConfig {
   }
 }
 
-/// Что чистка geo выбросит из готового конфига, не трогая оригинал.
-///
-/// Нужна ради предупреждения: сама чистка молчит, а выброшенное авторское
-/// правило меняет смысл конфига. С финалом «блок» трафик такого правила
-/// перестаёт ходить вовсе, и снаружи это «приложение блокирует то, что
-/// провайдер пускает через прокси».
 ({List<String> tokens, int removedRules}) previewUnknownGeo(
   Map<String, dynamic> config,
   GeoAssetIndex index,
@@ -408,19 +327,6 @@ class CustomXrayConfig {
   return (tokens: tokens, removedRules: before - _routingRuleCount(copy));
 }
 
-/// Авторские правила, которые после подмены инбаундов не сработают никогда.
-///
-/// Служебные инбаунды готового конфига — перехват DNS через `dokodemo-door`
-/// `dns-in`, api-порт, прозрачный прокси — адресуются в правилах через
-/// `inboundTag`. Инбаунды мы заменяем своими, и такое правило остаётся без
-/// инбаунда: его условие не выполнится ни разу, а трафик уходит в наш `final`.
-/// Молча это выглядит как «правила провайдера не работают».
-///
-/// [keptTags] — теги инбаундов, которые в конфиге на самом деле будут
-/// (`ConfigGeneratorV2.appInboundTags`).
-///
-/// Правила, ведущие в `dns`-аутбаунд, не считаем: перехват DNS мы делаем за
-/// автора сами (правило `dns-out`), и звать это потерей неверно.
 ({int rules, List<String> tags}) previewDeadInboundRules(
   Map<String, dynamic> config,
   List<String> keptTags,
@@ -464,14 +370,6 @@ int _routingRuleCount(Map<String, dynamic> config) {
   return rules is List ? rules.length : 0;
 }
 
-/// Выкидывает из готового конфига `geoip:`/`geosite:`-коды, которых нет в
-/// поставляемых базах, — правит [config] на месте.
-///
-/// Своя реализация вместо [stripUnknownGeoTokens]: тот работает с текстовыми
-/// списками настроек, а здесь коды разбросаны по правилам роутинга и dns.
-/// Цена ошибки та же — неизвестный код роняет разбор всего конфига. Правило,
-/// оставшееся без условий, удаляем целиком: на «this rule has no effective
-/// fields» ядро тоже выходит.
 List<String> stripUnknownGeoFromConfig(
   Map<String, dynamic> config,
   GeoAssetIndex index,
@@ -479,7 +377,6 @@ List<String> stripUnknownGeoFromConfig(
   final dropped = <String>[];
   if (index.isEmpty) return dropped;
 
-  /// Чистит список токенов; null — списка не было, [] — не осталось ничего.
   List<String>? clean(Object? raw) {
     if (raw is! List) return null;
     final kept = <String>[];
@@ -517,13 +414,8 @@ List<String> stripUnknownGeoFromConfig(
             rule[field] = cleaned;
           }
         }
-        // Условие вычистилось целиком — правило удаляем, даже если другие
-        // условия в нём остались: без вычищенного оно стало шире задуманного.
-        // `{ip: [geoip:sberbank], port: 443 → direct}` иначе превратилось бы в
-        // «весь трафик на 443 напрямую». Урезать правило можно, расширять — нет.
-        //
-        // Правило вообще без условий тоже выкидываем: xray на таком выходит
-        // с «this rule has no effective fields».
+        // условие вычистилось, значит правило стало бы шире задуманного ({ip: geoip:sberbank, port: 443} -> весь 443).
+        // урезать можно, расширять нельзя. без условий xray падает на this rule has no effective fields
         if (lostCondition || !_ruleHasCondition(rule)) continue;
         keptRules.add(rule);
       }
@@ -542,12 +434,10 @@ List<String> stripUnknownGeoFromConfig(
           continue;
         }
         final domains = clean(server['domains']);
-        // Сервер с доменами — точечный: без них он стал бы общим для всех
-        // запросов и подменил бы авторский порядок. Такой выкидываем целиком.
+        // сервер без доменов стал бы общим для всех запросов
         if (domains != null && domains.isEmpty) continue;
         if (domains != null) server['domains'] = domains;
-        // То же и с фильтром ответов: убрать пустой `expectIPs` значит принимать
-        // от этого сервера любой адрес — шире, чем хотел автор.
+        // пустой expectIPs значит принимать любой адрес, шире, чем хотел автор
         var lostFilter = false;
         for (final field in const ['expectIPs', 'expectedIPs']) {
           final original = server[field];
@@ -570,9 +460,7 @@ List<String> stripUnknownGeoFromConfig(
   return dropped;
 }
 
-/// Поля-условия правила роутинга xray. Без хотя бы одного ядро отказывается
-/// разбирать конфиг («this rule has no effective fields»). `ruleTag` и
-/// `domainMatcher` условиями не являются — это метки, их тут нет намеренно.
+// ruleTag и domainMatcher это метки, а не условия
 bool _ruleHasCondition(Map<dynamic, dynamic> rule) => const [
       'domain',
       'ip',

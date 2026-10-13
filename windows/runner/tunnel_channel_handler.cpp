@@ -43,7 +43,7 @@ namespace {
 constexpr char kChannel[] = "keqdis_vpn_channel";
 
 static const wchar_t kProxyBypass[] = L"127.0.0.1;<local>;::1;localhost";
-// WinINet per-connection API rejects some bypass tokens (e.g. "<local>") with 0x57.
+// per-connection API WinINet отвергает <local> с 0x57
 static const wchar_t kPerConnBypass[] = L"localhost;127.0.0.1;::1";
 
 static const wchar_t kInternetSettingsKey[] =
@@ -87,7 +87,7 @@ void NotifyProxySettingsChanged() {
   InternetSetOptionW(nullptr, INTERNET_OPTION_REFRESH, nullptr, 0);
   InternetSetOptionW(nullptr, INTERNET_OPTION_PROXY_SETTINGS_CHANGED, nullptr, 0);
 
-  // Chromium / WinINET read HKCU Internet Settings after this broadcast.
+  // после этой рассылки Chromium и WinINet перечитывают настройки
   SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
                       reinterpret_cast<LPARAM>(const_cast<wchar_t*>(L"InternetSettings")),
                       SMTO_ABORTIFHUNG, 5000, nullptr);
@@ -302,8 +302,7 @@ void LogRegistryProxySnapshot(const char* tag) {
       static_cast<unsigned long>(auto_detect), WideToUtf8(pac).c_str());
 }
 
-// Windows Settings and WinINet read DefaultConnectionSettings (REG_BINARY), not
-// ProxyServer alone. INTERNET_OPTION_PER_CONNECTION_OPTION rebuilds that blob.
+// Параметры Windows и WinINet читают двоичный DefaultConnectionSettings, а не один ProxyServer
 bool SetPerConnectionProxy(bool enabled,
                            const std::wstring& proxy_server,
                            const std::wstring& bypass,
@@ -351,7 +350,7 @@ bool SetPerConnectionProxy(bool enabled,
   list.dwOptionError = 0;
   list.pOptions = options;
 
-  // WinINet may reject per-connection updates until the module is initialized.
+  // до инициализации модуля WinINet может отвергать per-connection
   HINTERNET session = InternetOpenW(L"KeqdisProxy", INTERNET_OPEN_TYPE_PRECONFIG,
                                     nullptr, nullptr, 0);
   if (session == nullptr) {
@@ -389,7 +388,7 @@ bool SetPerConnectionProxy(bool enabled,
   return ok != FALSE;
 }
 
-// Simple host:port — Settings UI and DefaultConnectionSettings expect this format.
+// просто host:port, другой формат Параметры не понимают
 bool SetRegistryBrowserProxy(const std::wstring& proxy_server) {
   ProxyDebugLog("SetRegistryBrowserProxy server=\"%s\"",
                 WideToUtf8(proxy_server).c_str());
@@ -734,8 +733,7 @@ bool ReadRegistryProxy(bool* enabled, std::wstring* server) {
   return true;
 }
 
-// Only loopback proxies count as ours — a user-configured corporate proxy is
-// left alone by both cleanups.
+// наши только прокси на loopback, корпоративный не трогаем
 bool LoopbackSystemProxyActive(std::wstring* server) {
   bool enabled = false;
   if (!ReadRegistryProxy(&enabled, server)) {
@@ -744,10 +742,7 @@ bool LoopbackSystemProxyActive(std::wstring* server) {
   return enabled && server->find(L"127.0.0.1") != std::wstring::npos;
 }
 
-// Recover from an unclean previous exit (crash, forced kill, tray exit that
-// skipped stopVpn): the registry may still route the whole system into a dead
-// 127.0.0.1 port. Symmetric to LinuxTunnelBackend.cleanupStaleState(). Runs
-// synchronously before Dart main, so it cannot race an autostart connect.
+// после грязного выхода реестр мог оставить систему на мёртвом порту. до main Dart, с автоподключением не гоняется
 void CleanupStaleSystemProxy() {
   std::wstring server;
   if (!LoopbackSystemProxyActive(&server)) {
@@ -793,9 +788,7 @@ bool RestartAsAdministrator() {
         has_admin_restart = true;
         continue;
       }
-      // The link we were launched with has already been imported. Carrying it
-      // into the elevated process would import it a second time, so the user
-      // would get a "duplicate subscription" error for merely enabling TUN.
+      // ссылку уже импортировали: в процессе с правами она импортировалась бы второй раз, с ошибкой дубликат подписки
       if (std::wstring(argv[i]).find(L"://") != std::wstring::npos) {
         continue;
       }
@@ -815,7 +808,6 @@ bool RestartAsAdministrator() {
     params += L"--admin-restart";
   }
 
-  // Let the elevated process acquire the single-instance mutex immediately.
   RunnerReleaseSingleInstanceMutex();
 
   SHELLEXECUTEINFOW exec_info = {};
@@ -833,13 +825,8 @@ bool RestartAsAdministrator() {
   return exec_info.hInstApp > reinterpret_cast<HINSTANCE>(32);
 }
 
-// ───────── Platform-thread task marshaling ─────────
-// Heavy proxy operations (registry writes, WinINET broadcasts, `netsh winhttp
-// import`) block whichever thread runs them — sometimes for several seconds.
-// They must NOT run on the Flutter platform thread, which is also the UI thread
-// on Windows, or the whole window freezes. We run them on a worker std::thread
-// and marshal the MethodResult completion back to the platform thread through a
-// message-only window pumped by the main Win32 message loop.
+// тяжёлое (реестр, рассылки WinINet, netsh winhttp import) стоит секундами, а поток платформы на Windows ещё и UI.
+// работаем в своём потоке, ответ возвращаем через окно-сообщения в главном цикле
 constexpr UINT kRunOnPlatformThreadMsg = WM_APP + 0x71;
 
 std::mutex g_task_mutex;
@@ -868,7 +855,7 @@ LRESULT CALLBACK MarshalWndProc(HWND hwnd, UINT msg, WPARAM wparam,
   return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
-// Must be called once on the platform thread (during channel registration).
+// один раз, на потоке платформы
 void EnsureMarshalWindow() {
   if (g_marshal_window != nullptr) return;
   WNDCLASSW wc = {};
@@ -881,7 +868,6 @@ void EnsureMarshalWindow() {
                       nullptr, wc.hInstance, nullptr);
 }
 
-// Thread-safe: enqueue a callback to run on the platform thread.
 void PostToPlatformThread(std::function<void()> task) {
   {
     std::lock_guard<std::mutex> lock(g_task_mutex);
@@ -912,19 +898,14 @@ bool HasAutostartFlag() {
 std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> g_vpn_channel;
 bool g_pending_autostart_connect = false;
 
-// Touched only from the platform thread: the cold-start path runs before the
-// engine exists, WM_COPYDATA arrives on the window thread, and the method
-// handler runs there too.
+// только с потока платформы: холодный старт до движка, WM_COPYDATA и обработчик там же
 std::string g_pending_deep_link;
 
 void DispatchDeepLinkToDart() {
   if (g_vpn_channel == nullptr || g_pending_deep_link.empty()) {
     return;
   }
-  // Deliberately no payload: the link stays here until Dart takes it with
-  // getPendingDeepLink. The servers tab is not built while the tray menu is
-  // open (see DesktopHomeScreen), and a push carrying the link would be
-  // dropped on the floor; this way it just waits for the tab to come back.
+  // без данных намеренно: пока открыто меню трея, вкладки серверов нет, и пуш со ссылкой потерялся бы. ссылка ждёт getPendingDeepLink
   g_vpn_channel->InvokeMethod("onDeepLink",
                               std::make_unique<flutter::EncodableValue>());
 }
@@ -986,13 +967,8 @@ void KeqdisNotifyWindowVisibility(bool visible) {
   PostToPlatformThread([visible]() { DispatchWindowVisibilityToDart(visible); });
 }
 
-// Уборка при запуске чинит оставшийся прокси, только когда приложение снова
-// открыли; до того после перезагрузки весь системный трафик шёл в мёртвый порт.
-//
-// То же, что отключение в ApplySystemProxy, но без рассылки WM_SETTINGCHANGE:
-// сеанс кончается, перечитывать настройку некому, а два SendMessageTimeout по
-// окнам, которые сами сейчас закрываются, могут съесть до десяти секунд из
-// тех, что Windows даёт на выход. Следующий вход прочитает реестр и так.
+// без WM_SETTINGCHANGE: сеанс кончается, а две рассылки по закрывающимся окнам съели бы до десяти секунд на выход.
+// без этого после перезагрузки системный трафик шёл в мёртвый порт до открытия приложения
 void KeqdisClearSystemProxyOnSessionEnd() {
   std::wstring server;
   if (!LoopbackSystemProxyActive(&server)) {
@@ -1013,11 +989,9 @@ void RegisterKeqdisTunnelChannel(flutter::FlutterEngine* engine) {
   }
 
   KeqdisInitCoreProcessGuard();
-  // The guard above kills orphaned cores; this drops the system proxy they
-  // may have left pointing at a now-dead local port.
+  // сироты ядер убиты выше, а их системный прокси снимаем здесь
   CleanupStaleSystemProxy();
 
-  // Created on the platform thread so worker threads can marshal results back.
   EnsureMarshalWindow();
 
   auto channel = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
@@ -1120,9 +1094,6 @@ void RegisterKeqdisTunnelChannel(flutter::FlutterEngine* engine) {
               "(SOCKS is not written to system proxy)",
               enabled ? 1 : 0, host.c_str(), socks_port, http_port);
 
-          // ApplySystemProxy blocks for seconds (netsh, WinINET broadcasts).
-          // Run it off the platform thread so the UI never freezes; the result
-          // is completed back on the platform thread via PostToPlatformThread.
           std::shared_ptr<flutter::MethodResult<flutter::EncodableValue>>
               shared_result(result.release());
 
@@ -1312,9 +1283,7 @@ void RegisterKeqdisTunnelChannel(flutter::FlutterEngine* engine) {
             const auto* value = std::get_if<bool>(&it->second);
             return value != nullptr && *value;
           };
-          // Повышение прав просит только сам переключатель в настройках; на
-          // старте приложения (allowElevation == false) задача планировщика не
-          // трогается, и UAC не всплывает.
+          // UAC только по переключателю в настройках, на старте задачу планировщика не трогаем
           result->Success(flutter::EncodableValue(KeqdroidApplyAutostart(
               flag("enabled"), flag("elevated"), flag("allowElevation"))));
           return;
@@ -1338,8 +1307,7 @@ void RegisterKeqdisTunnelChannel(flutter::FlutterEngine* engine) {
         }
 
         if (call.method_name() == "getPendingDeepLink") {
-          // One shot, same contract as Android: handing it out twice would
-          // import the same subscription on every rebuild of the servers tab.
+          // одноразово, как на Android: иначе подписка импортировалась бы на каждую пересборку вкладки
           if (g_pending_deep_link.empty()) {
             result->Success();
             return;
@@ -1351,9 +1319,7 @@ void RegisterKeqdisTunnelChannel(flutter::FlutterEngine* engine) {
         }
 
         if (call.method_name() == "restartAsAdministrator") {
-          // Снять глобальные хоткеи ДО старта elevated-процесса: пока этот
-          // процесс доживает, RegisterHotKey в новом инстансе получал бы
-          // отказ («сочетание занято другим приложением»).
+          // хоткеи снять до старта процесса с правами, иначе RegisterHotKey там получит сочетание занято
           KeqdroidUnregisterAllHotkeys(WindowsTrayGetMainHwnd());
           if (!RestartAsAdministrator()) {
             result->Error("ELEVATION_FAILED",
@@ -1439,21 +1405,11 @@ void RegisterKeqdisTunnelChannel(flutter::FlutterEngine* engine) {
             result->Success(flutter::EncodableValue(std::string()));
             return;
           }
-          // Выемка иконки — рабочему потоку, как и прочая тяжёлая работа в
-          // этом файле.
-          //
-          // Достать иконку из exe и закодировать её в PNG — это единицы
-          // миллисекунд, и раньше они тратились ПРЯМО на потоке платформы, он
-          // же поток UI. Список раздельного туннелирования просит по иконке на
-          // каждую появившуюся строку, так что при быстрой прокрутке поток,
-          // обязанный разбирать ввод и кадры, стоял в этих вызовах десятками
-          // подряд — отсюда и рывки. Здесь он только принимает вызов и отдаёт
-          // ответ, когда тот готов.
+          // иконку тоже в рабочем потоке: список сплита просит её на каждую строку, и прокрутка дёргалась
           std::shared_ptr<flutter::MethodResult<flutter::EncodableValue>>
               shared_result = std::move(result);
           std::thread([path = Utf8ToWide(path_utf8), shared_result]() {
-            // Оболочечные API (`SHDefExtractIcon`, `SHGetFileInfo`) требуют
-            // инициализированного COM на СВОЁМ потоке.
+            // SHDefExtractIcon и SHGetFileInfo требуют COM на своём потоке
             const HRESULT com = ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
             const std::string icon = GetWindowsAppIconBase64(path);
             if (SUCCEEDED(com)) ::CoUninitialize();
@@ -1485,8 +1441,7 @@ void RegisterKeqdisTunnelChannel(flutter::FlutterEngine* engine) {
           return;
         }
 
-        // Слепок памяти для app.log: сам keqdroid.exe и ядра, чьи pid
-        // передал Dart (у него они есть, у раннера — нет).
+        // pid ядер передаёт Dart, у раннера их нет
         if (call.method_name() == "getProcessResources") {
           const auto encode = [](const ProcessResources& r) {
             flutter::EncodableMap m;
@@ -1572,8 +1527,6 @@ void RegisterKeqdisTunnelChannel(flutter::FlutterEngine* engine) {
         }
 
         if (call.method_name() == "stopVpn") {
-          // Disabling the proxy also broadcasts WM_SETTINGCHANGE (up to 10s),
-          // so run it off the platform thread to keep the UI responsive.
           std::shared_ptr<flutter::MethodResult<flutter::EncodableValue>>
               shared_result(result.release());
           std::thread([shared_result]() {

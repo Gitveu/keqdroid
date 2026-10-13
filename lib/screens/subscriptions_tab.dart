@@ -52,7 +52,6 @@ class SubscriptionsTab extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final subsAsync = ref.watch(subscriptionsProvider);
 
-    // кэшируем цвета
     final bgColor = AppTheme.bg(context);
     final textColor = AppTheme.text(context);
 
@@ -73,8 +72,6 @@ class SubscriptionsTab extends ConsumerWidget {
                     ),
                     child: Text(
                       l10n.subscriptionsTitle,
-                      // Заголовок экрана — headline: та же роль, что и на
-                      // остальных вкладках, иначе иерархия страниц разъезжается.
                       style: Theme.of(context).textTheme
                           .emphasized(Theme.of(context).textTheme.headlineMedium)
                           ?.copyWith(color: textColor),
@@ -120,9 +117,7 @@ class SubscriptionsTab extends ConsumerWidget {
                                           )
                                           .set(false);
                                     },
-                                    // onReorderItem уже корректирует newIndex за
-                                    // удалённый элемент (движение вниз), поэтому
-                                    // fromReorderableList: false — иначе вычтем -1 дважды.
+                                    // onReorderItem уже поправил newIndex, иначе вычтем единицу дважды
                                     onReorderItem: (oldIndex, newIndex) {
                                       ref
                                           .read(subscriptionsProvider.notifier)
@@ -248,13 +243,10 @@ class SubscriptionsTab extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final nameCtrl = TextEditingController();
     final urlCtrl = TextEditingController();
-    // Идентичность задаётся до первой загрузки: панель с привязкой по HWID
-    // считает устройство уже на ней, и «добавить, а потом подменить» стоило бы
-    // лишнего слота привязки.
+    // идентичность до первой загрузки: панель с привязкой по HWID считает устройство уже на ней
     var identity = SubscriptionFetchIdentity.empty;
     bool loading = false;
-    // Ошибки (скан QR, загрузка подписки) — в самой шторке: snackbar был бы
-    // скрыт за модальным барьером, а закрытие шторки теряло бы введённый URL.
+    // снек-бар скрыт за модальным барьером, а закрытие шторки потеряло бы URL
     String? sheetError;
 
     final textColor = AppTheme.text(context);
@@ -264,9 +256,6 @@ class SubscriptionsTab extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      // Настоящая ручка вместо нарисованной: прежняя была просто Container
-      // внутри содержимого — выглядела как ручка, но тянуть за неё было
-      // нельзя, и шторка закрывалась только тапом мимо неё.
       showDragHandle: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) => Padding(
@@ -304,10 +293,8 @@ class SubscriptionsTab extends ConsumerWidget {
                 l10n.subscriptionUrlLabel,
                 l10n.subscriptionUrlHint,
                 technical: true,
-                // у mobile_scanner нет имплементации под Windows/Linux
                 suffix: PlatformBootstrap.isDesktop
                     ? null
-                    // Телевизор: камеры нет, ссылку присылает телефон.
                     : PlatformBootstrap.isTelevision
                     ? IconButton(
                         icon: Icon(
@@ -329,8 +316,6 @@ class SubscriptionsTab extends ConsumerWidget {
                         onPressed: () async {
                           final raw = await QrScanScreen.scan(ctx);
                           if (raw == null || !ctx.mounted) return;
-                          // Код телевизора: шторка добавления тут ни при
-                          // чём, закрываем её и отправляем.
                           final tv = TvPairing.parse(raw);
                           if (tv != null) {
                             Navigator.pop(ctx);
@@ -377,8 +362,6 @@ class SubscriptionsTab extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 height: 56,
-                // Как и в шторке редактирования: FilledButton вместо
-                // ElevatedButton, форма-пилюля из темы.
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: accentContainerColor,
@@ -393,9 +376,6 @@ class SubscriptionsTab extends ConsumerWidget {
                             sheetError = null;
                           });
                           try {
-                            // Поле имени пустое — подставляем хост, но помечаем
-                            // имя автоматическим: придёт profile-title от
-                            // панели, и он его заменит.
                             final typedName = nameCtrl.text.trim();
                             final sub = Subscription.create(
                               name: typedName.isEmpty
@@ -410,9 +390,6 @@ class SubscriptionsTab extends ConsumerWidget {
                                 .add(sub);
                             if (ctx.mounted) Navigator.pop(ctx);
                           } catch (e) {
-                            // Шторку не закрываем: ошибка показывается в ней
-                            // самой, а введённые имя и URL сохраняются (как в
-                            // шторке вставки серверов и диалоге редактирования).
                             if (!ctx.mounted) return;
                             setModalState(() {
                               loading = false;
@@ -462,8 +439,6 @@ class SubscriptionsTab extends ConsumerWidget {
         suffixIcon: suffix,
         labelStyle: TextStyle(color: textLightColor),
         hintStyle: TextStyle(color: textLightColor.withValues(alpha: 0.5)),
-        // Заливка или обводка: у filled-поля рамки нет, её роль играет сама
-        // заливка. Обводка остаётся индикатором фокуса.
         filled: true,
         fillColor: cardColor,
         contentPadding: const EdgeInsets.symmetric(
@@ -541,18 +516,9 @@ class _SubsErrorView extends StatelessWidget {
   }
 }
 
-/// Человекочитаемое «когда это было».
-///
-/// Функция верхнего уровня, а не метод состояния: тем же самым пользуются
-/// вынесенные плашки, а состояния карточки у них нет.
 String _subFormatDate(BuildContext context, DateTime dt) =>
     timeAgo(AppLocalizations.of(context)!, dt);
 
-/// Объявление провайдера на карточке подписки.
-///
-/// Отдельный виджет, а не кусок общего `build()`: у него своя подписка на то,
-/// свёрнута ли карточка, поэтому сворачивание перерисовывает плашку, а не всю
-/// карточку целиком.
 class _SubAnnounceBanner extends ConsumerWidget {
   const _SubAnnounceBanner({required this.sub});
 
@@ -607,7 +573,6 @@ class _SubAnnounceBanner extends ConsumerWidget {
   }
 }
 
-/// Плашка истёкшей подписки.
 class _SubExpiredBanner extends StatelessWidget {
   const _SubExpiredBanner({required this.sub});
 
@@ -665,14 +630,9 @@ class _SubExpiredBanner extends StatelessWidget {
   }
 }
 
-/// Подписка отдана по http, а не https.
-///
-/// С 0.7.6 такие адреса не обновляются (`isSafeUrl` принимает только https),
-/// поэтому карточка предлагает починить схему.
 bool _subIsInsecureHttp(Subscription sub) =>
     sub.url.trim().toLowerCase().startsWith('http://');
 
-/// Открыть ссылку провайдера, пожаловавшись, если не вышло.
 Future<void> _subOpenProviderLink(BuildContext context, String url) async {
   final messenger = ScaffoldMessenger.of(context);
   final l10n = AppLocalizations.of(context)!;
@@ -683,9 +643,6 @@ Future<void> _subOpenProviderLink(BuildContext context, String url) async {
   );
 }
 
-/// Выбор интервала автообновления подписки.
-
-/// «Сколько осталось» до конца подписки.
 String _subFormatExpiry(BuildContext context, DateTime dt) {
   final l10n = AppLocalizations.of(context)!;
   final diff = dt.difference(DateTime.now());
@@ -695,22 +652,11 @@ String _subFormatExpiry(BuildContext context, DateTime dt) {
   return l10n.subscriptionsSoon;
 }
 
-/// Раскрывающиеся подробности карточки подписки: трафик, срок, интервал
-/// обновления, ссылки провайдера.
-///
-/// Отдельный виджет, а не кусок общего `build()`: он сам подписан на то,
-/// свёрнута ли карточка и не сорвалось ли обновление, поэтому и разворачивание,
-/// и ошибка обновления перерисовывают подробности, а не всю карточку. Карточка
-/// рисуется на каждую подписку в списке, так что это повторяется столько раз,
-/// сколько у человека подписок.
 class _SubCardDetails extends ConsumerWidget {
   const _SubCardDetails({required this.sub, required this.onSwitchToHttps});
 
   final Subscription sub;
 
-  /// Починка http-подписки живёт в состоянии карточки: она дёргает
-  /// `widget.onRefresh()` и смотрит на `mounted`, поэтому наверх не поднимается
-  /// и приходит сюда обработчиком.
   final VoidCallback onSwitchToHttps;
 
   @override
@@ -724,10 +670,6 @@ class _SubCardDetails extends ConsumerWidget {
     );
     final hasRefreshError = refreshError != null;
     final pct = sub.usagePercent;
-    // Состав карточки — настройка подписки (редактор оформления). Убрать можно
-    // только оформление и факты второго плана: предупреждения о просроченной
-    // подписке, о `http` и о неудачном обновлении рисуются всегда, что бы ни
-    // было выбрано, — спрятанная проблема выглядит как её отсутствие.
     final showsUsage = sub.showsCard(SubscriptionCardElement.usage);
     final textColor = AppTheme.text(context);
     final textLightColor = AppTheme.textLight(context);
@@ -744,24 +686,10 @@ class _SubCardDetails extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Якорь карточки: сколько потрачено, крупно.
-              //
-              // Раньше всё содержимое было набрано одним мелким кеглем —
-              // URL, трафик, срок, интервал, — и глазу не за что было
-              // зацепиться, приходилось читать подряд. Размер здесь и
-              // делает иерархию: у M3E это один из пяти механизмов
-              // наравне с цветом и формой.
               if (sub.usedDisplay != null && showsUsage)
-                // «Потрачено / лимит» — одно значение из двух виджетов, и
-                // порядок в нём держит LtrBlock, а не изолят: в персидской
-                // локали Row зеркалился, и вместо `621.8 GiB / 100 GiB`
-                // на экране получалось `/ 100 GiB 621.8 GiB`. Изолят чинил
-                // каждый кусок по отдельности и на порядок детей не влиял.
+                // LtrBlock: в фарси Row зеркалился и выходило / 100 GiB 621.8 GiB
                 LtrBlock(
                   child: Row(
-                    // Row обязан обжимать содержимое: растянутый на всю
-                    // ширину, он утащил бы блок к левому краю, а по-
-                    // персидски он должен стоять у правого.
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
@@ -873,12 +801,6 @@ class _SubCardDetails extends ConsumerWidget {
                   ),
                 ),
               ],
-              // МЕТА: факты второго плана — одной тихой строкой.
-              //
-              // Раньше срок годности стоял в ряду с чипами управления, а
-              // «когда обновлялось» — этажом выше рядом с трафиком. Два
-              // однородных факта в разных местах и разных ролях; теперь
-              // они вместе и оба `labelMedium`.
               if (sub.showsCard(SubscriptionCardElement.meta)) ...[
               const SizedBox(height: 12),
               Row(
@@ -913,22 +835,12 @@ class _SubCardDetails extends ConsumerWidget {
                 ],
               ),
               ],
-              // Управление: чипы одного вида в одном ряду.
-              //
-              // Автообновление было тремя элементами — подпись, значок
-              // ON/OFF и интервал с карандашом — ради одной настройки, и
-              // переключалось скрытым тапом по значку. Теперь это один
-              // чип: он же показывает состояние, он же открывает выбор,
-              // где «Выключить» стоит первым пунктом.
               if (sub.showsCard(SubscriptionCardElement.actions)) ...[
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 runSpacing: 6,
                 children: [
-                  // Настройка приложения — primary; ссылки провайдера —
-                  // secondary и tertiary. Три роли, три разных чипа: ряд
-                  // перестаёт быть однородной полосой.
                   _CardChip(
                     icon: Icons.update_rounded,
                     label: sub.autoUpdate
@@ -967,8 +879,6 @@ class _SubCardDetails extends ConsumerWidget {
   }
 }
 
-// mobile: вся карточка тащится через ReorderableDelayedDragStartListener
-// desktop: ручка для мыши + long-press на заголовке, как на мобильном
 Widget _subHeaderDragTarget({
   required bool isDesktop,
   required int listIndex,
@@ -985,11 +895,6 @@ Widget _subHeaderDragTarget({
   );
 }
 
-/// Шапка карточки подписки: имя, провайдер, кнопки обновления и меню.
-///
-/// Отдельный виджет, а не кусок общего `build()`: он сам подписан на то,
-/// свёрнута ли карточка и идёт ли обновление, поэтому вращение кнопки
-/// обновления перерисовывает шапку, а не всю карточку с её подробностями.
 class _SubCardHeader extends ConsumerWidget {
   const _SubCardHeader({
     required this.sub,
@@ -1002,9 +907,6 @@ class _SubCardHeader extends ConsumerWidget {
   final int listIndex;
   final Future<void> Function() onRefresh;
 
-  /// Меню карточки живёт в состоянии: оно открывает четыре шторки, каждая из
-  /// которых тоже метод состояния. Поднимать всю цепочку ради шапки — размен не
-  /// в нашу пользу, поэтому меню приходит сюда обработчиком.
   final VoidCallback onShowMenu;
 
   @override
@@ -1083,9 +985,6 @@ class _SubCardHeader extends ConsumerWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          // Чей это сервис на самом деле — показываем,
-                          // только если имя карточки задано своё и от
-                          // названия провайдера отличается.
                           if (sub.providerSubtitle != null)
                             Text(
                               sub.providerSubtitle!,
@@ -1135,12 +1034,6 @@ class _SubCardHeader extends ConsumerWidget {
               ),
             ),
             SizedBox(width: isDesktop ? 10 : 4),
-            // Правка, «поделиться» и удаление ушли под одну кнопку.
-            //
-            // Три иконки в шапке конкурировали с именем и делили место с
-            // ним же, а нужны они редко — в отличие от обновления, оно
-            // осталось снаружи. Удаление заодно перестало стоять в один
-            // ряд с безобидной правкой.
             IconButton(
               icon: const Icon(Icons.more_vert_rounded, size: 20),
               style: TvFocus.iconButtonStyle(context, color: textLightColor),
@@ -1179,8 +1072,6 @@ class _SubItem extends ConsumerStatefulWidget {
 class _SubItemState extends ConsumerState<_SubItem> {
   AppLocalizations get l10n => AppLocalizations.of(context)!;
 
-  /// Точечный фикс для http-подписки: с 0.7.6 такие не обновляются
-  /// (isSafeUrl принимает только https). Меняем схему и сразу пробуем обновить.
   Future<void> _switchToHttps() async {
     final httpsUrl = widget.sub.url
         .trim()
@@ -1204,9 +1095,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
   @override
   Widget build(BuildContext context) {
     final sub = widget.sub;
-    // Карточка сама почти ничего больше не рисует: шапка, плашки и подробности
-    // разошлись по своим виджетам и подписываются на нужное им сами. Здесь
-    // остались подложка, её форма и порядок частей.
     final cardColor = AppTheme.card(context);
     final cardTheme = resolveCardTheme(sub.cardThemeId);
     final cardRadius = BorderRadius.circular(ExpressiveShape.largeIncreased);
@@ -1216,7 +1104,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: cardRadius,
-          // Нейтральная тень как высота — см. то же в server_groups.
           boxShadow: [
             BoxShadow(
               color:
@@ -1226,8 +1113,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
             ),
           ],
         ),
-        // Подложка темы обрезается формой карточки и лежит под содержимым,
-        // не перехватывая нажатия: карточка целиком остаётся кликабельной.
         child: Stack(
           children: [
             if (!cardTheme.isPlain)
@@ -1248,15 +1133,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
               onRefresh: widget.onRefresh,
               onShowMenu: () => _showCardMenu(context),
             ),
-            // Истёкшая подписка — всегда на виду, вне сворачиваемой части:
-            // провайдер о конце срока клиенту не сообщает, а панель обычно
-            // продолжает отдавать те же серверы, поэтому раньше «просто не
-            // обновляется» выглядело как баг приложения.
-            // Объявление провайдера: техработы, смена адреса и подобное.
-            // Роль tertiary — «обратите внимание», ровно её назначение; красный
-            // здесь был бы неверен, это не ошибка. Свёрнутая карточка режет
-            // текст до двух строк, раскрытая показывает целиком — отдельного
-            // органа управления заводить не пришлось, чевron уже есть.
             if (sub.announce != null &&
                 sub.showsCard(SubscriptionCardElement.announce))
               _SubAnnounceBanner(sub: sub),
@@ -1276,8 +1152,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
     final nameCtrl = TextEditingController(text: sub.name);
     final urlCtrl = TextEditingController(text: sub.url);
     var identity = sub.fetchIdentity;
-    // Ошибка сохранения (например, дубликат URL) — показываем в самой шторке:
-    // snackbar был бы скрыт за модальным барьером.
     String? editError;
 
     final cardColor = AppTheme.card(context);
@@ -1290,9 +1164,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      // Настоящая ручка вместо нарисованной: прежняя была просто Container
-      // внутри содержимого — выглядела как ручка, но тянуть за неё было
-      // нельзя, и шторка закрывалась только тапом мимо неё.
       showDragHandle: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
@@ -1320,9 +1191,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
                 hintStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: textLightColor.withValues(alpha: 0.5),
                     ),
-                // Заливка или обводка, а не то и другое разом: у M3 filled-поле
-                // рамки не носит, её роль там играет сама заливка. Обводка
-                // остаётся только на фокусе — как индикатор, а не как контур.
                 filled: true,
                 fillColor: cardColor,
                 contentPadding: const EdgeInsets.symmetric(
@@ -1356,8 +1224,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Заголовок как в остальных шторках: по центру и в усиленном
-                // варианте роли — раньше он один был выключен влево и без веса.
                 SizedBox(
                   width: double.infinity,
                   child: Text(
@@ -1371,9 +1237,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
                 const SizedBox(height: 20),
                 inputField(nameCtrl, l10n.subscriptionNameLabel, sub.name),
                 const SizedBox(height: 10),
-                // Копирование — микро-кнопкой в самом поле, а не отдельной
-                // широкой кнопкой ниже: действие относится к этой строке, и
-                // рядом с ней ему и место. Заодно шторка теряет целый ряд.
                 inputField(
                   urlCtrl,
                   l10n.subscriptionUrlLabel,
@@ -1402,11 +1265,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Оформления здесь нет намеренно: вход в него — пункт «Вид
-                // карточки» в меню подписки, и второй вход внутри редактора был
-                // лишним. Настройки оформления применяются сразу, а редактор
-                // живёт под кнопкой «Сохранить» — держать их в одном списке
-                // значит показывать рядом две кнопки с разными правилами.
                 _IdentityTile(
                   identity: identity,
                   onTap: () async {
@@ -1426,17 +1284,10 @@ class _SubItemState extends ConsumerState<_SubItem> {
                         ?.copyWith(color: AppTheme.red(ctx)),
                   ),
                 ],
-                // Ни «поделиться», ни стрелок перестановки здесь нет: делиться
-                // предлагает меню карточки, а порядок задаётся перетаскиванием
-                // самой карточки. Дублировать их в редакторе — превращать его
-                // в панель со всем сразу; здесь правят подписку, и только.
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   height: 56,
-                  // Главное действие — FilledButton, а не ElevatedButton:
-                  // у M3 приподнятая кнопка с тенью это отдельная, куда более
-                  // скромная роль. Форма снова из темы.
                   child: FilledButton(
                     style: FilledButton.styleFrom(
                       backgroundColor: accentContainerColor,
@@ -1452,15 +1303,12 @@ class _SubItemState extends ConsumerState<_SubItem> {
                             .editMeta(
                               sub.id,
                               name: newName.isNotEmpty ? newName : null,
-                              // Очистили поле — просим вернуть автоматическое
-                              // имя, а не «оставить как было».
                               resetName: newName.isEmpty,
                               url: newUrl,
                               fetchIdentity: identity,
                             );
                       } catch (e) {
-                        // например, дубликат URL: без catch ошибка молча уходит
-                        // в zone, и диалог «не реагирует» на Save
+                        // без catch ошибка уходит в zone, и Save молча ничего не делает
                         if (ctx.mounted) {
                           setSheet(() => editError = friendlyError(e, ctx));
                         }
@@ -1484,21 +1332,12 @@ class _SubItemState extends ConsumerState<_SubItem> {
     );
   }
 
-  /// Меню карточки подписки.
-  ///
-  /// Шторка, а не `PopupMenuButton`: все прочие меню действий в приложении
-  /// (долгое нажатие на сервер, добавление конфигов, сортировка) уже сделаны
-  /// этим компонентом, и всплывающее меню оставалось единственным местом с
-  /// чужой анатомией — оттого и выглядело «обычным».
   void _showCardMenu(BuildContext context) {
     final sub = widget.sub;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       builder: (ctx) => SafeArea(
-        // Прокрутка, а не просто Column: пунктов в меню уже пять, и на
-        // невысоком экране (или при крупном системном шрифте) неподвижная
-        // колонка рвётся по нижнему краю вместо того, чтобы прокрутиться.
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
           child: Column(
@@ -1528,9 +1367,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
                       _showEditDialog(context);
                     },
                   ),
-                  // Оформление — рядом с правкой, а не внутри неё: менять вид
-                  // карточки хочется чаще, чем её адрес, и идти за этим в
-                  // форму с полем URL незачем.
                   ExpressiveActionTile(
                     icon: Icons.style_rounded,
                     title: l10n.subscriptionCardLookTitle,
@@ -1552,7 +1388,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Удаление — отдельной группой и в роли error, как в меню сервера.
               ExpressiveGroup(
                 children: [
                   ExpressiveActionTile(
@@ -1573,11 +1408,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
     );
   }
 
-  /// Открывает ссылку провайдера, а если открыть нечем — говорит об этом,
-  /// вместо того чтобы молча ничего не сделать.
-
-  /// Лист «Поделиться»: показывает QR подписки + ссылку и шарит их через
-  /// системный share (QR как PNG-файл + текст ссылки) — можно кинуть другу.
   void _showShareSheet(BuildContext context) {
     final sub = widget.sub;
     final l10n = AppLocalizations.of(context)!;
@@ -1664,7 +1494,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
     );
   }
 
-  /// QR из диалога картинкой PNG; null — диалог уже закрыт.
   Future<Uint8List?> _qrPng(GlobalKey qrKey) async {
     final boundary =
         qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
@@ -1679,9 +1508,7 @@ class _SubItemState extends ConsumerState<_SubItem> {
     return 'keqdis_sub_${safe.isEmpty ? 'qr' : safe}.png';
   }
 
-  /// На Linux поделиться файлом нечем: share_plus файлы там не передаёт и
-  /// бросает исключение, а общей «панели поделиться» у Linux нет. Картинку
-  /// сохраняем туда, куда человек укажет.
+  // на Linux share_plus файлы не передаёт и кидает исключение, поэтому сохраняем
   Future<void> _saveQr(BuildContext ctx, GlobalKey qrKey) async {
     final l10n = AppLocalizations.of(context)!;
     String message;
@@ -1704,7 +1531,6 @@ class _SubItemState extends ConsumerState<_SubItem> {
             : friendlyError(e, context),
       );
     }
-    // Шторка с QR закрывает низ экрана вместе с сообщением — убираем её.
     if (ctx.mounted) Navigator.of(ctx).pop();
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -1798,26 +1624,16 @@ class _SubItemState extends ConsumerState<_SubItem> {
 
 }
 
-/// Слайдер оформления карточки в редакторе подписки.
-///
-/// Образцы — та же самая подложка, что рисуется на карточке, только маленькая:
-/// превью, нарисованное отдельно, рано или поздно разойдётся с настоящим видом.
 class _CardThemePicker extends StatefulWidget {
   final String currentId;
 
-  /// Выбранная тема целиком, а не «переключи»: снятие темы повторным тапом —
-  /// дело самого слайдера, а выбор своей картинки её всегда включает.
   final ValueChanged<String> onSelect;
 
-  /// Нужен, чтобы назвать файл картинки: у каждой подписки своя, и они не
-  /// должны затирать друг друга.
   final String subscriptionId;
 
-  /// Показывать ли подложку и в шапке группы серверов.
   final bool inServers;
   final ValueChanged<bool> onInServersChanged;
 
-  /// Затемнение, с которым рисуются образцы: то же, что у самой карточки.
   final CardVeil veil;
 
   const _CardThemePicker({
@@ -1834,11 +1650,8 @@ class _CardThemePicker extends StatefulWidget {
 }
 
 class _CardThemePickerState extends State<_CardThemePicker> {
-  /// Почему картинку не взяли — под самой каруселью.
   String? _error;
 
-  /// Свой контроллер нужен ради колеса мыши: карусель без него на десктопе
-  /// не листается вовсе (см. [HorizontalMouseScroll]).
   final CarouselController _carousel = CarouselController();
 
   @override
@@ -1853,8 +1666,6 @@ class _CardThemePickerState extends State<_CardThemePicker> {
     try {
       result = await CardImageService.pick(subscriptionId: widget.subscriptionId);
     } catch (e) {
-      // Системный выбор файла может не открыться вовсе (Linux без портала и
-      // без zenity) — причину показываем там же, где и отказ по картинке.
       if (mounted) setState(() => _error = friendlyErrorDetailed(e, context));
       return;
     }
@@ -1862,9 +1673,6 @@ class _CardThemePickerState extends State<_CardThemePicker> {
 
     final rejection = result.rejection;
     if (rejection != null) {
-      // Прямо в шторке, а не снекбаром: снекбар рисует Scaffold под модальной
-      // шторкой, и объяснение осталось бы за ней — со стороны выглядело бы,
-      // что нажатие вообще ничего не сделало.
       setState(() => _error = switch (rejection) {
             CardImageRejection.aspect => l10n.cardImageRejectAspect,
             CardImageRejection.tooSmall =>
@@ -1895,15 +1703,6 @@ class _CardThemePickerState extends State<_CardThemePicker> {
                 ),
           ),
         ),
-        // Карусель M3, а не полоса одинаковых миниатюр.
-        //
-        // Раскладка multi-browse: крупный элемент, средний и мелкий, и они
-        // меняют размер по мере прокрутки — выбор картинки этим и живёт, крупный
-        // элемент показывает её так, как она ляжет на карточку, а прежние
-        // одинаковые 92 px не показывали толком ничего.
-        //
-        // Числа из измерений спеки: радиус элемента 28dp, между элементами 8dp
-        // (по 4 вокруг каждого — это и есть умолчание `padding`).
         SizedBox(
           height: _cardThemeCarouselHeight,
           child: HorizontalMouseScroll(
@@ -1918,16 +1717,12 @@ class _CardThemePickerState extends State<_CardThemePicker> {
               borderRadius: ExpressiveShape.radius(ExpressiveShape.extraLarge),
             ),
             backgroundColor: AppTheme.card(context),
-            // Первым элементом — «своя картинка». Раньше там стояла пустая
-            // карточка «без темы»: место занимала, а делать с ней было нечего.
-            // Отказаться от темы можно, выбрав её же повторно.
             onTap: (index) {
               if (index == 0) {
                 unawaited(_pick());
                 return;
               }
               final theme = kSubscriptionCardThemes[index - 1];
-              // Повторный тап по выбранной теме снимает её.
               widget.onSelect(theme.id == currentId ? '' : theme.id);
             },
             children: [
@@ -1953,11 +1748,6 @@ class _CardThemePickerState extends State<_CardThemePicker> {
                   ?.copyWith(color: AppTheme.red(context)),
             ),
           ),
-        // Тумблер появляется только когда выбрана картинка: он и обещает
-        // ровно её («картинка заполнит и шапку группы»), а у палитры
-        // переносить нечего — цвета уезжают в группу и без него. Пока условием
-        // было «тема выбрана», включённый тумблер на палитре растил шапку
-        // группы на пустую полосу.
         if (resolveCardTheme(currentId).hasImage)
           Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -1977,30 +1767,8 @@ class _CardThemePickerState extends State<_CardThemePicker> {
   }
 }
 
-/// Первый слот слайдера: своя картинка.
-///
-/// Пока не выбрана — кнопка с плюсом и допустимым размером: требование к
-/// картинке читается до того, как файл выбран и отвергнут. Выбрана — её же
-/// миниатюра.
-///
-/// Путь к файлу слот достаёт сам по id темы, а не получает сверху: иначе его
-/// пришлось бы асинхронно резолвить при открытии шторки и протаскивать через
-/// весь редактор ради одной картинки.
-/// Высота карусели тем: элемент плюс отступы `padding` сверху и снизу.
-///
-/// Крупный элемент карусели заметно шире прежних 92 px, и низкая полоса рядом с
-/// ним читалась бы обрезком: пропорции элемента должны напоминать саму карточку.
 const _cardThemeCarouselHeight = 88.0;
 
-/// Содержимое элемента карусели, которое не должно ездить при прокрутке.
-///
-/// Элемент карусели непрерывно меняет ширину — в этом весь смысл раскладки
-/// multi-browse. Центрированное содержимое пересчитывает свою позицию на каждый
-/// такой кадр и потому бегает туда-сюда внутри сжимающегося элемента: движение
-/// есть, а смысла в нём нет.
-///
-/// Поэтому содержимое держится за левый край и стоит на месте, а лишнее просто
-/// уезжает под обрез — так же, как уезжает под него картинка.
 class _CarouselLabel extends StatelessWidget {
   const _CarouselLabel({required this.child});
 
@@ -2020,11 +1788,6 @@ class _CarouselLabel extends StatelessWidget {
   }
 }
 
-/// Кольцо выбранного элемента карусели.
-///
-/// Обводкой по всему краю, а не рамкой снаружи: элементы карусели меняют ширину
-/// на ходу и обрезаются её формой, так что рамке снаружи просто негде жить.
-/// Радиус тот же, что у карусели, — кольцо ложится ровно по её краю.
 class _CardThemeRing extends StatelessWidget {
   const _CardThemeRing();
 
@@ -2039,7 +1802,6 @@ class _CardThemeRing extends StatelessWidget {
   }
 }
 
-/// Элемент карусели с готовой темой.
 class _CardThemeSlot extends StatelessWidget {
   const _CardThemeSlot({
     required this.theme,
@@ -2057,9 +1819,6 @@ class _CardThemeSlot extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Образец с тем же затемнением, что выбрано у карточки: иначе картинка
-        // в карусели и на карточке выглядели бы по-разному, а выбирают здесь
-        // именно по виду.
         theme.background(context, veil: veil),
         if (theme.isPlain)
           _CarouselLabel(
@@ -2093,8 +1852,7 @@ class _CustomImageSlot extends StatelessWidget {
       fit: StackFit.expand,
       children: [
           FutureBuilder<String?>(
-            // Ключ по id: сменили картинку — future пересоздаётся и миниатюра
-            // обновляется, иначе на месте новой осталась бы старая.
+            // ключ по id: иначе после смены картинки FutureBuilder показывал бы старую
             key: ValueKey(themeId),
             future: CardImageService.resolvePath(themeId),
             builder: (context, snapshot) {
@@ -2135,8 +1893,6 @@ class _CustomImageSlot extends StatelessWidget {
                     fit: BoxFit.cover,
                     errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
-                  // За левый край, как и подписи: у правого края элемент
-                  // карусели сжимается, и значок ехал бы по картинке.
                   Align(
                     alignment: AlignmentDirectional.bottomStart,
                     child: Padding(
@@ -2166,8 +1922,6 @@ class _CardChip extends StatelessWidget {
   final VoidCallback onTap;
   final ExpressiveAccent accent;
 
-  /// Выключенное состояние: чип остаётся на месте и нажимается, но уходит в
-  /// нейтральный тон и перестаёт звать цветом.
   final bool muted;
 
   const _CardChip({
@@ -2178,8 +1932,6 @@ class _CardChip extends StatelessWidget {
     this.muted = false,
   });
 
-  // На телевизоре фокус заливает чип (см. TvFocusHighlight), и цвета ниже
-  // берутся уже под его темой — поэтому чип строится внутри обёртки.
   @override
   Widget build(BuildContext context) => TvFocusHighlight(
         radius: ExpressiveShape.radius(ExpressiveShape.small),

@@ -2,37 +2,17 @@ import 'dart:convert';
 
 import 'package:yaml/yaml.dart';
 
-/// Готовый конфиг Clash/mihomo в роли сервера — то, что панели отдают
-/// clash-клиентам вместо списка ссылок: свои `proxies`, `proxy-groups`, `rules`
-/// и `dns`. Аналог [CustomXrayConfig] на другом ядре: исполняет такой конфиг
-/// только mihomo, xray его формата не знает вовсе.
-///
-/// Хранится и отдаётся ядру как JSON. YAML 1.2 — надмножество JSON, mihomo
-/// разбирает его тем же парсером, а всё остальное приложение работает с
-/// `jsonDecode` и не обязано знать про YAML. Разбор YAML нужен ровно один раз,
-/// на импорте.
-///
-/// Инбаунды автора не берём никогда — порты и креды диктует приложение (их ждёт
-/// нативная часть). Всё остальное авторское: за роутингом такой конфиг и берут.
+// храним JSON: YAML 1.2 его надмножество, и mihomo разбирает тем же парсером. инбаунды автора не берём никогда
 class CustomClashConfig {
   CustomClashConfig._(this.map);
 
-  /// Разобранный конфиг. [buildSessionConfig] работает с копией.
   final Map<String, dynamic> map;
 
-  /// Ключ, по которому конфиг узнаётся: без прокси это не конфиг клиента, а
-  /// что угодно ещё (метаданные подписки, ответ панели, кусок sing-box).
   static const _requiredKey = 'proxies';
 
-  /// Имя профиля. У Clash своего поля нет, но панели повсеместно кладут его в
-  /// корень — забираем те же ключи, что и у xray-конфига.
   static const _remarkKeys = ['remarks', 'remark', 'name', 'profile-name'];
 
-  /// Ключи инбаундов и всего, что делает ядро сервером или владельцем TUN.
-  ///
-  /// `tun` — самый опасный: с ним ядро полезет поднимать своё устройство
-  /// поверх того, которое уже держит VpnService, и сессия умрёт на старте.
-  /// Порты — наши: в них ходит само приложение с известными ему кредами.
+  // tun самый опасный: ядро полезет поднимать своё устройство поверх VpnService, и сессия умрёт
   static const _strippedKeys = {
     'tun',
     'port',
@@ -58,31 +38,23 @@ class CustomClashConfig {
     'tls',
     'interface-name',
     'routing-mark',
-    // Автообновление geo — это поход в сеть до того, как туннель поднялся.
+    // автообновление geo это поход в сеть до того, как поднялся туннель
     'geo-auto-update',
     'geo-update-interval',
     'geox-url',
   };
 
-  /// Похоже ли на конфиг Clash. Дешёвая отсечка перед полным разбором: её
-  /// зовут из `ServerItem.protocol`, то есть на каждую перерисовку плитки.
   static bool looksLikeClash(String raw) {
     final text = raw.trimLeft();
     if (text.isEmpty) return false;
     if (text.startsWith('{')) {
-      // JSON-форма: `proxies` среди корневых ключей — либо `proxy-providers`,
-      // когда узлы лежат за ссылкой и ключа `proxies` в конфиге нет вовсе.
-      // Без второго варианта такой профиль, сохранённый сервером, переставал
-      // узнаваться и уезжал в «неизвестный формат» — то есть на xray.
+      // или proxy-providers: без этого профиль на провайдерах уезжал в неизвестный формат, то есть на xray
       return RegExp(r'"(proxies|proxy-providers)"\s*:').hasMatch(text);
     }
-    // YAML: ключ верхнего уровня, то есть в начале строки и без отступа.
     return RegExp(r'^(proxies|proxy-groups|proxy-providers)\s*:', multiLine: true)
         .hasMatch(text);
   }
 
-  /// Разбирает конфиг (YAML или JSON). null — не пригодный clash-конфиг.
-  /// Причину для пользователя даёт [describeProblem].
   static CustomClashConfig? tryParse(String raw) {
     final decoded = _decode(raw);
     if (decoded == null) return null;
@@ -90,28 +62,16 @@ class CustomClashConfig {
   }
 
   static CustomClashConfig? _fromMap(Map<String, dynamic> map) {
-    // У прокси Clash обязателен `type` и адрес: без них это не список серверов,
-    // а что-то другое, случайно попавшее под тот же ключ.
     if (proxiesOf(map).any((p) =>
         p['type'] != null &&
         (p['server']?.toString().trim().isNotEmpty ?? false))) {
       return CustomClashConfig._(map);
     }
-    // Узлы бывают не в конфиге, а за ним: `proxy-providers` — это ссылка на
-    // список, который ядро скачивает само. Панели отдают такие профили
-    // clash-клиентам сплошь и рядом, и внутри у них нет ни одного `proxies`.
-    // Разбирать их на серверы нечем (списка ещё нет), зато mihomo исполняет
-    // такой конфиг ровно так, как написал автор.
     if (usesProviderNodes(map)) return CustomClashConfig._(map);
     return null;
   }
 
-  /// Узлы приезжают из `proxy-providers`, а не лежат в конфиге.
-  ///
-  /// Группы обязательны: правило роутинга должно куда-то указывать, а с
-  /// провайдерами единственная осмысленная цель — группа. Без них
-  /// [primaryTarget] вернул бы `DIRECT`, и весь трафик молча пошёл бы мимо
-  /// туннеля — то есть подключение «работает», а прокси нет.
+  // группы обязательны: без них primaryTarget вернёт DIRECT, и трафик молча пойдёт мимо туннеля
   static bool usesProviderNodes(Map<String, dynamic> map) {
     final providers = map['proxy-providers'];
     if (providers is! Map || providers.isEmpty) return false;
@@ -119,16 +79,8 @@ class CustomClashConfig {
     return groups is List && groups.isNotEmpty;
   }
 
-  /// Конфиг держит узлы в `proxy-providers`: своего адреса у него нет, и это
-  /// не признак болванки — просто список ещё не скачан.
   bool get usesProviders => proxies.isEmpty && usesProviderNodes(map);
 
-  /// Причина, почему конфиг не годится сервером — для сообщения пользователю.
-  ///
-  /// Текст обязан называть конкретную причину: «формат не поддерживается» про
-  /// Clash — прямая неправда, мы его исполняем, и с таким ответом непонятно,
-  /// что вообще делать. Сорванный разбор отдаёт сообщение самого парсера: у
-  /// панелей payload бывает битым, и это единственное, по чему видно, чем.
   static String? describeProblem(String raw) {
     final decoded = _decode(raw);
     if (decoded == null) {
@@ -150,8 +102,6 @@ class CustomClashConfig {
     return '"proxies" carry no type/server — this is not a proxy list';
   }
 
-  /// Сообщение YAML-парсера, если разбор сорвался; null — разобралось (просто
-  /// не в карту). Сообщения бывают многострочными и очень длинными — режем.
   static String? _decodeError(String raw) {
     final text = raw.trim();
     if (text.isEmpty) return 'empty response';
@@ -164,8 +114,6 @@ class CustomClashConfig {
     }
   }
 
-  /// Все конфиги из одного payload подписки. У Clash это всегда один документ,
-  /// но форма списка встречается у панелей, отдающих несколько профилей.
   static List<String> extractConfigs(String raw) {
     final text = raw.trim();
     if (text.isEmpty) return const [];
@@ -191,8 +139,6 @@ class CustomClashConfig {
     return decoded is Map<String, dynamic> ? decoded : null;
   }
 
-  /// YAML или JSON → обычные dart-типы. Сначала JSON: он строже, быстрее и
-  /// покрывает конфиги, которые панель отдаёт в json-форме.
   static Object? _decodeRaw(String raw) {
     final text = raw.trim();
     if (text.isEmpty) return null;
@@ -200,7 +146,7 @@ class CustomClashConfig {
       try {
         return _plain(jsonDecode(text));
       } on Object {
-        // Не JSON — пробуем как YAML: он допускает то, что jsonDecode не берёт.
+        // не JSON, пробуем как YAML
       }
     }
     try {
@@ -210,8 +156,6 @@ class CustomClashConfig {
     }
   }
 
-  /// YamlMap/YamlList/скаляры → Map/List/скаляры. Ключи приводим к строкам:
-  /// YAML разрешает и числовые, а дальше по коду везде строковые.
   static Object? _plain(Object? node) {
     if (node is Map) {
       return <String, dynamic>{
@@ -223,7 +167,6 @@ class CustomClashConfig {
     return node;
   }
 
-  /// Конфиг как текст для хранения и правки руками.
   String encode() => const JsonEncoder.withIndent('  ').convert(map);
 
   static List<Map<String, dynamic>> proxiesOf(Map<String, dynamic> map) {
@@ -245,12 +188,7 @@ class CustomClashConfig {
     return '';
   }
 
-  /// Куда слать трафик, который наши правила отправляют в прокси.
-  ///
-  /// Правильный ответ — то же, что выбирает сам конфиг: первая группа
-  /// (у панелей это селектор вида «Proxy»/«🚀 节点选择»), а если групп нет —
-  /// первый прокси. Ссылаться на группу важнее, чем на узел: пользователь
-  /// переключает узлы внутри неё, и правило обязано ехать за его выбором.
+  // на группу, а не на узел: узлы переключают внутри неё, и правило должно ехать за выбором
   String get primaryTarget {
     final groups = map['proxy-groups'];
     if (groups is List) {
@@ -265,9 +203,6 @@ class CustomClashConfig {
     return name.isEmpty ? 'DIRECT' : name;
   }
 
-  /// Адрес и порт первого прокси. По ним идёт tcp-пинг и исключение сервера из
-  /// туннеля; для конфига с десятком узлов это лишь «первый», но другого
-  /// осмысленного ответа у такого сервера нет.
   ({String address, int port}) get endpoint {
     for (final proxy in proxies) {
       final address = proxy['server']?.toString().trim() ?? '';
@@ -281,14 +216,7 @@ class CustomClashConfig {
   String get address => endpoint.address;
   int get port => endpoint.port;
 
-  /// Конфиг сессии: авторские прокси/группы/правила/dns + наши инбаунд,
-  /// снифер, api и списки роутинга.
-  ///
-  /// [prependRules] — раньше авторских (защита LAN-инбаундов и сам сервер:
-  /// правило против круга обязано решать первым).
-  /// [appendRules] — после авторских, но перед их `MATCH`: правило после
-  /// catch-all не сработает никогда, а в конфигах Clash catch-all есть почти
-  /// всегда.
+  // наши списки перед авторским MATCH: после catch-all правило не сработает никогда
   Map<String, dynamic> buildSessionConfig({
     required Map<String, dynamic> inbound,
     required Map<String, dynamic> sniffer,
@@ -310,14 +238,11 @@ class CustomClashConfig {
     out.addAll(inbound);
     out['log-level'] = logLevel;
     out['sniffer'] = sniffer;
-    // Базы geo у нас вшитые (v2fly `.dat`), ядро берёт их из рабочего каталога.
     out['geodata-mode'] = true;
     out['geo-auto-update'] = false;
     out['find-process-mode'] = 'off';
 
-    // DNS автора уважаем, но только если он включён: с выключенным ядро идёт в
-    // системный резолвер, а на Android его нет (`/etc/resolv.conf` отсутствует),
-    // и не резолвится даже адрес самого сервера.
+    // DNS автора только включённый: с выключенным ядро идёт в системный резолвер, а на Android его нет
     final authorDns = out['dns'];
     final authorDnsEnabled =
         authorDns is Map && authorDns['enable'] == true &&
@@ -330,8 +255,7 @@ class CustomClashConfig {
       append: appendRules,
     );
 
-    // Выходы «других серверов» маршрутов — после авторских: имена у них свои
-    // (`keq-srv-…`), а первым у автора остаётся его собственный узел.
+    // после авторских: первым у автора должен остаться его узел
     if (extraProxies.isNotEmpty) {
       final authorProxies = out['proxies'];
       out['proxies'] = [
@@ -350,10 +274,7 @@ class CustomClashConfig {
     return [for (final rule in raw) rule.toString()];
   }
 
-  /// Склейка правил: наши защитные — первыми, наши списки — перед авторским
-  /// `MATCH`, авторский `MATCH` остаётся последним. Своего `MATCH` не
-  /// добавляем: у автора он почти всегда есть, а если нет — ядро само шлёт
-  /// несовпавшее в `DIRECT` (`tunnel.match`), и это его решение, не наше.
+  // своего MATCH не добавляем: без авторского ядро само шлёт в DIRECT, это его решение
   static List<String> _mergeRules({
     required List<String> authorRules,
     required List<String> prepend,

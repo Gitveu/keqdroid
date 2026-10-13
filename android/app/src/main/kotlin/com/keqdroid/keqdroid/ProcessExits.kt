@@ -8,21 +8,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * Как заканчивались прошлые жизни процесса приложения (Android 11+).
- *
- * Жалобу «туннель умер в фоне» иначе не проверить: убитый снаружи процесс
- * ничего не пишет в свои логи, а следующая его жизнь не знает о предыдущей.
- * Система же помнит, кто его убил и почему, вплоть до строки от убийцы
- * прошивки, и отдаёт это самому приложению без разрешений.
- */
+// убитый снаружи процесс в свои логи ничего не пишет, а система помнит, кто и почему, и отдаёт это без разрешений
 object ProcessExits {
 
-    /**
-     * Отдать системе статус сессии заранее: он вернётся вместе с записью о
-     * смерти процесса. Без него запись не отличает «убили посреди работы
-     * VPN» от «убили давно простаивающее приложение».
-     */
+    // без статуса запись не отличит убийство посреди VPN от убийства простаивающего приложения
     fun noteVpnStatus(context: Context, status: String) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         runCatching {
@@ -31,7 +20,6 @@ object ProcessExits {
         }
     }
 
-    /** Последние смерти процесса, от свежей к старой; пусто до Android 11. */
     fun recent(context: Context, max: Int = 10): List<Map<String, Any?>> =
         records(context, max).map { info ->
             mapOf(
@@ -45,10 +33,6 @@ object ProcessExits {
             )
         }
 
-    /**
-     * Прошлая смерть процесса одной строкой — для лога ядра сессии, которую
-     * система подняла после неё. Null — записей нет.
-     */
     fun describeLast(context: Context): String? {
         val info = records(context, 1).firstOrNull() ?: return null
         val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(info.timestamp))
@@ -57,8 +41,6 @@ object ProcessExits {
         return "$time, ${reasonName(info.reason)}, status ${info.status}$vpn$description"
     }
 
-    /// Имя константы REASON_* из ApplicationExitInfo: в отчёте и логе число
-    /// пришлось бы каждый раз искать по документации.
     private fun reasonName(reason: Int): String = when (reason) {
         ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
         ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"

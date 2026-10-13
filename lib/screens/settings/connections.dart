@@ -1,12 +1,5 @@
 part of '../settings_tab.dart';
 
-/// Дебаг-экран «Соединения»: что, куда и по какому правилу идёт прямо сейчас.
-///
-/// Данные берёт [ConnectionsService]; полнота зависит не от платформы, а от
-/// ядра. Живой снимок из clash_api (с байтами и правилом) дают keqrnel на
-/// десктопе и mihomo на Android. Android+xray остаётся особым случаем: API у
-/// ядра нет вовсе, поэтому там разбор access-лога — без байт и без правила,
-/// пока уровень логов ниже Info.
 class _ConnectionsScreen extends ConsumerStatefulWidget {
   const _ConnectionsScreen();
 
@@ -21,8 +14,6 @@ class _ConnectionsScreenState extends ConsumerState<_ConnectionsScreen> {
   String _filter = '';
   Timer? _pollTimer;
 
-  /// Прошлый снимок ещё читается — новый не просим: на медленном ядре
-  /// запросы иначе наслаивались бы каждые две секунды.
   bool _refreshing = false;
   final _filterCtrl = TextEditingController();
 
@@ -76,8 +67,6 @@ class _ConnectionsScreenState extends ConsumerState<_ConnectionsScreen> {
         .toList();
   }
 
-  /// Уровень логов ядра на Info — без него xray не печатает, какое правило
-  /// сработало, и колонка «правило» на Android остаётся пустой.
   Future<void> _enableInfoLogs() async {
     final settings = ref.read(settingsNotifierProvider).value;
     if (settings == null) return;
@@ -96,8 +85,6 @@ class _ConnectionsScreenState extends ConsumerState<_ConnectionsScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // Туннель переподняли — соединения прошлой сессии ядра к новой отношения не
-    // имеют, накопленное трекером выкидываем.
     ref.listen(vpnStateProvider.select((s) => s.value?.status), (_, _) {
       ConnectionsService.resetTracker();
     });
@@ -107,22 +94,12 @@ class _ConnectionsScreenState extends ConsumerState<_ConnectionsScreen> {
         (a) => a.value?.xrayCore.logLevel ?? 'warning',
       ),
     );
-    // Правило ядро печатает только на уровне Info — и когда оно само инбаунд
-    // (Android, там же и домены: xray называет их только строкой сниффера), и
-    // когда работает встроенным движком за sing-box (десктоп): там clash_api
-    // знает лишь «отдал движку».
     final showLogLevelHint = !_snapshot.ruleInfoAvailable &&
         _snapshot.source != ConnectionsSource.unavailable &&
         logLevel != 'info' &&
         logLevel != 'debug';
-    // Владельца ищем по исходному сокету из самой записи, а система знает
-    // только живые сокеты. Когда в списке одни закрытые, колонка пуста у
-    // всех, и молчать об этом нельзя: выглядит поломкой.
     final showAppNamesHint =
         Platform.isAndroid && !_snapshot.appNamesAvailable;
-    // Сплит-туннель на Android делает система: исключённые приложения идут
-    // мимо TUN, их трафик не видит ядро вовсе. В списке их поэтому
-    // не бывает никогда — и это не пропажа, а как раз то, о чём просили.
     final split = ref.watch(splitTunnelingProvider);
     final showSplitNote = Platform.isAndroid &&
         (split.excludePackages.isNotEmpty || split.includePackages.isNotEmpty);
@@ -324,7 +301,6 @@ class _ConnectionsScreenState extends ConsumerState<_ConnectionsScreen> {
     );
   }
 
-  /// Плашка-объяснение без действия: сделать за пользователя тут нечего.
   Widget _noticeBox(
     BuildContext context,
     IconData icon,

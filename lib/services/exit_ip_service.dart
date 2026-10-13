@@ -8,29 +8,21 @@ import '../models/server_flag.dart';
 import '../utils/exit_ip_probe.dart';
 import '../utils/local_vpn_proxy.dart';
 
-/// Адрес, которым подключение видно сайтам, и его страна.
 class ExitIp {
   const ExitIp({required this.ip, this.countryCode});
 
   final String ip;
 
-  /// ISO alpha-2 в верхнем регистре; null — страну Cloudflare не назвал.
   final String? countryCode;
 
-  /// Флаг страны, если для неё есть картинка.
   FlagArt? get flag {
     final code = countryCode?.toLowerCase();
     return code != null && flagArtCodes.contains(code) ? FlagArt(code) : null;
   }
 }
 
-/// Узнаёт выход одним запросом к трассировке Cloudflare: она отдаёт и адрес
-/// (`ip=`), и страну (`loc=`), а Cloudflare приложению уже знаком по замеру
-/// пинга — нового стороннего сервиса не появляется.
-///
-/// Запрос идёт через локальный HTTP-инбаунд ядра. Пакет приложения из туннеля
-/// исключён, и прямой запрос показал бы адрес без VPN. Мимо правил
-/// пользователя его проводят сами генераторы (см. [kExitIpProbeHost]).
+// трассировка Cloudflare отдаёт и ip=, и loc=, а Cloudflare приложению уже знаком по пингу.
+// через локальный HTTP-инбаунд: пакет приложения исключён из туннеля, прямой запрос показал бы адрес без VPN
 abstract final class ExitIpService {
   static Future<ExitIp?> lookup({
     required int proxyPort,
@@ -49,15 +41,12 @@ abstract final class ExitIpService {
       }
       return parseTrace(await utf8.decodeStream(response).timeout(timeout));
     } catch (_) {
-      // Не ответил — флага просто нет: это подсказка, а не проверка связи.
       return null;
     } finally {
       client.close(force: true);
     }
   }
 
-  /// Строки `ключ=значение`. Вместо страны Cloudflare бывает пишет `XX`
-  /// (не знает) или `T1` (Tor) — флага у таких нет.
   @visibleForTesting
   static ExitIp? parseTrace(String body) {
     String? ip;

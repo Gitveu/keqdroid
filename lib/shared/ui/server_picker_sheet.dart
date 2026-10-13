@@ -13,9 +13,7 @@ import 'app_theme.dart';
 import 'expressive.dart';
 import 'server_row.dart';
 
-/// Строка списка выбора: либо заголовок группы, либо сервер. Плоский список
-/// нужен, чтобы `ListView.builder` строил строки лениво — в подписке их бывают
-/// сотни.
+// плоский список, чтобы ListView.builder строил строки лениво: их бывают сотни
 sealed class _PickerEntry {
   const _PickerEntry();
 }
@@ -33,24 +31,14 @@ final class _PickerServer extends _PickerEntry {
   const _PickerServer(this.server);
 }
 
-/// Выбор сервера: тот же список, что на главной (см. [ServerRow]) — с флагом,
-/// бейджем протокола и пингом, чтобы выбирать по тем же приметам. Какие
-/// серверы годятся, решает вызывающий: узел цепочки, «другой сервер»
-/// маршрута. Выбранный возвращается через `Navigator.pop`.
-///
-/// Серверы разложены по подпискам в том же порядке, что и на главной: без
-/// заголовков одинаковые имена из разных подписок («🇳🇱 Netherlands» у трёх
-/// провайдеров) не отличить, и выбор превращается в угадайку.
-/// Подписки и настройки читаются здесь вотчем, а не приезжают параметром:
-/// оба провайдера асинхронные, и на несозданном ещё провайдере `read` вернул бы
-/// пустоту — все группы схлопнулись бы в «ручные серверы».
+// по подпискам: одинаковые имена из разных подписок иначе не отличить.
+// подписки и настройки через watch: на несозданном асинхронном провайдере read вернёт пустоту, и группы схлопнутся в ручные
 class ServerPickerSheet extends ConsumerStatefulWidget {
   final String title;
   final String searchHint;
   final String emptyText;
   final List<ServerItem> candidates;
 
-  /// Уже выбранный сервер: у него галочка вместо плюса.
   final String? selectedId;
 
   const ServerPickerSheet({
@@ -85,11 +73,7 @@ class _ServerPickerSheetState extends ConsumerState<ServerPickerSheet> {
         .toList();
   }
 
-  /// Заголовок группы + её серверы, подписки в порядке главного списка,
-  /// ручные — в конце. Пустые группы (всё отсеял поиск) выпадают целиком.
-  ///
-  /// Порядок внутри группы берётся из её же настройки сортировки: список тот
-  /// же самый, и разъехавшийся порядок делал бы из него второй, чужой.
+  // порядок внутри группы из её же сортировки, иначе список выглядел бы чужим
   List<_PickerEntry> _entries(
     List<ServerItem> servers,
     AppLocalizations l10n,
@@ -115,8 +99,7 @@ class _ServerPickerSheetState extends ConsumerState<ServerPickerSheet> {
     }
     const manualKey = ServersNotifier.manualGroupKey;
     addGroup(l10n.serversManualGroup, manualKey, bySub[null]);
-    // Подписку могли удалить, а серверы остаться: такие не должны исчезнуть из
-    // выбора только потому, что их группе неоткуда взять имя.
+    // подписку могли удалить, а серверы остаться: из выбора они пропадать не должны
     final known = {for (final sub in subs) sub.id};
     for (final entry in bySub.entries) {
       final id = entry.key;
@@ -191,8 +174,6 @@ class _ServerPickerSheetState extends ConsumerState<ServerPickerSheet> {
                 Flexible(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    // Карточка вокруг списка — как группа серверов на главной:
-                    // строки не должны висеть на голом фоне шторки.
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: AppTheme.card(context),
@@ -225,8 +206,6 @@ class _ServerPickerSheetState extends ConsumerState<ServerPickerSheet> {
     );
   }
 
-  /// Заголовок подписки внутри списка. Своя подложка, а не просто текст:
-  /// иначе он читается как ещё одна строка выбора.
   Widget _groupHeader(String title, int count) => Container(
         height: 38,
         width: double.infinity,

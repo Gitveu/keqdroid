@@ -14,8 +14,6 @@ AppRoutingMode routingModeFromSplit({
   return AppRoutingMode.allProxy;
 }
 
-/// Записи сплита для правил ядра: путь остаётся путём («только этот файл»),
-/// имя приводится к виду, в котором его видит ядро.
 List<String> processNamesForSplit({
   required Set<String> includePackages,
   required Set<String> excludePackages,

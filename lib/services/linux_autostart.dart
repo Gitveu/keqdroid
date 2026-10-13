@@ -7,20 +7,12 @@ import '../core/app_logger.dart';
 import 'linux_appimage_updater.dart';
 import 'linux_desktop_entry.dart';
 
-/// Автозапуск на Linux: ярлык в `~/.config/autostart` по спецификации XDG
-/// Autostart.
-///
-/// Его исполняют GNOME, KDE, XFCE, Cinnamon, MATE и LXQt. Hyprland и Sway сами
-/// автозагрузку XDG не читают — там это делают uwsm или dex, если они стоят.
-/// Флаг [flag] отличает запуск при входе от обычного: по нему приложение
-/// подключается само, если так настроено.
 class LinuxAutostart {
   LinuxAutostart._();
 
   static const flag = '--autostart';
   static const _fileName = 'keqdroid.desktop';
 
-  /// Метка нашего ярлыка: чужой файл с тем же именем не трогаем.
   static const _marker = 'X-KeqDroid-Autostart=true';
 
   static File _file() {
@@ -30,8 +22,7 @@ class LinuxAutostart {
     return File(p.join(config, 'autostart', _fileName));
   }
 
-  /// Что запускать: сам AppImage, а не бинарь в его временном монте —
-  /// тот исчезает вместе с процессом.
+  // сам AppImage: бинарь во временном монте исчезает вместе с процессом
   static String _target() =>
       LinuxAppImageUpdater.currentAppImagePath() ?? Platform.resolvedExecutable;
 
@@ -44,7 +35,6 @@ class LinuxAutostart {
     }
   }
 
-  /// true — система делает то, что просили.
   static Future<bool> setEnabled(bool enabled) async {
     try {
       final file = _file();
@@ -66,7 +56,6 @@ class LinuxAutostart {
     }
   }
 
-  /// На старте: путь в ярлыке догоняет переезд AppImage или переустановку.
   static Future<void> refresh() async {
     if (!isEnabled()) return;
     final content = contentFor(_target());
@@ -77,8 +66,7 @@ class LinuxAutostart {
     } catch (_) {}
   }
 
-  /// Запущены ли мы ярлыком автозапуска. Аргументы — из `/proc/self/cmdline`:
-  /// раннер их в Dart не передаёт, а AppRun AppImage пробрасывает как есть.
+  // раннер аргументы в Dart не передаёт, читаем /proc/self/cmdline
   static bool launchedAtLogin() {
     try {
       final raw = File('/proc/self/cmdline').readAsStringSync();

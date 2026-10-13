@@ -11,26 +11,9 @@ import '../../services/subscription_accent_service.dart';
 import '../../shared/ui/expressive.dart';
 import '../../shared/ui/server_group_anchors.dart';
 
-/// Быстрый переход по группам серверов в боковой панели десктопа.
-///
-/// Под тремя кнопками разделов остаётся полэкрана пустоты, а список серверов у
-/// человека с четырьмя подписками листается долго. Здесь те же группы и в том же
-/// порядке, что в списке: клик переключает на вкладку серверов и прокручивает к
-/// группе.
-///
-/// Прижато к низу колонки, а не к верху свободного места: разделы вверху,
-/// переход внизу — две группы кнопок, а не одна разъехавшаяся. Разделителя нет
-/// намеренно, в M3 секции навигации разделяет заголовок и воздух, а линия
-/// поперёк панели читается как шов.
-///
-/// Цвет точки берётся у темы карточки подписки — то же связывание карточки,
-/// группы и кнопки, что и в шапке группы: узнавание идёт по цвету.
 class SidebarGroupNav extends ConsumerWidget {
-  /// Узкий сайдбар (окно < 900): только значки с подсказками.
   final bool compact;
 
-  /// Переключение на вкладку серверов. Прыжок без неё бессмысленен: список
-  /// может быть не на экране.
   final VoidCallback onOpenServers;
 
   const SidebarGroupNav({
@@ -45,17 +28,12 @@ class SidebarGroupNav extends ConsumerWidget {
     final subs = ref.watch(subscriptionsProvider).value ?? const [];
 
     final groups = buildServerGroups(servers: servers, subscriptions: subs);
-    // Одна группа — это весь список: прыгать некуда, а строка занимала бы место
-    // и обещала навигацию, которой нет.
     if (groups.length < 2) return const SizedBox.shrink();
 
     final l10n = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
 
     return Expanded(
-      // Expanded + Align: забираем всю свободную высоту, но содержимое жмём
-      // вниз. Список внутри остаётся ограниченным — на десятке подписок он
-      // прокручивается, а не выдавливает разделы за край окна.
       child: Align(
         alignment: Alignment.bottomCenter,
         child: Column(
@@ -64,8 +42,6 @@ class SidebarGroupNav extends ConsumerWidget {
           children: [
             if (!compact)
               Padding(
-                // 28 слева — это 10 внешнего поля пилюли плюс 18 её
-                // собственного: заголовок встаёт ровно над текстом пунктов.
                 padding: const EdgeInsets.fromLTRB(28, 14, 16, 6),
                 child: Text(
                   l10n.sidebarJumpTitle,
@@ -77,10 +53,6 @@ class SidebarGroupNav extends ConsumerWidget {
             else
               const SizedBox(height: 12),
             Flexible(
-              // Подсветка идёт за положением списка, а не за активным сервером:
-              // активный сервер не двигается, и метка навсегда оставалась бы на
-              // своей группе, сколько бы ты ни прыгала. ValueListenableBuilder,
-              // чтобы прокрутка перестраивала только эти пункты, а не сайдбар.
               child: ValueListenableBuilder<String?>(
                 valueListenable: ServerGroupAnchors.instance.currentGroup,
                 builder: (context, currentKey, _) => ListView.builder(
@@ -96,9 +68,7 @@ class SidebarGroupNav extends ConsumerWidget {
                       title: _titleFor(group, l10n),
                       onTap: () {
                         onOpenServers();
-                        // Список мог не строиться ни разу (первый заход с
-                        // другой вкладки) — прыгаем после кадра, когда якоря
-                        // уже на месте.
+                        // список мог ещё ни разу не строиться, прыгаем после кадра, когда якоря на месте
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           unawaited(
                             ServerGroupAnchors.instance.jumpTo(group.key),
@@ -126,14 +96,6 @@ class SidebarGroupNav extends ConsumerWidget {
       };
 }
 
-/// Пункт перехода — та же пилюля, что у разделов выше, только рангом ниже:
-/// меньше рост, роль текста `labelMedium`, вместо иконки раздела — точка цвета
-/// подписки. Выбранный красится в `secondaryContainer`, как и раздел.
-///
-/// Цвет достаётся из синхронного кэша, а при промахе досчитывается в фоне —
-/// ровно как в шапке группы ([SubscriptionAccentService]): сайдбар
-/// перестраивается на каждую прокрутку списка, и `FutureBuilder` здесь гонял бы
-/// квантование картинки постоянно.
 class _GroupJumpTile extends StatefulWidget {
   final ServerGroupRef group;
   final String title;
@@ -262,8 +224,6 @@ class _GroupJumpTileState extends State<_GroupJumpTile> {
     );
 
     return Padding(
-      // Внешнее поле как у разделов выше — пилюли обеих групп стоят на одной
-      // вертикали.
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       child: widget.compact
           ? Tooltip(

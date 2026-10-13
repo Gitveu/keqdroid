@@ -3,11 +3,8 @@
 
 #include <cstdint>
 
-// Память и ресурсы процесса для слепков в app.log (MemoryWatch в Dart).
-//
-// private_bytes — выделенная память (commit): её Windows и считает занятой, и
-// её же называет событие 2004 при нехватке памяти. Рабочий набор бывает много
-// меньше: после сна страницы уходят в файл подкачки, а commit остаётся.
+// private_bytes это commit: его Windows считает занятым и его называет событие 2004.
+// рабочий набор после сна бывает много меньше, страницы уходят в подкачку
 struct ProcessResources {
   bool ok = false;
   uint64_t private_bytes = 0;
@@ -19,7 +16,7 @@ struct ProcessResources {
   uint32_t user_objects = 0;
 };
 
-// pid 0 — сам keqdroid.exe.
+// pid 0 это сам keqdroid.exe
 ProcessResources QueryProcessResources(uint32_t pid);
 
 #endif  // RUNNER_WINDOWS_PROCESS_MEMORY_H_

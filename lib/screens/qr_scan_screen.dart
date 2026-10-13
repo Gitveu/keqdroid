@@ -5,12 +5,6 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../shared/ui/app_theme.dart';
 
-/// Полноэкранный сканер QR-кодов: возвращает сырую строку первого
-/// распознанного кода через Navigator.pop, null — если пользователь вышел.
-///
-/// Только для мобильных: у mobile_scanner нет имплементации под
-/// Windows/Linux, поэтому все точки входа скрываются за
-/// `!PlatformBootstrap.isDesktop`.
 class QrScanScreen extends StatefulWidget {
   const QrScanScreen({super.key});
 
@@ -29,8 +23,6 @@ class _QrScanScreenState extends State<QrScanScreen> {
     formats: const [BarcodeFormat.qrCode],
   );
 
-  /// onDetect стреляет пачками по мере распознавания кадров —
-  /// pop делаем ровно один раз.
   bool _popped = false;
 
   @override
@@ -106,7 +98,6 @@ class _QrScanScreenState extends State<QrScanScreen> {
               ),
             ),
           ),
-          // рамка видоискателя + подсказка
           IgnorePointer(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,

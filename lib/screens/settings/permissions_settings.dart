@@ -1,9 +1,5 @@
 part of '../settings_tab.dart';
 
-/// Экран «Разрешения»: системные разрешения, которые требует приложение и
-/// которые пользователь может отозвать. Уведомления показываем с реальным
-/// статусом; остальные (камера/телефон/установка) — с входом в системные
-/// настройки приложения, где их отзывают. На Linux сюда же вынесен root для TUN.
 class _PermissionsScreen extends ConsumerStatefulWidget {
   const _PermissionsScreen();
 
@@ -17,8 +13,6 @@ class _PermissionsScreenState extends ConsumerState<_PermissionsScreen>
   bool? _notifEnabled;
   bool? _batteryUnrestricted;
 
-  /// Куда ведёт строка автозапуска (см. OemAutostart.kind): `screen`,
-  /// `appDetails` или null — у прошивки его нет, и строки нет тоже.
   String? _autostart;
 
   @override
@@ -38,7 +32,6 @@ class _PermissionsScreenState extends ConsumerState<_PermissionsScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Вернулись из системных настроек — статус разрешения мог измениться.
     if (state == AppLifecycleState.resumed) {
       _refreshNotifStatus();
       _refreshBatteryStatus();
@@ -83,8 +76,6 @@ class _PermissionsScreenState extends ConsumerState<_PermissionsScreen>
     try {
       await _channel.invokeMethod<void>('requestIgnoreBatteryOptimizations');
     } catch (_) {}
-    // Статус придёт не отсюда: диалог системный, и ответ виден только по
-    // возвращении в приложение — см. didChangeAppLifecycleState.
   }
 
   Future<void> _openAppSettings() async {
@@ -98,15 +89,10 @@ class _PermissionsScreenState extends ConsumerState<_PermissionsScreen>
     try {
       final kind = await _channel.invokeMethod<String>('getOemAutostart');
       if (mounted) setState(() => _autostart = kind == 'none' ? null : kind);
-    } catch (_) {
-      // Натив старый или не ответил — строки просто не будет.
-    }
+    } catch (_) {}
   }
 
   Future<void> _openAutostart() async {
-    // Своего экрана у прошивки нет — откроется карточка приложения, и искать
-    // переключатель человеку придётся самому. Сказать, что искать, можно
-    // только до перехода: вернётся он, уже всё сделав или бросив.
     if (_autostart == 'appDetails') {
       final l10n = AppLocalizations.of(context)!;
       final material = MaterialLocalizations.of(context);
@@ -152,13 +138,10 @@ class _PermissionsScreenState extends ConsumerState<_PermissionsScreen>
     final accent = AppTheme.accent(context);
     final granted = _notifEnabled == true;
     return [
-      // Строки разрешений — в контейнере, как везде в настройках: голыми на
-      // фоне этот экран выпадал из общей раскладки.
       ExpressiveCard(
         padding: EdgeInsets.zero,
         child: Column(
           children: [
-            // Уведомления — единственное разрешение с реальным статусом/запросом.
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               leading: Icon(Icons.notifications_active_rounded, color: accent),
@@ -167,9 +150,6 @@ class _PermissionsScreenState extends ConsumerState<_PermissionsScreen>
               trailing: _statusChip(granted),
               onTap: granted ? _openAppSettings : _requestNotif,
             ),
-            // Не косметика: снятая оптимизация батареи — исключение из
-            // официального списка Android на подъём сервиса из фона. В режиме
-            // VPN это право даёт и согласие на VPN, в режиме прокси — только она.
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               leading: Icon(Icons.battery_saver_rounded, color: accent),
@@ -180,9 +160,6 @@ class _PermissionsScreenState extends ConsumerState<_PermissionsScreen>
                   ? _openAppSettings
                   : _requestBattery,
             ),
-            // Автозапуск прошивки Android не видит: человек выдаёт всё, что
-            // тот спрашивает, и честно считает, что разрешил всё, — а VPN
-            // из шторки не включается. Статуса нет: прочитать его нельзя.
             if (_autostart != null)
               _PermissionInfoTile(
                 icon: Icons.rocket_launch_rounded,
@@ -228,8 +205,6 @@ class _PermissionsScreenState extends ConsumerState<_PermissionsScreen>
 
   List<Widget> _linuxPermissions(AppLocalizations l10n) {
     return [
-      // Разделителя между платформами больше нет: секцию отбивает её
-      // собственный заголовок, ровно как на остальных экранах настроек.
       _sectionHeader(l10n.settingsPermTunHeader),
       const ExpressiveCard(
         padding: EdgeInsets.zero,
@@ -264,8 +239,6 @@ class _PermissionInfoTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
 
-  /// Иконка цветом акцента, как у строк, от которых зависит работа VPN;
-  /// серые — справочные.
   final bool accent;
 
   const _PermissionInfoTile({
@@ -292,8 +265,6 @@ class _PermissionInfoTile extends StatelessWidget {
   }
 }
 
-/// Linux: тумблер беспарольного TUN. Установка/удаление правки требуют root —
-/// каждое переключение поднимает разовый polkit-запрос пароля.
 class _LinuxTunPasswordlessTile extends ConsumerStatefulWidget {
   const _LinuxTunPasswordlessTile();
 
@@ -315,7 +286,6 @@ class _LinuxTunPasswordlessTileState
         ? await LinuxTunnelBackend.installPasswordlessTun()
         : await LinuxTunnelBackend.removePasswordlessTun();
     if (!mounted) return;
-    // Ручное управление гасит авто-предложение в любом случае.
     final current = ref.read(settingsNotifierProvider).value;
     if (current != null && !current.linuxTunRememberDismissed) {
       await ref

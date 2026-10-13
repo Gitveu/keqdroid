@@ -2,17 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Якоря групп серверов: куда прыгает боковой навигатор.
-///
-/// Сайдбар и список живут в разных ветках дерева, общего состояния у них нет, а
-/// прыгать надо к группе, которая может быть далеко за экраном. Каждая группа
-/// кладёт сюда свой `BuildContext`, навигатор по нему считает смещение.
-///
-/// `GlobalKey` не годится: список пересобирается через `AnimatedSwitcher`, и на
-/// время кросс-фейда в дереве живут оба поддерева — один ключ в двух местах это
-/// исключение. Контексты сосуществуют спокойно. Считать смещения самим тоже не
-/// вышло: `SliverLayoutBuilder` зовётся на каждый кадр прокрутки и перестраивал
-/// бы всю группу.
+// не GlobalKey: на кросс-фейде AnimatedSwitcher в дереве два поддерева, и один ключ в двух местах это исключение
 class ServerGroupAnchors {
   ServerGroupAnchors._();
 
@@ -20,28 +10,13 @@ class ServerGroupAnchors {
 
   final Map<String, BuildContext> _anchors = {};
 
-  /// Сколько пикселей оставить над группой: сверху список накрыт градиентом,
-  /// и выровненная «в ноль» шапка уехала бы под него. Ставит сам список — он
-  /// один знает высоту своей шапки.
   double leadingInset = 0;
 
-  /// Группа, на которой список стоит сейчас, — то есть чья шапка занимает верх
-  /// экрана. Именно её подсвечивает навигатор.
-  ///
-  /// Подсвечивать группу активного сервера, как было сначала, нельзя: активный
-  /// сервер не двигается, и метка навсегда оставалась на своей группе, сколько
-  /// бы ты ни прыгала. Наружу это выглядело как «прыжок не работает» — хотя
-  /// список уезжал правильно.
   final ValueNotifier<String?> currentGroup = ValueNotifier<String?>(null);
 
   bool _updateScheduled = false;
 
-  /// Просит пересчитать [currentGroup] в конце кадра.
-  ///
-  /// Не сразу: уведомления прокрутки прилетают и во время layout, а
-  /// `ValueNotifier` дёргает слушателей синхронно — `setState` посреди layout
-  /// это исключение. Заодно получается троттлинг: сколько бы уведомлений ни
-  /// пришло за кадр, пересчёт будет один.
+  // в конце кадра: уведомления прокрутки прилетают и во время layout
   void requestUpdate() {
     if (_updateScheduled) return;
     _updateScheduled = true;
@@ -57,8 +32,7 @@ class ServerGroupAnchors {
     String? nearest;
     double? nearestDy;
 
-    // Порог чуть ниже отступа шапки: после прыжка группа стоит ровно на
-    // `leadingInset`, и без запаса она считалась бы «ещё не достигнутой».
+    // с запасом: после прыжка группа стоит ровно на leadingInset
     final threshold = leadingInset + 8;
 
     for (final entry in _anchors.entries) {
@@ -71,7 +45,6 @@ class ServerGroupAnchors {
       final dy = box.localToGlobal(Offset.zero, ancestor: viewport).dy;
 
       if (dy <= threshold) {
-        // Из уже проехавших верх — самая нижняя: она и занимает экран.
         if (passedDy == null || dy > passedDy) {
           passedDy = dy;
           passed = entry.key;
@@ -82,36 +55,21 @@ class ServerGroupAnchors {
       }
     }
 
-    // Ни одна не проехала верх — список в самом начале, текущая та, что первой
-    // идёт под шапкой.
     final next = passed ?? nearest;
     if (next != currentGroup.value) currentGroup.value = next;
   }
 
-  /// Есть ли к чему прыгать. Пустой реестр означает, что список серверов ещё
-  /// не построен (или групп нет вовсе) — навигатору тогда нечего показывать.
   bool get isEmpty => _anchors.isEmpty;
 
   void register(String groupKey, BuildContext context) {
     _anchors[groupKey] = context;
   }
 
-  /// Снимает только свою запись: во время кросс-фейда раскладки уходящая
-  /// группа диспоузится уже после того, как её сменщица зарегистрировалась, и
-  /// безусловное удаление стёрло бы живой якорь.
+  // снимаем только свою запись: на кросс-фейде сменщица регистрируется раньше, чем уходящая диспоузится
   void unregister(String groupKey, BuildContext context) {
     if (identical(_anchors[groupKey], context)) _anchors.remove(groupKey);
   }
 
-  /// Где стоит активный сервер: в какой группе и на сколько ниже её шапки.
-  ///
-  /// Пишет сама группа, и иначе нельзя: смещение строки складывается из
-  /// порядка сортировки (у каждой группы свой), числа колонок и высоты
-  /// собственной шапки. Повторить этот расчёт на стороне прыжка — завести
-  /// вторую половину, которая разъедется с первой на первой же правке
-  /// раскладки.
-  ///
-  /// `offsetInGroup == null` — группа свёрнута: строки в дереве нет вовсе.
   ({String serverId, String groupKey, double? offsetInGroup})? _activeServer;
 
   void registerActiveServer({
@@ -126,19 +84,10 @@ class ServerGroupAnchors {
     );
   }
 
-  /// Снимает запись, если она принадлежит [groupKey].
-  ///
-  /// Зовётся группой, которая перестроилась и активного сервера у себя не
-  /// нашла: его удалили, перенесли в другую группу или спрятал фильтр. Без
-  /// этого осталось бы смещение строки, которой в группе больше нет, и прыжок
-  /// увозил бы к чужой. Ключ проверяется по той же причине, что и контекст в
-  /// [unregister]: группа снимает только свою запись.
   void unregisterActiveServer(String groupKey) {
     if (_activeServer?.groupKey == groupKey) _activeServer = null;
   }
 
-  /// В какой группе стоит сервер и развёрнута ли она. Null — список про этот
-  /// сервер ничего не говорил: он не построен, отфильтрован или удалён.
   ({String groupKey, bool collapsed})? placeOfServer(String serverId) {
     final active = _activeServer;
     if (active == null || active.serverId != serverId) return null;
@@ -148,12 +97,6 @@ class ServerGroupAnchors {
     );
   }
 
-  /// Прокручивает список к строке сервера. `false` — прыгать не к чему:
-  /// группа свёрнута (строки нет) или её якоря в реестре не оказалось.
-  ///
-  /// Строки строятся лениво, поэтому цель считается арифметикой от шапки
-  /// группы, а не `ensureVisible` по её контексту: у сервера, до которого ещё
-  /// не долистали, контекста нет — а прыгают как раз к таким.
   Future<bool> jumpToServer(
     String serverId, {
     Duration duration = const Duration(milliseconds: 420),
@@ -171,11 +114,6 @@ class ServerGroupAnchors {
     );
   }
 
-  /// Прокручивает список к группе. `false` — якоря нет (список не построен,
-  /// группа исчезла), и вызывающий может решить, что делать дальше.
-  ///
-  /// [extraOffset] — сколько ещё проехать вниз от шапки группы: так к строке
-  /// внутри группы прыгают тем же кодом, что и к самой группе.
   Future<bool> jumpTo(
     String groupKey, {
     double extraOffset = 0,
@@ -197,7 +135,6 @@ class ServerGroupAnchors {
         (viewport.getOffsetToReveal(render, 0).offset + extraOffset -
                 leadingInset)
             .clamp(position.minScrollExtent, position.maxScrollExtent);
-    // Уже там: анимация «на месте» выглядит как случайное вздрагивание списка.
     if ((target - position.pixels).abs() < 1) return true;
 
     await position.animateTo(target, duration: duration, curve: curve);
@@ -205,12 +142,6 @@ class ServerGroupAnchors {
   }
 }
 
-/// Оборачивает список серверов: задаёт отступ прыжка и следит, на какой группе
-/// список стоит сейчас.
-///
-/// Слушатель прокрутки живёт здесь, а не в самом списке, ровно затем, чтобы
-/// «прыжок» и «текущая группа» проверялись одним куском в тестах — а не
-/// оказались двумя половинами, каждая из которых по отдельности работает.
 class ServerGroupAnchorScope extends StatefulWidget {
   final double leadingInset;
   final Widget child;
@@ -249,7 +180,6 @@ class _ServerGroupAnchorScopeState extends State<ServerGroupAnchorScope> {
     return NotificationListener<ScrollNotification>(
       onNotification: (_) {
         ServerGroupAnchors.instance.requestUpdate();
-        // false — уведомление идёт дальше: на нём же держатся шапка и фейды.
         return false;
       },
       child: widget.child,
@@ -257,11 +187,6 @@ class _ServerGroupAnchorScopeState extends State<ServerGroupAnchorScope> {
   }
 }
 
-/// Помечает шапку группы как цель прыжка.
-///
-/// Регистрация идёт из `initState`/`dispose`, а не из `build`: билд у группы
-/// случается на каждый пинг и на каждую смену активного сервера, и трогать
-/// общий реестр так часто незачем.
 class ServerGroupAnchor extends StatefulWidget {
   final String groupKey;
   final Widget child;

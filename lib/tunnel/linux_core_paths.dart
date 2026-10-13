@@ -4,13 +4,6 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
-/// Linux counterpart of [WindowsCorePaths]: locates the bundled core ELF
-/// binaries and the geoip/geosite data files.
-///
-/// Resolution order mirrors Windows: next to flutter_assets, next to the
-/// executable, extracted from the asset bundle to a temp dir, then `$PATH`.
-/// Extracted binaries are marked executable (`chmod +x`) since the asset bundle
-/// does not preserve the executable bit.
 class LinuxCorePaths {
   LinuxCorePaths._();
 
@@ -27,18 +20,11 @@ class LinuxCorePaths {
       '(см. README) и пересоберите приложение, '
       'или поместите их рядом с исполняемым файлом / в \$PATH.';
 
-  /// Путь к `pkexec`, или null, если polkit в системе нет.
-  ///
-  /// polkit у пакетов в необязательных зависимостях: без него прокси работает,
-  /// а TUN — нет. Спрашиваем заранее, потому что иначе отказ приезжает
-  /// `ProcessException`, в текст которой Dart вписывает всю команду целиком —
-  /// вместе с телом root-обёртки на несколько экранов.
+  // заранее: иначе ProcessException вписывает в текст всю команду вместе с телом root-обёртки
   static String? findPkexec() {
     final onPath = _which('pkexec');
     if (onPath != null) return onPath;
-    // PATH у графической сессии бывает урезан до неузнаваемости (.desktop без
-    // оболочки, AppImage из файлового менеджера), а pkexec лежит в одном и том
-    // же месте во всех дистрибутивах, которые мы пакуем.
+    // PATH графической сессии бывает урезан, а pkexec везде лежит здесь
     for (final candidate in const ['/usr/bin/pkexec', '/usr/local/bin/pkexec']) {
       if (File(candidate).existsSync()) return candidate;
     }
@@ -55,27 +41,13 @@ class LinuxCorePaths {
   static Future<String?> singboxExecutable() =>
       _resolveExecutable(assetSingbox, 'sing-box');
 
-  /// keqrnel — единое ядро (sing-box host + встроенный xray), заменяет xray+sing-box.
   static Future<String?> keqrnelExecutable() =>
       _resolveExecutable(assetKeqrnel, 'keqrnel');
 
-  /// mihomo — второе ядро: исполняет готовые конфиги Clash и ссылки, а в
-  /// TUN-режиме само создаёт tun-устройство (для этого его и запускают под root).
   static Future<String?> mihomoExecutable() =>
       _resolveExecutable(assetMihomo, 'mihomo');
 
-  /// Домашний каталог mihomo (аргумент `-d`).
-  ///
-  /// Отдельный от каталога с geo-базами намеренно: ядро создаёт в доме
-  /// `config.yaml`, если его там нет (`config.Init`), и на каталоге без права
-  /// записи это фатальная ошибка — ядро не стартует. А на Linux дом «рядом с
-  /// бинарём» недоступен для записи в большинстве установок: `/opt` у .deb и
-  /// read-only FUSE-монт у AppImage. Поэтому дом в пользовательском кэше, а
-  /// geo-базы копируются туда один раз, со сверкой по размеру.
-  ///
-  /// Для TUN под root этот каталог не годится — там дом делает сам бэкенд в
-  /// каталоге сессии, иначе root наплодил бы в пользовательском кэше файлов,
-  /// которые потом не переписать обычным запуском.
+  // отдельный дом: ядро создаёт в нём config.yaml, а рядом с бинарём на Linux обычно нельзя писать (/opt, монт AppImage)
   static Future<String> mihomoHomeDir() async {
     final dir = Directory(p.join(await _cacheRoot(), 'keqdroid', 'mihomo'));
     if (!dir.existsSync()) dir.createSync(recursive: true);
@@ -88,10 +60,7 @@ class LinuxCorePaths {
         if (dst.existsSync() && dst.lengthSync() == src.lengthSync()) continue;
         try {
           await replaceAtomically(dst.path, (tmp) => src.copy(tmp));
-        } catch (_) {
-          // Занято работающим ядром или нет места: geo-правила не сработают,
-          // но подключение важнее — ядро скажет об этом в свой лог.
-        }
+        } catch (_) {}
       }
     }
     return dir.path;
@@ -104,8 +73,6 @@ class LinuxCorePaths {
         '.cache',
       );
 
-  /// Directory holding geoip.dat / geosite.dat for xray's asset lookup
-  /// (passed to xray via XRAY_LOCATION_ASSET). Null if not found.
   static Future<String?> geoAssetDir() async {
     final besideAssets = _geoDirBesideFlutterAssets();
     if (besideAssets != null) return besideAssets;
@@ -131,9 +98,7 @@ class LinuxCorePaths {
     return hasGeo ? dir : null;
   }
 
-  /// Extracts geo files into the stable cache (`~/.cache/keqdroid/geo`) —
-  /// именно в стабильный каталог: createTemp на каждый вызов копит в /tmp
-  /// каталоги, которые никто не удаляет.
+  // стабильный каталог: createTemp на каждый вызов копил бы мусор в /tmp
   static Future<String?> _extractGeoFiles() async {
     try {
       final base = Platform.environment['XDG_CACHE_HOME'] ??
@@ -154,14 +119,11 @@ class LinuxCorePaths {
           final bytes = data.buffer
               .asUint8List(data.offsetInBytes, data.lengthInBytes);
           final outFile = File(p.join(outDir.path, entry.value));
-          // размер совпадает — уже извлечено этой же сборкой
           if (!outFile.existsSync() || outFile.lengthSync() != bytes.length) {
             await outFile.writeAsBytes(bytes, flush: true);
           }
           extracted = true;
-        } catch (_) {
-          // file not bundled — skip
-        }
+        } catch (_) {}
       }
       return extracted ? outDir.path : null;
     } catch (_) {
@@ -173,11 +135,8 @@ class LinuxCorePaths {
     String assetKey,
     String fileName,
   ) async {
-    // The bundled binary lives where we CANNOT make it executable: a read-only
-    // AppImage FUSE mount, or a root-owned /opt (deb). Flutter assets also drop
-    // the +x bit. So copy the binary into a user-writable cache dir and chmod
-    // it there, then run that copy. Without this, Process.start fails with
-    // "Permission denied" (which the UI mis-reported as "VPN permission").
+    // там, где лежит бинарь, +x не поставить (монт AppImage, /opt от root), поэтому копируем в кэш.
+    // без этого Process.start падает с Permission denied
     final fromFlutterBundle = _pathBesideFlutterAssets(fileName);
     if (fromFlutterBundle != null) {
       return stageExecutable(fromFlutterBundle, fileName);
@@ -194,10 +153,9 @@ class LinuxCorePaths {
       return fromAsset;
     }
 
-    return _which(fileName); // system PATH copy is already executable
+    return _which(fileName);
   }
 
-  /// User-writable cache for runnable core binaries (`~/.cache/keqdroid/cores`).
   static Future<String> _coresCacheDir() async {
     final base = cacheRootOverride ??
         Platform.environment['XDG_CACHE_HOME'] ??
@@ -210,24 +168,13 @@ class LinuxCorePaths {
     return dir.path;
   }
 
-  /// Раскладки, которые идут прямо сейчас: одна на файл.
   static final _staging = <String, Future<String>>{};
 
-  /// Каталог кэша вместо `~/.cache` — для тестов.
   @visibleForTesting
   static String? cacheRootOverride;
 
-  /// Copies [src] into the writable cache (only when missing or a different
-  /// size) and marks it executable; returns the runnable path.
-  ///
-  /// Замеры пинга зовут это параллельно, а после обновления ядро другого
-  /// размера и копируется заново. `File.copy` пишет прямо в целевой файл с
-  /// обрезкой (`O_TRUNC`, file_linux.cc в Dart), так что одни замеры
-  /// переписывали ядро, пока другие его запускали. Теперь копия одна на всех,
-  /// и ложится она переименованием готового файла.
-  ///
-  /// Уборка в `whenComplete` — блоком, а не стрелкой: стрелка вернула бы из
-  /// карты эту же раскладку, и `whenComplete` ждал бы сам себя вечно.
+  // File.copy пишет поверх с O_TRUNC, и параллельные замеры переписывали ядро, пока другие его запускали.
+  // уборка в whenComplete блоком: стрелка вернула бы эту же раскладку, и whenComplete ждал бы сам себя
   @visibleForTesting
   static Future<String> stageExecutable(String src, String fileName) =>
       _staging[fileName] ??= _stage(src, fileName).whenComplete(() {
@@ -246,16 +193,12 @@ class LinuxCorePaths {
       await _ensureExecutable(dstPath);
       return dstPath;
     } catch (_) {
-      // Staging failed (e.g. no HOME) — fall back to the source path and at
-      // least try to chmod it; better than nothing.
       await _ensureExecutable(src);
       return src;
     }
   }
 
-  /// Пишет файл рядом под временным именем и переименовывает поверх [path].
-  /// Запущенное ядро на старом файле доработает спокойно: переименование
-  /// меняет только запись в каталоге.
+  // запущенное ядро на старом файле доработает: rename меняет только запись в каталоге
   @visibleForTesting
   static Future<void> replaceAtomically(
     String path,
@@ -275,7 +218,6 @@ class LinuxCorePaths {
 
   static int _tmpCounter = 0;
 
-  /// `build/linux/x64/release/bundle/data/flutter_assets/...`
   static String? _pathBesideFlutterAssets(String fileName) {
     final path = p.join(
       p.dirname(Platform.resolvedExecutable),
@@ -289,8 +231,6 @@ class LinuxCorePaths {
     return File(path).existsSync() ? path : null;
   }
 
-  /// Extracts a bundled binary into the stable cores cache (same dir as
-  /// [stageExecutable]); createTemp-каталог на каждый вызов копил бы мусор.
   static Future<String?> _extractAssetToCache(
     String assetKey,
     String fileName,
@@ -300,7 +240,6 @@ class LinuxCorePaths {
       final bytes =
           data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
       final outFile = File(p.join(await _coresCacheDir(), fileName));
-      // размер совпадает — уже извлечён этой же сборкой
       if (outFile.existsSync() && outFile.lengthSync() == bytes.length) {
         return outFile.path;
       }
@@ -310,7 +249,6 @@ class LinuxCorePaths {
           (tmp) => File(tmp).writeAsBytes(bytes, flush: true),
         );
       } on FileSystemException {
-        // каталог недоступен для записи — пользуемся существующей копией
         if (outFile.existsSync()) return outFile.path;
         rethrow;
       }
@@ -320,16 +258,12 @@ class LinuxCorePaths {
     }
   }
 
-  /// Adds the executable bit; the asset bundle stores files without it.
   static Future<void> _ensureExecutable(String path) async {
     try {
       final stat = await FileStat.stat(path);
-      // Already executable by owner — skip the chmod round-trip.
       if (stat.mode & 0x40 != 0) return;
       await Process.run('chmod', ['+x', path]);
-    } catch (_) {
-      // best effort; the launch will surface a clear error if it stays non-exec
-    }
+    } catch (_) {}
   }
 
   static String? _which(String name) {

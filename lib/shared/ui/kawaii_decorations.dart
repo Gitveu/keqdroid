@@ -2,9 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Цветовой «вкус» kawaii-оверлея: палитра дождика из частиц и акценты
-/// стикеров. Цвета фиксированы, а не из ColorScheme: Material-тона из
-/// fromSeed дают приглушённые mauve/оливковые цвета — совсем не kawaii.
 class KawaiiFlavor {
   final Color petalLight;
   final Color petalDark;
@@ -13,7 +10,6 @@ class KawaiiFlavor {
   final Color heartLight;
   final Color heartDark;
 
-  /// Акцент стикеров: лепестки цветка, внутренние ушки и т.п.
   final Color accentLight;
   final Color accentDark;
   final Color accentSoftLight;
@@ -32,7 +28,6 @@ class KawaiiFlavor {
     required this.accentSoftDark,
   });
 
-  /// Клубнично-сакуровый: розовые лепестки, золотые блёстки.
   static const sakura = KawaiiFlavor(
     petalLight: Color(0xFFF783B0),
     petalDark: Color(0xFFFFA8CC),
@@ -46,7 +41,6 @@ class KawaiiFlavor {
     accentSoftDark: Color(0xFFFFC0D9),
   );
 
-  /// Лавандово-молочный: сиреневые лепестки, те же золотые блёстки.
   static const lavender = KawaiiFlavor(
     petalLight: Color(0xFFB79CF0),
     petalDark: Color(0xFFCDB7FF),
@@ -61,15 +55,6 @@ class KawaiiFlavor {
   );
 }
 
-/// Полноэкранный слой финтифлюшек kawaii-пресета поверх всего интерфейса:
-/// медленный дождик из лепестков, звёздочек и сердечек, а поверх него крупные
-/// чиби-стикеры с белой обводкой, как настоящие наклейки. Стикеры и делают тему
-/// кавай-кором, а не просто розовой.
-///
-/// Дёшево по перфу: один CustomPainter, ~18 фигур дождика + 6 стикеров из
-/// закешированных unit-Path за кадр, без per-particle виджетов и saveLayer;
-/// IgnorePointer — слой не перехватывает тапы; RepaintBoundary — анимация не
-/// заставляет перерисовываться само приложение под ней.
 class KawaiiOverlay extends StatefulWidget {
   final Widget child;
   final KawaiiFlavor flavor;
@@ -85,7 +70,6 @@ class KawaiiOverlay extends StatefulWidget {
 
 class _KawaiiOverlayState extends State<KawaiiOverlay>
     with SingleTickerProviderStateMixin {
-  // Один длинный цикл: value 0..1 за минуту, частицы зациклены по модулю.
   static const _cycle = Duration(seconds: 60);
   late final AnimationController _t =
       AnimationController(vsync: this, duration: _cycle)..repeat();
@@ -94,12 +78,10 @@ class _KawaiiOverlayState extends State<KawaiiOverlay>
   late final List<_Sticker> _stickers = _spawnStickers();
 
   static List<_Particle> _spawnParticles() {
-    // Фиксированный seed: раскладка частиц стабильна между перезапусками,
-    // никаких «прыжков» при hot reload / пересоздании оверлея.
     final rnd = math.Random(20260706);
     return List.generate(18, (i) {
       final kind = switch (i % 6) {
-        0 || 1 || 2 => _Kind.petal, // лепестков больше всего
+        0 || 1 || 2 => _Kind.petal,
         3 || 4 => _Kind.sparkle,
         _ => _Kind.heart,
       };
@@ -107,7 +89,6 @@ class _KawaiiOverlayState extends State<KawaiiOverlay>
         kind: kind,
         x: rnd.nextDouble(),
         yOffset: rnd.nextDouble(),
-        // 2–4 прохода экрана за цикл (падение ~15–30 с на экран)
         fallSpeed: 2 + rnd.nextDouble() * 2,
         size: switch (kind) {
           _Kind.petal => 7 + rnd.nextDouble() * 6,
@@ -129,11 +110,9 @@ class _KawaiiOverlayState extends State<KawaiiOverlay>
       return _Sticker(
         kind: kinds[i],
         x: 0.08 + rnd.nextDouble() * 0.84,
-        // равномерно раскиданы по высоте, чтобы не сбивались в стайку
         yOffset: (i + rnd.nextDouble()) / kinds.length,
-        // куда медленнее дождика: ~45–85 с на проход экрана
         fallSpeed: 0.7 + rnd.nextDouble() * 0.7,
-        size: 15 + rnd.nextDouble() * 9, // полуразмер, px: стикер ~30–48 px
+        size: 15 + rnd.nextDouble() * 9,
         swayAmp: 0.008 + rnd.nextDouble() * 0.012,
         swayFreq: 3 + rnd.nextDouble() * 4,
         wobbleAmp: 0.10 + rnd.nextDouble() * 0.10,
@@ -233,14 +212,12 @@ class _Sticker {
   });
 }
 
-/// Палитра стикеров: заливки непрозрачные — это «наклейки», сквозь которые
-/// UI просвечивать не должен (иначе обводка/заливка дают швы по краям).
 class _StickerColors {
-  final Color outline; // белая die-cut обводка
+  final Color outline;  // белая обводка
   final Color ink; // глазки/ротик
   final Color blush;
   final Color bodyWhite; // котик/зайка/онигири
-  final Color accent; // от KawaiiFlavor: лепестки цветка
+  final Color accent;  // лепестки цветка
   final Color accentSoft; // внутренние ушки, серединки
   final Color berry;
   final Color leaf;
@@ -268,7 +245,6 @@ class _StickerColors {
         outline: dark ? const Color(0xFFFFF3F8) : Colors.white,
         ink: const Color(0xFF69454F),
         blush: dark ? const Color(0xFFFF9FBE) : const Color(0xFFF78FB2),
-        // в тёмной теме «белое» чуть приглушено, чтобы не слепило
         bodyWhite: dark ? const Color(0xFFF7EDF1) : const Color(0xFFFFFEFC),
         accent: dark ? f.accentDark : f.accentLight,
         accentSoft: dark ? f.accentSoftDark : f.accentSoftLight,
@@ -303,18 +279,14 @@ class _KawaiiPainter extends CustomPainter {
     _paintStickers(canvas, size);
   }
 
-  // ── дождик из мелких частиц ───────────────────────────────────────────────
-
   void _paintRain(Canvas canvas, Size size) {
     final paint = Paint()..style = PaintingStyle.fill;
-    // В тёмной теме частицы чуть ярче — иначе тонут в фоне.
     final baseAlpha = dark ? 0.38 : 0.30;
     final petalColor = dark ? flavor.petalDark : flavor.petalLight;
     final sparkleColor = dark ? flavor.sparkleDark : flavor.sparkleLight;
     final heartColor = dark ? flavor.heartDark : flavor.heartLight;
 
     for (final p in particles) {
-      // Падение сверху вниз с запасом за края, чтобы не «рождались» на экране.
       final yFrac = (p.yOffset + t * p.fallSpeed) % 1.15 - 0.075;
       final xFrac =
           p.x + math.sin(t * p.swayFreq * 2 * math.pi + p.phase) * p.swayAmp;
@@ -329,7 +301,6 @@ class _KawaiiPainter extends CustomPainter {
           paint.color = petalColor.withValues(alpha: baseAlpha);
           _drawPetal(canvas, paint, p.size);
         case _Kind.sparkle:
-          // Мерцание: альфа дышит со своей фазой.
           final twinkle =
               0.5 + 0.5 * math.sin(t * 40 * 2 * math.pi + p.phase);
           paint.color = sparkleColor.withValues(
@@ -337,7 +308,7 @@ class _KawaiiPainter extends CustomPainter {
           );
           _drawSparkle(canvas, paint, p.size);
         case _Kind.heart:
-          canvas.rotate(math.sin(angle) * 0.35); // сердечки лишь покачиваются
+          canvas.rotate(math.sin(angle) * 0.35);
           paint.color = heartColor.withValues(alpha: baseAlpha * 0.9);
           _drawHeart(canvas, paint, p.size);
       }
@@ -345,7 +316,6 @@ class _KawaiiPainter extends CustomPainter {
     }
   }
 
-  /// Лепесток сакуры: капля с выемкой на широком конце.
   static void _drawPetal(Canvas canvas, Paint paint, double s) {
     final path = Path()
       ..moveTo(0, -s) // остриё
@@ -357,9 +327,8 @@ class _KawaiiPainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
-  /// Четырёхлучевая звёздочка-блик.
   static void _drawSparkle(Canvas canvas, Paint paint, double s) {
-    const waist = 0.28; // «талия» между лучами
+    const waist = 0.28; // талия между лучами
     final path = Path()
       ..moveTo(0, -s)
       ..quadraticBezierTo(0, -s * waist, s, 0)
@@ -379,12 +348,8 @@ class _KawaiiPainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
-  // ── стикеры ───────────────────────────────────────────────────────────────
-
   void _paintStickers(Canvas canvas, Size size) {
     for (final st in stickers) {
-      // Запас 0.1 высоты за краями: стикер крупный, не должен «рождаться»
-      // на глазах.
       final yFrac = (st.yOffset + t * st.fallSpeed) % 1.2 - 0.1;
       final xFrac =
           st.x + math.sin(t * st.swayFreq * 2 * math.pi + st.phase) * st.swayAmp;
@@ -394,8 +359,6 @@ class _KawaiiPainter extends CustomPainter {
       canvas.save();
       canvas.translate(xFrac * size.width, yFrac * size.height);
       canvas.rotate(wobble);
-      // Всё нарисовано в unit-пространстве (тело ≈ радиус 1) — масштаб
-      // превращает его в пиксели, толщины штрихов масштабируются вместе.
       canvas.scale(st.size);
       _paintSticker(canvas, st.kind);
       canvas.restore();
@@ -422,7 +385,6 @@ class _KawaiiPainter extends CustomPainter {
         _drawFace(canvas, dy: -0.08);
       case _StickerKind.strawberry:
         _stickerBase(canvas, _StickerArt.berryBody, _k.berry);
-        // семечки по краям, чтобы не мешали мордочке
         fill.color = _k.bodyWhite.withValues(alpha: 0.85);
         for (final seed in _StickerArt.berrySeeds) {
           canvas.drawOval(
@@ -430,14 +392,11 @@ class _KawaiiPainter extends CustomPainter {
             fill,
           );
         }
-        // листики поверх ягоды, со своей обводкой-наклейкой
         canvas.drawPath(_StickerArt.berryLeaves, _outlinePaint());
         fill.color = _k.leaf;
         canvas.drawPath(_StickerArt.berryLeaves, fill);
         _drawFace(canvas, dy: 0.10, fs: 0.9);
       case _StickerKind.blossom:
-        // белые прожилки обводки между лепестками — это и есть «линворк»
-        // наклейки, швы тут намеренные
         _stickerBase(canvas, _StickerArt.blossomPetals, _k.accent);
         fill.color = _k.core;
         canvas.drawCircle(Offset.zero, 0.40, fill);
@@ -455,10 +414,6 @@ class _KawaiiPainter extends CustomPainter {
     ..strokeCap = StrokeCap.round
     ..color = _k.outline;
 
-  /// Общая база стикера: мягкая тень → белая die-cut обводка → заливка.
-  /// Обводка центрирована на контуре, заливка сверху накрывает её внутреннюю
-  /// половину (и служебные рёбра составных Path), снаружи остаётся ровный
-  /// белый кант — как у вырубленной наклейки.
   void _stickerBase(Canvas canvas, Path body, Color fillColor) {
     canvas.save();
     canvas.translate(0.05, 0.10);
@@ -471,8 +426,6 @@ class _KawaiiPainter extends CustomPainter {
     canvas.drawPath(body, Paint()..color = fillColor);
   }
 
-  /// Мордочка: закрытые счастливые глазки ∩∩, ротик, румянец.
-  /// [fs] — масштаб мордочки, [dy] — вертикальный сдвиг центра.
   void _drawFace(
     Canvas canvas, {
     double dy = 0,
@@ -499,7 +452,6 @@ class _KawaiiPainter extends CustomPainter {
       stroke,
     );
     if (catMouth) {
-      // кошачий ротик «ω»: две маленькие дуги рядом
       for (final dx in const [-0.07, 0.07]) {
         canvas.drawArc(
           Rect.fromCircle(
@@ -539,12 +491,9 @@ class _KawaiiPainter extends CustomPainter {
       old.t != t || old.flavor != flavor || old.dark != dark;
 }
 
-/// Количество видов стикеров — для тестовых дампов/goldens.
 @visibleForTesting
 int get debugKawaiiStickerKindCount => _StickerKind.values.length;
 
-/// Тестовый хук: рисует один стикер [kindIndex] в unit-пространстве вокруг
-/// (0,0) — чтобы goldens/дампы не вскрывали приватные классы.
 @visibleForTesting
 void debugPaintKawaiiSticker(
   Canvas canvas, {
@@ -561,13 +510,9 @@ void debugPaintKawaiiSticker(
   )._paintSticker(canvas, _StickerKind.values[kindIndex]);
 }
 
-/// Контуры стикеров в unit-пространстве (тело ≈ радиус 1), построены один раз
-/// на процесс — в кадре только drawPath по готовым Path.
 class _StickerArt {
   _StickerArt._();
 
-  /// Котик: круглая голова + треугольные ушки одним Path — заливка после
-  /// обводки накрывает внутренние рёбра, снаружи остаётся общий кант.
   static final Path catBody = Path()
     ..moveTo(-0.80, -0.30)
     ..lineTo(-1.02, -1.05)
@@ -622,7 +567,6 @@ class _StickerArt {
       ),
     );
 
-  /// Онигири: скруглённый треугольник.
   static final Path onigiriBody = Path()
     ..moveTo(-0.22, -0.80)
     ..quadraticBezierTo(0, -1.02, 0.22, -0.80)
@@ -640,7 +584,6 @@ class _StickerArt {
       ),
     );
 
-  /// Клубничка: капля остриём вниз.
   static final Path berryBody = Path()
     ..moveTo(0, -0.62)
     ..cubicTo(0.80, -0.72, 0.94, 0.02, 0.14, 0.88)
@@ -676,7 +619,6 @@ class _StickerArt {
     return p;
   }
 
-  /// Пять лепестков сакуры вокруг центра.
   static final Path blossomPetals = _buildBlossomPetals();
 
   static Path _buildBlossomPetals() {

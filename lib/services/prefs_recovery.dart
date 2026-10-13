@@ -6,15 +6,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/app_logger.dart';
 
-/// Чинит файл настроек до того, как его впервые прочитает SharedPreferences.
-///
-/// На Windows и Linux плагин держит всё в одном JSON и пишет его без атомарной
-/// замены: обрезает файл и пишет поверх. Перезагрузка посреди записи оставляет
-/// файл прежней длины, но из нулей — метаданные NTFS записать успевает, данные
-/// нет. На таком файле getInstance() кидает исключение, причём до runApp: кадра
-/// не будет, а окно на Windows показывается только по первому кадру. Итог для
-/// пользователя — живой процесс без окна и без трея, снимать через диспетчер
-/// задач. Так у человека и пропало приложение после принудительного обновления.
+// плагин на Windows/Linux пишет JSON без атомарной замены, и перезагрузка посреди записи
+// оставляет файл из нулей. тогда getInstance() падает до runApp, и окно не появляется вовсе
 class PrefsRecovery {
   PrefsRecovery._();
 
@@ -22,29 +15,24 @@ class PrefsRecovery {
   static const _backupName = 'shared_preferences.backup.json';
   static const _corruptName = 'shared_preferences.corrupt.json';
 
-  /// Зовётся из main() перед первым [StorageService.init].
   static Future<void> prepare() async {
-    // У Android, iOS и macOS настройки хранит система, ломаться этим способом
-    // там нечему.
     if (!Platform.isWindows && !Platform.isLinux) return;
     try {
       repairIn(await getApplicationSupportDirectory());
     } catch (e, st) {
-      // Починка не имеет права сама стать причиной не запуститься.
+      // починка сама не должна мешать запуску
       AppLogger.instance
           .warn('Prefs recovery skipped', error: e, stackTrace: st);
     }
   }
 
-  /// Каталог параметром, а не через path_provider: в тестах он не отвечает.
   @visibleForTesting
   static void repairIn(Directory dir) {
     final sep = Platform.pathSeparator;
     final prefs = File('${dir.path}$sep$_fileName');
     final backup = File('${dir.path}$sep$_backupName');
 
-    // Файла нет — первый запуск или сознательный сброс руками. Поднимать в этом
-    // случае бэкап значило бы возвращать человеку то, что он только что снёс.
+    // файла нет: первый запуск или сброс руками, бэкап не поднимаем
     if (!prefs.existsSync()) return;
 
     if (_isUsable(prefs)) {
@@ -54,8 +42,6 @@ class PrefsRecovery {
 
     AppLogger.instance.error('Prefs file is unreadable, recovering');
     if (prefs.lengthSync() > 0) {
-      // Уцелевшая голова файла может ещё хранить серверы и подписки — отдать
-      // её на разбор дешевле, чем объяснять человеку, что всё потеряно.
       prefs.copySync('${dir.path}$sep$_corruptName');
     }
     prefs.deleteSync();
@@ -65,11 +51,7 @@ class PrefsRecovery {
     }
   }
 
-  /// Копия снимается через временный файл и проверяется перед заменой.
-  ///
-  /// На Linux второй запуск доходит до Dart (на Windows его отсекает мьютекс
-  /// ещё в раннере), и копия может сняться ровно посреди чужой записи. Затереть
-  /// годный бэкап рваным — ровно та потеря, ради которой он и заведён.
+  // на Linux второй запуск доходит до Dart, и копия могла сняться посреди чужой записи
   static void _refreshBackup(File prefs, File backup) {
     final temp = File('${backup.path}.tmp');
     prefs.copySync(temp.path);
@@ -80,9 +62,6 @@ class PrefsRecovery {
     }
   }
 
-  /// Читается ли файл так, как его читает плагин: строка и `json.decode` в Map.
-  /// Пустой файл плагин переживает (пропускает decode), но это тот же обрыв
-  /// записи — с целым бэкапом поднять настройки лучше, чем стартовать пустым.
   static bool _isUsable(File file) {
     try {
       if (!file.existsSync()) return false;

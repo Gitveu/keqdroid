@@ -1,17 +1,6 @@
-/// Разбор вывода ядра, когда TUN не поднялся.
-///
-/// Наружу такие падения выглядят одинаково — «TUN did not start (exit code 1)»
-/// плюс хвост лога, в котором пользователю нечего опознать. Причин же ровно
-/// десяток, и почти каждая чинится в одно действие: дать права, вернуть
-/// снесённый антивирусом `wintun.dll`, подгрузить модуль `tun`, сменить порт.
-/// Здесь они названы явно.
-///
-/// Правило про порядок: сначала самые узкие признаки. «access is denied»
-/// встречается в половине сообщений, поэтому идёт после того, что говорит о
-/// причине конкретнее.
+// сначала узкие признаки: access is denied встречается в половине сообщений
 library;
 
-/// Опознанная причина: [id] — для тестов и логов, [message] — текст человеку.
 class TunFailureHint {
   final String id;
   final String message;
@@ -19,7 +8,6 @@ class TunFailureHint {
   const TunFailureHint(this.id, this.message);
 }
 
-/// Ищет в выводе ядра известную причину. `null` — ничего знакомого.
 TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
   final text = coreOutput.toLowerCase();
   if (text.trim().isEmpty) return null;
@@ -27,7 +15,6 @@ TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
   bool has(String needle) => text.contains(needle);
   bool hasAny(List<String> needles) => needles.any(has);
 
-  // --- сборка ядра -------------------------------------------------------
   if (has('gvisor is not included')) {
     return const TunFailureHint(
       'gvisor-missing',
@@ -38,8 +25,6 @@ TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
     );
   }
 
-  // --- wintun ------------------------------------------------------------
-  // Отдельная ветка до общего «access is denied»: тут дело не в правах.
   if (windows &&
       (has('wintun') || has('tun.dll')) &&
       hasAny([
@@ -71,7 +56,6 @@ TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
     );
   }
 
-  // Адаптер/устройство от прошлой сессии ещё не снят.
   if (hasAny([
         'already exists',
         'file exists',
@@ -88,7 +72,6 @@ TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
     );
   }
 
-  // --- Linux: устройство и права ----------------------------------------
   if (hasAny(['/dev/net/tun', 'dev/net/tun']) &&
       hasAny([
         'no such file',
@@ -118,7 +101,6 @@ TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
     );
   }
 
-  // --- порты (локальные инбаунды внутри того же процесса) ----------------
   if (hasAny([
     'forbidden by its access permissions',
     'wsaeacces',
@@ -147,7 +129,6 @@ TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
     );
   }
 
-  // --- сеть ---------------------------------------------------------------
   if (hasAny([
     'missing default interface',
     'no route to internet',
@@ -163,7 +144,6 @@ TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
     );
   }
 
-  // --- IPv6 ---------------------------------------------------------------
   if (has('ipv6') &&
       hasAny([
         'access is denied',
@@ -179,7 +159,6 @@ TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
     );
   }
 
-  // --- конфиг -------------------------------------------------------------
   if (hasAny([
     'decode config',
     'parse config',
@@ -198,7 +177,6 @@ TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
     );
   }
 
-  // --- общий отказ в правах (последним: слишком широкий признак) ----------
   if (hasAny(['access is denied', 'отказано в доступе', 'access denied'])) {
     return TunFailureHint(
       'access-denied',
@@ -214,11 +192,6 @@ TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
   return null;
 }
 
-/// Собирает готовый текст ошибки старта TUN: подсказка (если узнали причину),
-/// затем базовый совет, затем хвост лога ядра.
-///
-/// Хвост обязателен: подсказка объясняет типовой случай, а разбирать всегда
-/// приходится нетиповой.
 String tunStartFailureMessage({
   required String fallback,
   required String coreOutput,

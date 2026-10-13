@@ -276,8 +276,6 @@ class ServerNameUtils {
     'kwt': 'KW',
   };
 
-  /// Флажок сервера: сначала настоящий флаг-эмодзи из имени (любого вида —
-  /// см. [ServerFlag]), и только если его нет — догадка по названию страны.
   static ServerFlag? extractFlag(String displayName) {
     if (displayName.isEmpty) return null;
     final emoji = firstFlagIn(displayName);
@@ -286,7 +284,6 @@ class ServerNameUtils {
     return code == null ? null : FlagArt(code.toLowerCase());
   }
 
-  /// ISO alpha-2 код региона сервера, если у его флажка такой код есть.
   static String? extractCountryCode(String displayName) =>
       switch (extractFlag(displayName)) {
         FlagArt(:final countryCode) => countryCode,
@@ -296,18 +293,13 @@ class ServerNameUtils {
   static String? _countryCodeFromKeywords(String displayName) {
     final lower = displayName.toLowerCase();
 
-    // Многословные названия ("hong kong", "united states", "южная африка")
-    // достаточно уникальны, чтобы безопасно искать их как подстроку.
     for (final entry in _keywords.entries) {
       if (entry.key.contains(' ') && lower.contains(entry.key)) {
         return entry.value;
       }
     }
 
-    // Одиночные названия и 2–3-буквенные коды матчим только как целое слово.
-    // Раньше здесь был поиск подстроки по всем ключам, из-за чего произвольные
-    // имена без страны получали чужой флаг: "cloudflare" → "are" (ARE=ОАЭ),
-    // "southampton" → "pt" (PT), "united kingdom" → "ng" (NG) и т.п.
+    // только целым словом: подстрокой cloudflare давал ОАЭ (are), southampton давал PT
     final tokens = lower
         .replaceAll(RegExp(r'[|,\-_/\\]'), ' ')
         .split(RegExp(r'\s+'))

@@ -1,10 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-/// Xray StatsService for live session counters on Windows Proxy mode.
-///
-/// TUN mode uses sing-box/Wintun adapter counters; loopback does not work on
-/// Windows for 127.0.0.1 proxy traffic.
 class XraySessionStats {
   XraySessionStats._();
 
@@ -34,7 +30,6 @@ class XraySessionStats {
     return out;
   }
 
-  /// Returns cumulative inbound downlink/uplink bytes (user download/upload).
   static ({int download, int upload})? parseStatsQueryOutput(String stdout) {
     final dynamic decoded = jsonDecode(stdout);
     if (decoded is! Map) return null;

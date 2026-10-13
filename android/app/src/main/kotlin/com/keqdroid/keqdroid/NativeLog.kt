@@ -7,29 +7,16 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * Журнал нативной части: те же строки, что уходят в logcat, но ещё и в файл.
- *
- * logcat приложению на Android 13+ не прочитать (SELinux), поэтому всё, что
- * писали служба, плитка и окно подключения, человеку было не показать —
- * «из шторки не включается» оставалось без единой строки. Файл читает экран
- * «Журнал приложения»; формат строк тот же, что у app.log из Dart, чтобы
- * разбор был один.
- *
- * debug в файл не идёт: плитка пишет его на каждое открытие шторки, и за
- * пару дней он вытеснил бы всё, ради чего журнал открывают.
- */
+// logcat приложению на Android 13+ не прочитать, а этот файл читает экран Журнал приложения, формат как у app.log.
+// debug в файл не идёт: плитка пишет его на каждое открытие шторки
 object NativeLog {
     const val FILE_NAME = "native.log"
 
-    /// Как у app.log: столько человек ещё перешлёт, а причина обычно в
-    /// последних строках. Старая половина живёт в `.1`.
+    // как у app.log: столько ещё перешлют, а причина обычно в конце. старая половина в .1
     private const val MAX_BYTES = 256 * 1024L
 
     @Volatile private var file: File? = null
 
-    /// Зовёт VpnStatusProvider: провайдер создаётся при старте процесса раньше
-    /// любого компонента, так что журнал готов и для службы, и для плитки.
     fun init(context: Context) {
         if (file == null) file = File(context.filesDir, FILE_NAME)
     }
@@ -53,7 +40,6 @@ object NativeLog {
         append("ERROR", tag, msg, tr)
     }
 
-    /// Хвост журнала вместе с прошлой половиной, не больше [maxChars].
     fun read(maxChars: Int = 512 * 1024): String {
         val current = file ?: return ""
         return runCatching {

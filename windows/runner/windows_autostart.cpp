@@ -10,8 +10,7 @@
 
 namespace {
 
-// Имя задачи в корне планировщика. Его видно человеку в «Планировщике
-// заданий», поэтому оно человеческое, а не идентификатор.
+// имя видно в Планировщике заданий, поэтому человеческое
 constexpr wchar_t kTaskName[] = L"KeqDroid Autostart";
 
 constexpr wchar_t kRunKey[] =
@@ -30,9 +29,7 @@ std::wstring DirectoryOf(const std::wstring& path) {
   return slash == std::wstring::npos ? std::wstring() : path.substr(0, slash);
 }
 
-// SID текущего пользователя. В задаче он стоит и в триггере, и в принципале:
-// имя вида «КОМПЬЮТЕР\Пользователь» на локализованной системе планировщик
-// принимает не всегда, SID — всегда.
+// SID, а не имя: КОМПЬЮТЕР\Пользователь на локализованной системе планировщик принимает не всегда
 std::wstring CurrentUserSid() {
   HANDLE token = nullptr;
   if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_QUERY, &token)) {
@@ -84,15 +81,10 @@ std::wstring XmlEscape(const std::wstring& value) {
   return out;
 }
 
-// Путь к exe, который поднимает задача, или пусто, если задачи нет.
-//
-// Через COM, а не разбором вывода schtasks: тот пришлось бы читать с оглядкой
-// на язык системы, а его /XML — ещё и на кодировку перенаправленного потока.
+// через COM: вывод schtasks зависит от языка системы, а /XML ещё и от кодировки потока
 std::wstring TaskExecPath() {
   std::wstring result;
-  // S_FALSE — COM на этом потоке уже поднят (это делает main.cpp), но пару
-  // CoUninitialize всё равно должен получить. RPC_E_CHANGED_MODE — чужая
-  // модель потока, внутрипроцессному объекту она не мешает.
+  // S_FALSE: COM уже поднят в main.cpp, но пара CoUninitialize нужна. RPC_E_CHANGED_MODE внутрипроцессному объекту не мешает
   const HRESULT com = ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   const bool balance = SUCCEEDED(com);
 
@@ -146,8 +138,7 @@ std::wstring TaskExecPath() {
   }
 
   if (balance) ::CoUninitialize();
-  // Планировщик отдаёт путь таким, каким его записали. Кавычки снимаем, чтобы
-  // сравнение с GetModuleFileNameW не зависело от того, кто создал задачу.
+  // кавычки снимаем, чтобы сравнение не зависело от того, кто создал задачу
   if (result.size() >= 2 && result.front() == L'"' && result.back() == L'"') {
     result = result.substr(1, result.size() - 2);
   }
@@ -161,7 +152,7 @@ std::wstring TempXmlPath() {
   return std::wstring(dir, len) + L"keqdroid_autostart.xml";
 }
 
-// UTF-16 с BOM: файл задачи schtasks читает только так.
+// UTF-16 с BOM, иначе schtasks файл не читает
 bool WriteXmlFile(const std::wstring& path, const std::wstring& xml) {
   const HANDLE file =
       ::CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
@@ -195,8 +186,7 @@ std::wstring BuildTaskXml() {
   xml += L"  </RegistrationInfo>\n";
   xml += L"  <Triggers>\n    <LogonTrigger>\n      <Enabled>true</Enabled>\n";
   xml += L"      <UserId>" + sid + L"</UserId>\n";
-  // Пять секунд форы: вход в систему — самая занятая минута, а туннелю нужен
-  // уже поднятый сетевой стек.
+  // пять секунд: на входе в систему туннелю нужен уже поднятый сетевой стек
   xml += L"      <Delay>PT5S</Delay>\n    </LogonTrigger>\n  </Triggers>\n";
   xml += L"  <Principals>\n    <Principal id=\"Author\">\n";
   xml += L"      <UserId>" + sid + L"</UserId>\n";
@@ -205,8 +195,7 @@ std::wstring BuildTaskXml() {
   xml += L"    </Principal>\n  </Principals>\n";
   xml += L"  <Settings>\n";
   xml += L"    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\n";
-  // На ноутбуке планировщик по умолчанию не запускает задачи от батареи и
-  // останавливает уже запущенные — для автозапуска VPN негодно и то и другое.
+  // по умолчанию на батарее задача не стартует и останавливается
   xml +=
       L"    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\n";
   xml += L"    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\n";
@@ -219,8 +208,7 @@ std::wstring BuildTaskXml() {
   xml += L"    <Enabled>true</Enabled>\n    <Hidden>false</Hidden>\n";
   xml += L"    <RunOnlyIfIdle>false</RunOnlyIfIdle>\n";
   xml += L"    <WakeToRun>false</WakeToRun>\n";
-  // Ноль — «без ограничения». По умолчанию задачу убивают через трое суток, а
-  // это приложение живёт столько, сколько включён компьютер.
+  // по умолчанию задачу убивают через трое суток
   xml += L"    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\n";
   xml += L"    <Priority>7</Priority>\n  </Settings>\n";
   xml += L"  <Actions Context=\"Author\">\n    <Exec>\n";
@@ -232,8 +220,7 @@ std::wstring BuildTaskXml() {
   return xml;
 }
 
-// schtasks под UAC. Полным путём, а не именем: на повышение уходит то, что
-// лежит в системном каталоге, а не первое попавшееся в PATH.
+// полным путём: на повышение уходит системный schtasks, а не первый в PATH
 bool RunSchtasksElevated(const std::wstring& params) {
   wchar_t system_dir[MAX_PATH] = {};
   if (::GetSystemDirectoryW(system_dir, MAX_PATH) == 0) return false;
@@ -246,8 +233,7 @@ bool RunSchtasksElevated(const std::wstring& params) {
   info.lpFile = exe.c_str();
   info.lpParameters = params.c_str();
   info.nShow = SW_HIDE;
-  // Отказ от UAC приходит сюда же (ERROR_CANCELLED) и обрабатывается так же,
-  // как сбой: вызывающий вернёт переключатель обратно.
+  // отказ от UAC (ERROR_CANCELLED) тоже сюда, переключатель вернётся
   if (!::ShellExecuteExW(&info) || info.hProcess == nullptr) return false;
 
   ::WaitForSingleObject(info.hProcess, 60000);
@@ -299,7 +285,6 @@ bool SetRunValue(bool enable) {
   return status == ERROR_SUCCESS;
 }
 
-// Указывает ли найденная задача на этот же exe.
 bool TaskMatchesThisExe(const std::wstring& task_exe) {
   if (task_exe.empty()) return false;
   const std::wstring exe = CurrentExePath();
@@ -328,9 +313,7 @@ bool KeqdroidIsAutostartEnabled() {
 
 bool KeqdroidApplyAutostart(bool enabled, bool elevated, bool allow_elevation) {
   const bool want_task = enabled && elevated;
-  // «Задача есть» и «задача поднимает этот exe» — разные вопросы. Выключая,
-  // сносим любую: после переезда папки в планировщике осталась бы чужая.
-  // Включая — пересоздаём, если путь разъехался.
+  // выключая, сносим любую задачу: после переезда папки осталась бы чужая. включая, пересоздаём при другом пути
   const std::wstring task_exe = TaskExecPath();
   const bool task_present = !task_exe.empty();
   const bool task_matches = TaskMatchesThisExe(task_exe);
@@ -347,14 +330,12 @@ bool KeqdroidApplyAutostart(bool enabled, bool elevated, bool allow_elevation) {
         task_now = false;
       }
     } else {
-      // Молча: запрашивать UAC на каждом запуске приложения — ровно то, от
-      // чего эта настройка избавляет.
+      // молча: UAC на каждом запуске и есть то, от чего настройка избавляет
       ok = false;
     }
   }
 
-  // Ключ Run закрывает всё, чего не делает задача: отказались от UAC —
-  // остаётся обычный автозапуск, и приложение хотя бы стартует.
+  // ключ Run подстраховывает: отказались от UAC, приложение хотя бы стартует
   SetRunValue(enabled && !task_now);
   return ok;
 }

@@ -6,12 +6,8 @@ import 'route_servers.dart';
 import 'split_tunneling_entries.dart';
 import 'traffic_routes.dart';
 
-/// Работают ли маршруты отдельных приложений в такой сессии. Одно правило на
-/// экран и на подключение: что экран обещает, то ядро и получает.
-///
-/// Владельца соединения ядро узнаёт только у своего туннеля: mihomo на ПК сам,
-/// на Android оба ядра спрашивают у VpnService. xray на ПК внутри keqrnel
-/// видит один выход на всех.
+// одно правило на экран и на подключение. владельца соединения ядро узнаёт только у своего туннеля: mihomo на ПК сам,
+// на Android оба ядра спрашивают VpnService, а xray на ПК внутри keqrnel видит один выход на всех
 bool appRoutesRun({
   required VpnBackend core,
   required ConnectionMode mode,
@@ -19,7 +15,6 @@ bool appRoutesRun({
 }) =>
     mode == ConnectionMode.tun && (core == VpnBackend.mihomo || android);
 
-/// Маршрут отдельных приложений в виде, готовом для генератора.
 class RouteAppRules {
   const RouteAppRules({
     required this.tag,
@@ -31,24 +26,19 @@ class RouteAppRules {
     this.listDomains = const [],
   });
 
-  /// Имя в конфиге ядра: набор правил маршрута и его скачанных списков.
   final String tag;
 
-  /// Имена процессов и пути, приведённые к виду, в котором их видит ядро.
   final List<String> apps;
 
   final RouteTarget target;
 
-  /// Выход другого сервера; пусто у маршрута на сервер — выхода у него нет
-  /// (пропал, совпал с активным, не встаёт в ядро), и маршрут идёт через VPN.
+  // пусто, если выхода нет (сервер пропал, совпал с активным, не встаёт в ядро): тогда через VPN
   final String serverTag;
 
   final bool allTraffic;
 
-  /// Сайты маршрута в формате полей списков.
   final String entries;
 
-  /// Домены скачанных списков из ссылок в [entries].
   final List<String> listDomains;
 
   RouteAppRules copyWith({String? entries, List<String>? listDomains}) =>
@@ -63,9 +53,6 @@ class RouteAppRules {
       );
 }
 
-/// Маршруты отдельных приложений в порядке проверки: блокировка, затем
-/// приложения (сайты раньше «весь трафик»). Сервер маршрута берётся из
-/// [outbounds]; нет там — маршрут идёт через VPN, как и у всех приложений.
 List<RouteAppRules> routeAppRules({
   required List<TrafficRoute> routes,
   required List<RouteServerOutbound> outbounds,
@@ -75,7 +62,7 @@ List<RouteAppRules> routeAppRules({
   final out = <RouteAppRules>[];
   for (final route in orderedRoutes(routes)) {
     if (!route.enabled || route.allApps || routeIsEmpty(route)) continue;
-    // Повторы — без учёта регистра: так сравнивает и ядро.
+    // повторы без учёта регистра: так сравнивает и ядро
     final seen = <String>{};
     final apps = [
       for (final app in route.apps)
@@ -99,12 +86,7 @@ List<RouteAppRules> routeAppRules({
   return out;
 }
 
-/// Приложения маршрута, которые раздельное туннелирование ведёт мимо VPN: до
-/// ядра они не доходят, и маршрут для них не сработает никогда.
-///
-/// Сомнение трактуется в пользу маршрута: имя без пути при «только
-/// выбранных» с путём того же имени считается пропущенным — та программа в
-/// туннель идёт, хоть и не из любой папки.
+// сомнение в пользу маршрута: имя без пути при только выбранных с путём того же имени считается пропущенным
 List<String> appsOutsideSplit(
   List<String> apps, {
   required Set<String> include,

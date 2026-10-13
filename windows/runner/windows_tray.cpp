@@ -8,16 +8,13 @@ namespace {
 bool g_minimize_to_tray = true;
 HWND g_tray_hwnd = nullptr;
 
-// Окно спрятано в трей (SW_HIDE), а не свёрнуто в панель задач. Разница важна:
-// у спрятанного нет кнопки на панели, и любая его активация приходит извне.
+// спрятано в трей, а не свёрнуто: кнопки на панели нет, и любая активация приходит извне
 bool g_window_hidden_in_tray = false;
 
 void HideWindowToTray(HWND hwnd) {
   g_window_hidden_in_tray = true;
   ::ShowWindow(hwnd, SW_HIDE);
-  // Tell Dart the window is off screen so it stops the wave animation and the
-  // traffic-stats polling — the Flutter lifecycle reports SW_HIDE only as
-  // `inactive`, so it would otherwise keep rendering at 60fps in the tray.
+  // жизненный цикл Flutter отдаёт SW_HIDE как inactive, и в трее шла бы отрисовка 60 кадров
   KeqdisNotifyWindowVisibility(false);
 }
 
@@ -43,7 +40,6 @@ bool WindowsTrayActivateMainWindow() {
   if (g_tray_hwnd == nullptr || !::IsWindow(g_tray_hwnd)) {
     return false;
   }
-  // Window is coming back on screen — resume the animation / stats polling.
   KeqdisNotifyWindowVisibility(true);
   g_window_hidden_in_tray = false;
   if (::IsIconic(g_tray_hwnd)) {
@@ -72,8 +68,7 @@ bool WindowsTrayToggleMainWindow() {
 }
 
 void WindowsTrayExitApplication(HWND hwnd) {
-  // Last chance to persist the bounds (covers un-maximize via titlebar button
-  // followed by tray exit).
+  // последний шанс сохранить границы: снятие разворота кнопкой и сразу выход из трея
   KeqdroidSaveWindowPlacement(hwnd);
   if (hwnd != nullptr && ::IsWindow(hwnd)) {
     ::DestroyWindow(hwnd);
@@ -98,21 +93,8 @@ bool WindowsTrayHandleMessage(HWND hwnd,
       return false;
     }
 
-    // Only take over activation when the window is fully hidden in the tray —
-    // in that state there is no taskbar button, so this can't be a taskbar
-    // click. A normally minimized window (iconic but still shown in the taskbar)
-    // must keep the OS-native taskbar toggle: swallowing its restore here left
-    // Windows 10 unable to minimize on the second taskbar click (Win11 tolerated
-    // it). IsWindowVisible() is FALSE only for SW_HIDE'd (tray) windows; iconic
-    // windows keep WS_VISIBLE, so they now fall through to the default handler.
-    //
-    // Кто активирует спрятанное окно: второй экземпляр приложения
-    // (ActivateExistingInstance в main.cpp) — и только он. Превратить его
-    // кросс-процессный SetForegroundWindow в полноценный возврат (сказать Dart,
-    // что окно снова на экране, снять g_window_hidden_in_tray) может лишь сам
-    // получатель, поэтому ветка тут и живёт. Обратная сторона — любая другая
-    // активация читается как просьба пользователя, и нативному коду брать это
-    // окно ради Win32-API нельзя (см. docs/PITFALLS.md).
+    // перехватываем только спрятанное в трей: у свёрнутого на панели есть кнопка, и съеденный restore
+    // на Windows 10 ломал второе нажатие по ней. спрятанное активирует только второй экземпляр (ActivateExistingInstance)
     if (g_window_hidden_in_tray || !::IsWindowVisible(hwnd)) {
       WindowsTrayActivateMainWindow();
       if (result != nullptr) {
@@ -126,9 +108,7 @@ bool WindowsTrayHandleMessage(HWND hwnd,
   if (message == WM_SYSCOMMAND) {
     const WPARAM command = wparam & 0xFFF0;
     if (command == SC_RESTORE || command == SC_MAXIMIZE) {
-      // Same rule as WM_ACTIVATE: only intervene for a tray-hidden window.
-      // Leave a taskbar-minimized (iconic) window to DefWindowProc so the
-      // native restore/minimize taskbar toggle keeps working on Windows 10.
+      // то же правило, что у WM_ACTIVATE
       if (g_window_hidden_in_tray || !::IsWindowVisible(hwnd)) {
         WindowsTrayActivateMainWindow();
         if (result != nullptr) {

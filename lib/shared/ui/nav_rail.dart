@@ -7,14 +7,6 @@ import 'package:keqdroid/shared/ui/expressive.dart';
 import 'package:keqdroid/shared/ui/haptics.dart';
 import 'package:keqdroid/shared/ui/tv_focus.dart';
 
-/// Навигационная рейка — та же навигация, что [AppBottomNav], но у переднего
-/// края окна шириной от «expanded» (телефон боком, планшет). Обе сразу спека M3
-/// не показывает: на компактной ширине панель, шире — рейка.
-///
-/// Свёрнутый вариант M3E, числа из токенов AndroidX
-/// (NavigationRailCollapsedTokens, NavigationRailVerticalItemTokens): ширина
-/// 96, индикатор 56×32, подпись `labelMedium` под значком. Пункты по центру
-/// высоты: лежащий телефон держат за края, и до верха рейки тянуться дальше.
 class AppNavRail extends StatefulWidget {
   final int index;
   final bool showConnectedBadge;
@@ -36,7 +28,7 @@ class AppNavRail extends StatefulWidget {
 class _AppNavRailState extends State<AppNavRail> with TickerProviderStateMixin {
   static const int _count = 3;
 
-  /// Unbounded — пружина M3E недодемпфирована и обязана перелетать за цель.
+  // unbounded: пружина должна перелетать за цель
   late final List<AnimationController> _ctrls = List.generate(
     _count,
     (i) => AnimationController.unbounded(
@@ -77,9 +69,6 @@ class _AppNavRailState extends State<AppNavRail> with TickerProviderStateMixin {
 
     return ColoredBox(
       color: Theme.of(context).colorScheme.surface,
-      // Врезки со стороны края — рейкины: вырез камеры у лежащего телефона
-      // приходится как раз на неё. Сверху и снизу — статус-бар и жестовая
-      // полоса.
       child: SafeArea(
         left: atLeft,
         right: !atLeft,
@@ -117,7 +106,6 @@ class _RailItem extends StatelessWidget {
   final bool badge;
   final bool selected;
 
-  /// 0 — не выбран, 1 — выбран; пружина может перелетать за 1.
   final double t;
   final VoidCallback onTap;
 
@@ -141,9 +129,7 @@ class _RailItem extends StatelessWidget {
     final shape = ExpressiveShape.border(ExpressiveShape.full);
     final tc = t.clamp(0.0, 1.0);
 
-    // Цель нажатия по спеке — вся ширина рейки, а state layer — только по
-    // индикатору. Внешний детектор ловит поля, внутренний InkWell выигрывает
-    // спор жестов на самом индикаторе, так что нажатие не срабатывает дважды.
+    // внешний детектор ловит поля, InkWell выигрывает спор на индикаторе, двойного нажатия нет
     return MergeSemantics(
       child: Semantics(
         selected: selected,
@@ -158,8 +144,6 @@ class _RailItem extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // На телевизоре фокус пульта заливает индикатор (см. TvFocusHighlight),
-                // поэтому цвета значка берутся уже под его темой.
                 TvFocusHighlight(
                   radius: BorderRadius.circular(ExpressiveShape.full),
                   child: Builder(builder: (context) {
@@ -177,9 +161,6 @@ class _RailItem extends StatelessWidget {
                           child: Stack(
                             alignment: Alignment.center,
                             children: [
-                              // Индикатор раскрывается от центра значка — так его
-                              // появление описывает спека. Ink, а не Container:
-                              // рисуется на слое Material, и рипл остаётся поверх.
                               Ink(
                                 width: lerpDouble(
                                   _indicatorHeight,
@@ -217,8 +198,6 @@ class _RailItem extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                     horizontal: ExpressiveSpacing.extraSmall,
                   ),
-                  // Подпись не режется: спека запрещает многоточие в пункте
-                  // навигации, длинное слово переносится на вторую строку.
                   child: Text(
                     label,
                     textAlign: TextAlign.center,

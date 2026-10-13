@@ -7,15 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Цикл морфинга фигур M3 Expressive — общий для индикатора загрузки и формы
-/// кнопки подключения.
-///
-/// Повторяет `LoadingIndicator` из androidx вместе с числами, иначе выходит
-/// «похоже, но не то»: семь фигур, шаг морфинга 650 мс, недодемпфированная
-/// пружина с перелётом, полный оборот за 4666 мс линейно и независимо от
-/// морфинга. Пружина добегает раньше шага, и остаток фигура стоит — эта пауза и
-/// делает движение узнаваемым, оно щёлкает формами, а не перетекает. Периоды
-/// намеренно не кратны, поэтому рисунок не повторяется покадрово.
 class ShapeMorphCycle extends ChangeNotifier {
   ShapeMorphCycle({required TickerProvider vsync}) {
     _morph = AnimationController.unbounded(vsync: vsync)
@@ -31,7 +22,6 @@ class ShapeMorphCycle extends ChangeNotifier {
   static const _globalRotationDurationMillis = 4666;
   static const _quarterRotation = 90.0;
 
-  /// Официальная последовательность M3 Expressive.
   static final List<RoundedPolygon> shapes = [
     MaterialShapes.softBurst,
     MaterialShapes.cookie9Sided,
@@ -42,12 +32,7 @@ class ShapeMorphCycle extends ChangeNotifier {
     MaterialShapes.oval,
   ];
 
-  /// Морфы считаются один раз на всё приложение, и это не преждевременная
-  /// оптимизация: конструктор [Morph] сопоставляет кривые двух фигур (`match`),
-  /// то есть перебор с поиском лучшего соответствия. Строить его в `build` или
-  /// в пейнтере значило бы гонять этот перебор 60 раз в секунду.
-  ///
-  /// Список замкнут в кольцо: последняя фигура перетекает обратно в первую.
+  // Morph сопоставляет кривые перебором, строить его в build или пейнтере значит 60 раз в секунду
   static final List<Morph> morphs = [
     for (var i = 0; i < shapes.length; i++)
       Morph(shapes[i], shapes[(i + 1) % shapes.length]),
@@ -59,47 +44,32 @@ class ShapeMorphCycle extends ChangeNotifier {
     ratio: 0.6,
   );
 
-  /// Пружине нужен unbounded-контроллер: она перелетает за 1.0 и возвращается,
-  /// а обычный AnimationController зажал бы значение в [0, 1] и съел бы отдачу.
+  // unbounded: пружина перелетает за 1.0, обычный контроллер срезал бы отдачу
   late final AnimationController _morph;
   late final AnimationController _rotation;
   Timer? _timer;
   int _index = 0;
   double _stepAngle = 0;
 
-  /// Сдвиг оборота: свой контроллер у каждого цикла начинается с нуля, а
-  /// повернуть фигуру надо туда, где сейчас все остальные.
   double _rotationOffset = 0;
 
-  /// Часы фазы — общие для всех циклов в приложении.
-  ///
-  /// Берём время планировщика, а не свой секундомер: оно то же самое, по
-  /// которому тикают контроллеры, и в тестах идёт по `pump`, а не мимо него.
+  // время планировщика: по нему тикают контроллеры, и в тестах оно идёт по pump
   static Duration get _now =>
       SchedulerBinding.instance.currentSystemFrameTimeStamp;
 
-  /// Номер идущего сейчас шага на общей сетке.
   static int _stepsNow(Duration now) =>
       now.inMilliseconds ~/ _morphIntervalMillis;
 
-  /// Номер шага для сработавшего таймера — с округлением до ближайшей границы.
-  ///
-  /// Таймер срабатывает на границе, а часы планировщика отстают от неё на
-  /// последний кадр. По floor это давало бы номер предыдущего шага, то есть ту
-  /// же пару фигур ещё раз: пружина дёргала бы форму на месте.
+  // округляем к границе: часы планировщика отстают на кадр, и floor дал бы прежний шаг
   static int _stepsAtBoundary(Duration now) =>
       (now.inMilliseconds + _morphIntervalMillis ~/ 2) ~/ _morphIntervalMillis;
 
-  /// Морф «текущая фигура → круг» для завершения цикла, см. [settle].
   Morph? _settleMorph;
 
-  /// Идёт ли доводка до круга.
   bool get isSettling => _settleMorph != null;
 
-  /// Текущая пара фигур.
   Morph get morph => _settleMorph ?? morphs[_index];
 
-  /// Положение между ними; перелетает за 1.0 — так работает пружина.
   double get progress => _morph.value;
 
   double get degrees =>
@@ -107,18 +77,6 @@ class ShapeMorphCycle extends ChangeNotifier {
       _stepAngle +
       (_rotation.value + _rotationOffset) * 360;
 
-  /// Довести фигуру до круга и остановиться.
-  ///
-  /// Без этого цикл обрывался на произвольной форме: подключение заканчивалось,
-  /// и кнопка скачком превращалась из клевера обратно в круг. Здесь она
-  /// доезжает туда той же пружиной, что и все остальные переходы.
-  ///
-  /// Морф берётся от конечной фигуры текущей пары, а не от промежуточной формы:
-  /// пружина почти всё время интервала стоит на завершённом переходе, поэтому в
-  /// момент вызова кадр совпадает с ней с точностью до отдачи.
-  ///
-  /// [onDone] зовётся, когда доводка закончилась — по нему владелец убирает
-  /// цикл и возвращает обычную круглую форму.
   void settle({required VoidCallback onDone}) {
     if (isSettling) return;
     _timer?.cancel();
@@ -132,21 +90,12 @@ class ShapeMorphCycle extends ChangeNotifier {
         duration: _settleDuration,
         curve: Curves.easeOutCubic,
       ).whenComplete(() {
-        // TickerFuture завершается и когда анимацию перебили (различает только
-        // `orCancel`). Без этой проверки отменённая доводка всё равно звала бы
-        // onDone — то есть владелец убирал бы цикл, который уже снова крутится.
+        // TickerFuture завершается и при отмене, без проверки onDone убрал бы уже ожившую фигуру
         if (!isSettling) return;
         onDone();
       });
   }
 
-  /// Отменить доводку и вернуться к бесконечному циклу.
-  ///
-  /// Нужно, когда работа возобновилась, пока фигура ехала к кругу. На первом
-  /// подключении так и происходит: система показывает диалог разрешения VPN,
-  /// статус на этот момент проваливается из «подключается» и тут же
-  /// возвращается. Без возобновления цикл добегал доводку до конца и умирал —
-  /// фигур на кнопке не было вовсе до самого конца подключения.
   void resume() {
     if (!isSettling) return;
     _settleMorph = null;
@@ -155,39 +104,20 @@ class ShapeMorphCycle extends ChangeNotifier {
 
   static final _circle = MaterialShapes.circle;
 
-  /// Доводка идёт кривой, а не пружиной, и это принципиально.
-  ///
-  /// Критически задемпфированная пружина подходит к цели асимптотически:
-  /// визуально она приезжала за пару десятых, а `isDone` наступал сильно
-  /// позже — фигура успевала стать кругом и потом ещё около секунды просто
-  /// стояла, прежде чем уступить место иконке. Снаружи это выглядело как
-  /// зависание после успешного подключения.
-  ///
-  /// Перелёт здесь и не нужен: круг — конечная форма кнопки, дрогнуть в самом
-  /// конце он не должен.
+  // кривой, а не пружиной: критическая пружина доезжает асимптотически, и isDone наступал на секунду позже
   static const _settleDuration = Duration(milliseconds: 320);
 
-  /// Заводит цикл с той фазы, на которой он сейчас у остальных индикаторов.
-  ///
-  /// Тайлы списка строятся лениво и, уехав из кадра, умирают вместе со своим
-  /// циклом. Начинай он с первой фигуры, вернувшийся в кадр индикатор
-  /// откатывал бы анимацию к её началу — при пинге пачки серверов это видно
-  /// как рывок на каждой прокрутке. Поэтому и шаг, и доворот, и оборот
-  /// считаются от общих часов, а не от момента создания.
+  // фаза от общих часов: ленивые тайлы умирают вместе с циклом, и вернувшийся в кадр откатывал бы анимацию
   void _start() {
     final now = _now;
     final steps = _stepsNow(now);
     _index = steps % morphs.length;
     _stepAngle = (steps * _quarterRotation) % 360;
-    // Пружина отрабатывает заметно быстрее самого шага и остаток интервала
-    // стоит на завершённом переходе — с середины шага честнее показать эту
-    // отстоявшуюся форму, чем догонять симуляцию с произвольного места.
     _morph.value = 1;
     _rotationOffset =
         (now.inMilliseconds % _globalRotationDurationMillis) /
             _globalRotationDurationMillis;
     _rotation.repeat();
-    // Первый шаг — по общей сетке, дальше по ней же идёт periodic.
     final untilNext =
         _morphIntervalMillis - now.inMilliseconds % _morphIntervalMillis;
     _timer = Timer(Duration(milliseconds: untilNext), () {
@@ -199,11 +129,7 @@ class ShapeMorphCycle extends ChangeNotifier {
     });
   }
 
-  /// Следующая пара фигур: прогресс с нуля, доворот на четверть.
-  ///
-  /// Номер шага берётся у общих часов, а не инкрементом: periodic-таймеры
-  /// разных индикаторов расходятся на миллисекунды, и за минуту работы соседи
-  /// разъезжались бы по фигурам.
+  // номер шага от общих часов: periodic-таймеры расходятся, и соседи разъезжались бы по фигурам
   void _step() {
     final steps = _stepsAtBoundary(_now);
     _index = steps % morphs.length;
@@ -222,11 +148,6 @@ class ShapeMorphCycle extends ChangeNotifier {
   }
 }
 
-/// Рисует текущую фигуру [ShapeMorphCycle] заливкой.
-///
-/// Общий для индикатора загрузки и для кнопки подключения: у M3E это один и тот
-/// же компонент, «contained loading indicator» — круглая подложка и фигура
-/// внутри неё, отличается только размер.
 class MorphPainter extends CustomPainter {
   const MorphPainter({
     required this.morph,
@@ -244,8 +165,6 @@ class MorphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Фигуры нормализованы в квадрат (0,0)–(1,1), поэтому масштаб — сторона
-    // виджета, ужатая до активного размера, а сдвиг возвращает её в центр.
     final side = math.min(size.width, size.height) * scale;
     final dx = (size.width - side) / 2;
     final dy = (size.height - side) / 2;

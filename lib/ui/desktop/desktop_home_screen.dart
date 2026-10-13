@@ -35,7 +35,7 @@ import '../../utils/clipboard_import.dart';
 import 'desktop_connection_mode.dart';
 import 'sidebar_group_nav.dart';
 
-/// desktop shell: фиксированный sidebar + вкладки (без NavigationRail — на windows ломается layout)
+// свой сайдбар: NavigationRail на Windows ломал раскладку
 class DesktopHomeScreen extends ConsumerStatefulWidget {
   const DesktopHomeScreen({super.key});
 
@@ -56,14 +56,10 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(_onGlobalKey);
-    // Linux: window close hides to tray (handled in main via window_manager).
-    // The tray "Quit" tears the tunnel down first via this callback.
     if (Platform.isLinux) {
       LinuxBackgroundService.instance.onQuit = _disconnectForQuit;
       LinuxBackgroundService.instance.uiVisible
           .addListener(_onLinuxWindowVisibility);
-      // После первого ввода пароля в polkit для TUN — предложить сделать запуск
-      // беспарольным (установить правило). См. LinuxTunnelBackend.
       _tunRememberSub = linuxTunRememberOffers.listen((_) {
         if (mounted) unawaited(_maybeOfferTunRemember());
       });
@@ -86,8 +82,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Меню трея на Linux заводится до первого кадра, когда языка ещё нет; здесь
-    // же оно догоняет смену языка в настройках.
     final l10n = AppLocalizations.of(context);
     if (Platform.isLinux && l10n != null) {
       unawaited(LinuxBackgroundService.instance.setTrayLabels(
@@ -102,9 +96,7 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     final settings = await ref.read(storageProvider).getSettings();
     final bindings = HotkeyService.parseBindings(settings.hotkeys);
     var failed = await HotkeyService.apply(bindings);
-    // После перезапуска (elevation для TUN, быстрый релонч) предыдущий
-    // процесс может ещё доживать и держать свои RegisterHotKey — повторяем
-    // попытку, прежде чем сообщать «занято другим приложением».
+    // прошлый процесс после перезапуска ещё может держать RegisterHotKey
     for (var attempt = 0; failed.isNotEmpty && attempt < 3; attempt++) {
       await Future<void>.delayed(const Duration(seconds: 2));
       if (!mounted) return;
@@ -115,8 +107,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     }
   }
 
-  /// Snackbar о сочетаниях, занятых другими приложениями. Вызывать только
-  /// после проверки [mounted].
   void _showHotkeyConflictSnack(
     List<String> failedActionIds,
     Map<String, String> hotkeys,
@@ -131,8 +121,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     );
   }
 
-  /// Срабатывание хоткея: Windows — из натива (даже при скрытом окне),
-  /// Linux — из in-app обработчика HotkeyService.
   Future<void> _onHotkeyAction(HotkeyAction action) async {
     if (!mounted) return;
     try {
@@ -173,7 +161,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     await ref.read(vpnStateProvider.notifier).connect();
   }
 
-  /// Переключить Proxy ⇄ TUN; при активном туннеле — с переподключением.
   Future<void> _hotkeyToggleTunMode() async {
     final settings =
         ref.read(settingsNotifierProvider).value ?? const AppSettings();
@@ -184,8 +171,7 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     if (next == ConnectionMode.tun && Platform.isWindows) {
       final elevated = await WindowsDesktopService.isProcessElevated();
       if (!elevated) {
-        // Молчаливый UAC из глобального хоткея дезориентирует — показываем
-        // окно, диалог перезапуска покажет applyDesktopConnectionMode.
+        // молчаливый UAC из хоткея сбивает с толку, сперва показываем окно
         await WindowsDesktopService.restoreMainWindow();
       }
     }
@@ -193,7 +179,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     await applyDesktopConnectionMode(context, DesktopModeDeps.of(ref), settings, next);
   }
 
-  /// Переключиться на сервер с наименьшим пингом (speed-замеры не считаются).
   Future<void> _hotkeyBestPingServer() async {
     final serversState = ref.read(serversProvider);
     ServerItem? best;
@@ -244,7 +229,7 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
       await _runWindowsStartupTasks();
       await _runLinuxStartupTasks();
     } finally {
-      // После автостарта, а не наперегонки с ним: оба подключают один сервер.
+      // после автостарта: оба подключают один и тот же сервер
       await _maybeResumeAfterUpdate();
     }
   }
@@ -285,7 +270,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     }
   }
 
-  /// Туннель, погашенный перед перезапуском на обновление, поднимаем обратно.
   Future<void> _maybeResumeAfterUpdate() async {
     if (!await ResumeAfterUpdate.take() || _startupConnectInFlight) return;
 
@@ -303,7 +287,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     }
   }
 
-  /// Подключение без нажатия на старте процесса — к тому серверу, что выбран.
   Future<void> _connectActiveOnStartup(String reason) async {
     await ref.read(vpnStateProvider.future);
     await ref.read(serversProvider.notifier).reloadPreservingActive();
@@ -329,8 +312,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
         .connect(autostartTunFallback: true);
   }
 
-  /// Tray "Quit" on Linux: disconnect (kills cores + clears system proxy)
-  /// before the process exits.
   Future<void> _disconnectForQuit() async {
     try {
       await ref.read(vpnStateProvider.notifier).disconnect();
@@ -339,9 +320,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     }
   }
 
-  /// Предложить установить беспарольное правило polkit для TUN (Linux). Один раз:
-  /// не показываем, если пользователь уже отклонил (linuxTunRememberDismissed)
-  /// или правило уже стоит.
   Future<void> _maybeOfferTunRemember() async {
     if (!Platform.isLinux || _tunRememberDialogOpen) return;
     if (LinuxTunnelBackend.isPasswordlessTunInstalled()) return;
@@ -411,8 +389,7 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     _tunRememberDialogOpen = false;
     if (!mounted) return;
 
-    // В любом случае больше не спрашиваем автоматически (управление — в
-    // «Разрешениях»). Отметку ставим до установки, чтобы отказ тоже запомнился.
+    // отметку до установки, чтобы отказ тоже запомнился
     final current = ref.read(settingsNotifierProvider).value;
     if (current != null) {
       await ref
@@ -449,16 +426,11 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     super.dispose();
   }
 
-  /// Нативный трей сообщил, скрыто окно (SW_HIDE) или восстановлено. Это
-  /// авторитетный сигнал видимости для десктопа — гасит/возобновляет волну и
-  /// опрос трафика (Flutter-lifecycle на трей-hide отдаёт лишь `inactive`).
   void _onWindowVisibility(bool visible) {
     if (!mounted) return;
     ref.read(desktopWindowVisibleProvider.notifier).set(visible);
   }
 
-  /// Linux: окно убрано в фон или возвращено нашими же руками (см.
-  /// LinuxBackgroundService.uiVisible).
   void _onLinuxWindowVisibility() =>
       _onWindowVisibility(LinuxBackgroundService.instance.uiVisible.value);
 
@@ -478,9 +450,7 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    // До ранних return'ов, чтобы подписка жила на каждом билде: хоткеи
-    // переприменяются при любом изменении настроек (экран хоткеев, восстановление
-    // бэкапа). До первого изменения действует применение из initState.
+    // до ранних return: подписка должна жить на каждом билде
     ref.listen<AsyncValue<AppSettings>>(settingsNotifierProvider, (prev, next) {
       final prevHotkeys = prev?.value?.hotkeys;
       final nextHotkeys = next.value?.hotkeys;
@@ -496,9 +466,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
       );
     });
 
-    // Меню трея на Windows — нативное; держим его живым, пока жив экран.
-    // Окно при этом никто не сужает, поэтому ни ветки «показываем меню вместо
-    // приложения», ни порога ширины против overflow вкладок больше нет.
     ref.watch(windowsTrayMenuProvider);
 
     final l10n = AppLocalizations.of(context)!;
@@ -550,10 +517,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
                       compact: MediaQuery.sizeOf(context).width < 900,
                       onTap: () => _selectTab(i),
                     ),
-                  // Пустоту под разделами занимает быстрый переход по группам
-                  // серверов: он сам разворачивается в Expanded и потому
-                  // работает и как прежний Spacer. На одной группе (прыгать
-                  // некуда) схлопывается в ноль, и панель выглядит как раньше.
                   SidebarGroupNav(
                     compact: MediaQuery.sizeOf(context).width < 900,
                     onOpenServers: () => _selectTab(0),
@@ -579,12 +542,7 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     );
   }
 
-  /// Ctrl/Cmd+V on the active tab → paste-add (subscriptions/servers). Registered
-  /// as a GLOBAL keyboard handler (not a Focus.onKeyEvent) so it fires regardless
-  /// of which widget holds focus — the Focus-based version never received events
-  /// on Linux/GTK. Matches the PHYSICAL V key, so it works on any layout (on
-  /// ЙЦУКЕН the logical key is "м"). A focused text field keeps its own paste,
-  /// and so does anything opened on top of the tab — see the checks below.
+  // глобальный обработчик: Focus.onKeyEvent на Linux/GTK событий не получал. физическая V работает и на ЙЦУКЕН
   bool _onGlobalKey(KeyEvent event) {
     if (event is! KeyDownEvent || !mounted) return false;
     if (Platform.isLinux && _isQuitShortcut(event)) {
@@ -594,16 +552,9 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     final mod = HardwareKeyboard.instance.isControlPressed ||
         HardwareKeyboard.instance.isMetaPressed;
     if (!mod || event.physicalKey != PhysicalKeyboardKey.keyV) return false;
-    // Что-то открыто поверх вкладки — Ctrl+V принадлежит ему, а не нам.
-    //
-    // Проверки фокуса ниже для этого мало, и это была настоящая ошибка: пока
-    // человек не щёлкнул в поле формы добавления, фокуса в тексте нет, и
-    // Ctrl+V добавлял подписку мимо открытой формы. Форма при этом оставалась
-    // на экране, человек дозаполнял её и жал «загрузить» — и получал «уже
-    // добавлена», не понимая, откуда она взялась.
+    // поверх вкладки что-то открыто, Ctrl+V принадлежит ему: иначе подписка добавлялась мимо открытой формы
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return false;
-    // Don't hijack paste while the user is typing in a text field.
     if (FocusManager.instance.primaryFocus?.context?.widget is EditableText) {
       return false;
     }
@@ -618,10 +569,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     return false;
   }
 
-  /// Ctrl+Q — выход, как у Linux-программ: где трея нет, крестик только
-  /// сворачивает окно, и другого выхода не остаётся. Физическая клавиша — чтобы
-  /// работало в русской раскладке. Сочетание из настроек хоткеев и запись
-  /// нового сочетания важнее.
   bool _isQuitShortcut(KeyEvent event) {
     final hk = HardwareKeyboard.instance;
     return event.physicalKey == PhysicalKeyboardKey.keyQ &&
@@ -634,7 +581,6 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
   }
 }
 
-/// bounded constraints для корней вкладок (нужно в IndexedStack)
 class _DesktopTabHost extends StatelessWidget {
   final Widget child;
   const _DesktopTabHost({required this.child});
@@ -648,13 +594,6 @@ class _DesktopTabHost extends StatelessWidget {
   }
 }
 
-/// Пункт боковой навигации.
-///
-/// Переключение идёт пружиной, как в нижней панели на телефоне
-/// (`lib/shared/ui/bottom_nav.dart`), и по той же механике: цвет пилюли, её
-/// отступы и цвет содержимого считаются от одного значения покадрово. Раньше
-/// здесь всё переключалось мгновенно, и панель ощущалась мёртвой рядом с
-/// телефонной.
 class _SidebarTile extends StatefulWidget {
   final IconData icon;
   final String label;
@@ -676,7 +615,7 @@ class _SidebarTile extends StatefulWidget {
 
 class _SidebarTileState extends State<_SidebarTile>
     with SingleTickerProviderStateMixin {
-  /// Unbounded — пружина M3E недодемпфирована и обязана перелетать за цель.
+  // unbounded: пружина должна перелетать за цель
   late final AnimationController _ctrl = AnimationController.unbounded(
     vsync: this,
     value: widget.selected ? 1 : 0,
@@ -703,15 +642,11 @@ class _SidebarTileState extends State<_SidebarTile>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    // Пункт навигации у M3E — пилюля, как и в нижней панели. Здесь стояло
-    // скругление 12, и панель читалась как список прямоугольников.
     final shape = BorderRadius.circular(ExpressiveShape.full);
 
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (context, _) {
-        // Перелёт пружины нужен геометрии, но не цвету: там он читается как
-        // мигание.
         final t = _ctrl.value;
         final tc = t.clamp(0.0, 1.0);
 
@@ -721,15 +656,12 @@ class _SidebarTileState extends State<_SidebarTile>
           scheme.onSecondaryContainer,
           tc,
         )!;
-        // Выбранная пилюля «набухает»: поля вокруг неё поджимаются, и она
-        // раздаётся в стороны — то же движение, что раскрытие пункта внизу.
         final outerInset = 10.0 - 4.0 * tc;
 
         final pill = Material(
           color: bg,
           borderRadius: shape,
-          // Цвет ведём пружиной покадрово — неявная 200-миллисекундная
-          // анимация Material тянулась бы следом и отставала от отступов.
+          // цвет ведём пружиной покадрово, неявная анимация Material отставала бы
           animationDuration: Duration.zero,
           child: InkWell(
             onTap: widget.onTap,
@@ -751,7 +683,6 @@ class _SidebarTileState extends State<_SidebarTile>
                         Expanded(
                           child: Text(
                             widget.label,
-                            // Вес из шкалы: у выбранного усиленный вариант роли.
                             style:
                                 (widget.selected
                                         ? textTheme.emphasized(
@@ -827,7 +758,6 @@ class _ConnectionModeChip extends ConsumerWidget {
           padding: const EdgeInsets.only(left: 4, bottom: 8),
           child: Text(
             AppLocalizations.of(context)!.desktopModeShort,
-            // Тот же вид, что у заголовков секций в настройках.
             style: Theme.of(context).textTheme
                 .emphasized(Theme.of(context).textTheme.labelLarge)
                 ?.copyWith(color: Theme.of(context).colorScheme.primary),

@@ -11,13 +11,7 @@ import '../../services/windows_desktop_service.dart';
 import '../../shared/ui/app_theme.dart';
 import '../../utils/error_messages.dart';
 
-/// То немногое из провайдеров, что нужно переключателю режима.
-///
-/// Раньше сюда передавался `WidgetRef`. Но зовёт эту функцию не только экран:
-/// меню трея на Windows живёт в провайдере, и у него есть только `Ref`. Общего
-/// предка у `Ref` и `WidgetRef` нет, а принять сам `ref.read` мешает то, что
-/// `ProviderListenable` из flutter_riverpod наружу не экспортируется. Поэтому
-/// зависимости передаются явно — заодно видно, что функция вообще трогает.
+// у Ref и WidgetRef нет общего предка, а меню трея знает только Ref, поэтому зависимости явно
 class DesktopModeDeps {
   const DesktopModeDeps({
     required this.vpn,
@@ -28,7 +22,7 @@ class DesktopModeDeps {
   final VpnStateNotifier vpn;
   final SettingsNotifier settings;
 
-  /// Функцией, а не значением: статус перечитывается после await'ов.
+  // функцией: статус перечитывается после await
   final VpnStatus? Function() status;
 
   factory DesktopModeDeps.of(WidgetRef ref) => DesktopModeDeps(
@@ -44,10 +38,6 @@ class DesktopModeDeps {
       );
 }
 
-/// Переключение Proxy/TUN на desktop (sidebar, tray, хоткей).
-/// При активном туннеле режим меняется с автоматическим переподключением
-/// (disconnect → save → connect) — как это всегда делал хоткей, вместо
-/// отказа «сначала отключитесь».
 Future<void> applyDesktopConnectionMode(
   BuildContext context,
   DesktopModeDeps deps,
@@ -56,8 +46,7 @@ Future<void> applyDesktopConnectionMode(
 ) async {
   if (next == settings.connectionModeEnum) return;
 
-  // Linux elevates per-connect via pkexec (sing-box), so only Windows needs
-  // the relaunch-as-admin flow before switching to TUN.
+  // на Linux права даёт pkexec при подключении, перезапуск с админом нужен только Windows
   if (next == ConnectionMode.tun && Platform.isWindows) {
     final elevated = await WindowsDesktopService.isProcessElevated();
     if (!elevated) {
@@ -114,8 +103,6 @@ Future<void> applyDesktopConnectionMode(
     try {
       await deps.vpn.connect();
     } catch (e) {
-      // Ошибка уже лежит в state (её покажет круг подключения); снекбар —
-      // немедленная подсказка, если пользователь смотрит на sidebar/трей.
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(friendlyError(e, context))),
@@ -125,15 +112,8 @@ Future<void> applyDesktopConnectionMode(
   }
 }
 
-/// Рвёт активный туннель перед перезапуском с правами администратора.
-///
-/// `restartAsAdministrator` просто вызывает PostQuitMessage и процесс умирает,
-/// ничего не остановив: без этого keqrnel proxy-сессии оставался жить (новый
-/// elevated-экземпляр поднимался раньше, чем умирал старый, и держал job object
-/// открытым), а системный прокси Windows продолжал указывать на порт, который
-/// вот-вот исчезнет. Нотифаер и статус передаются значениями: в трее вызов идёт
-/// уже после демонтажа меню, когда `ref` мёртв. Ошибку глотаем — перезапуск
-/// важнее, остатки подберёт стартовая зачистка (initCoreProcessGuard).
+// перезапуск с правами просто зовёт PostQuitMessage: без остановки keqrnel жил дальше,
+// а системный прокси смотрел на порт, который вот-вот исчезнет
 Future<void> stopSessionBeforeElevation({
   required VpnStateNotifier notifier,
   required VpnStatus? status,

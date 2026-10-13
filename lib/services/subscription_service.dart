@@ -23,10 +23,6 @@ import '../utils/ssr_uri.dart';
 import '../utils/vmess_json_link.dart';
 import '../core/exceptions.dart';
 
-/// Косметика, которую панель отдаёт заголовками ответа на запрос подписки.
-///
-/// Отдельный класс, а не поля в record'е результата: их пять, а record с
-/// десятком позиций пришлось бы переписывать в каждом месте возврата.
 class SubscriptionProfileHeaders {
   final String? title;
   final String? announce;
@@ -52,21 +48,12 @@ class SubscriptionProfileHeaders {
       updateIntervalHours == null;
 }
 
-/// Что вернула загрузка подписки: сами конфиги плюс всё, что панель сообщила
-/// о квоте и оформлении.
-///
-/// Все поля обязательны намеренно — раньше это был record, и он не позволял
-/// забыть ни одного; ветки фолбэков сетевого конвейера должны сказать про
-/// каждое поле явно, в том числе `null`.
 class SubscriptionFetchResult {
   final List<String> configs;
   final int? usedBytes;
   final int? totalBytes;
   final DateTime? expiresAt;
 
-  /// UA, на котором payload наконец приехал. `null` означает «перебора UA не
-  /// было» — тогда сохранённый в подписке UA не затирается, см.
-  /// [SubscriptionService.updateSubscription].
   final String? usedUserAgent;
 
   final SubscriptionProfileHeaders profile;
@@ -99,30 +86,16 @@ class SubscriptionService {
   final StorageService _storage;
   final Dio _dio;
 
-  /// Порт локального HTTP-инбаунда ядра на момент запроса (null — напрямую).
-  /// Нужен и вне dio: HttpClient-фолбэк ниже поднимает свой клиент.
   final LocalProxyPortResolver? _localProxyPort;
   String? _cachedHwid;
   String? _cachedDeviceModel;
   static const MethodChannel _platform = MethodChannel('keqdis_vpn_channel');
 
-  /// браузерный UA: базовый для краулинга html-страниц и последний резерв
-  /// в переборе (часть cdn/waf отдаёт payload только браузеру)
   static const browserUserAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-  /// UA сторонних клиентов для перебора при отказе панели.
-  ///
-  /// Это намеренно короткий список, а не весь каталог из [ClientUaPresets]:
-  /// перебор делает по запросу на вариант, и полный каталог растянул бы
-  /// неудачную загрузку на десятки секунд. Ручной выбор в подписке берёт
-  /// каталог целиком.
   static const clientUserAgents = ClientUaPresets.rotation;
 
-  /// UA нашего клиента — им идёт первый запрос (если у подписки нет
-  /// сохранённого рабочего UA) и он первый в переборе. Версия подтягивается
-  /// из PackageInfo один раз; без платформенного канала (тесты, изоляты)
-  /// остаёмся на голом 'keqdroid'.
   static String _appUserAgentCache = 'keqdroid';
   static bool _appUserAgentResolved = false;
   static Future<String> appUserAgent() async {
@@ -133,7 +106,7 @@ class SubscriptionService {
           _appUserAgentCache = 'keqdroid/${info.version}';
         }
       } on Object {
-        // нет платформы — оставляем дефолт
+        // нет платформы, остаётся голый keqdroid
       }
       _appUserAgentResolved = true;
     }
@@ -147,15 +120,7 @@ class SubscriptionService {
   })  : _localProxyPort = localProxyPort,
         _dio = dio ?? _buildDio(localProxyPort: localProxyPort);
 
-  /// dio с опциональным локальным HTTP-прокси (порт keqrnel/xray/mihomo HTTP
-  /// inbound). Обязателен при включённом VPN: на Android собственный пакет
-  /// исключён из TUN (`addDisallowedApplication` в KeqdisVpnService), на
-  /// десктопе туннель тоже мимо процесса приложения — без прокси запрос к
-  /// подписке уходит напрямую к провайдеру и упирается в его блокировку, хотя
-  /// в браузере та же ссылка открывается.
-  ///
-  /// Резолвер спрашивается на каждый запрос: VPN включают и выключают, пока
-  /// сервис живёт. Без [localProxyPort] работает напрямую.
+  // при включённом VPN только через локальный инбаунд: пакет приложения исключён из TUN
   static Dio _buildDio({LocalProxyPortResolver? localProxyPort}) {
     final dio = Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 15),
@@ -174,8 +139,6 @@ class SubscriptionService {
     return dio;
   }
 
-  // безопасность
-
   static const _blockedHostnames = {
     'metadata.google.internal',
     '169.254.169.254',           // AWS/GCP/Azure IMDS
@@ -186,8 +149,7 @@ class SubscriptionService {
     try {
       if (url.length > 2048) return false;
       final uri = Uri.parse(url);
-      // Только https: payload подписки несёт серверные секреты (пароли, uuid,
-      // ключи), по plain http их читает и подменяет любой MITM по пути.
+      // только https: в payload пароли и ключи серверов, по http их читает любой посредник
       if (!uri.hasScheme || uri.scheme != 'https') {
         return false;
       }
@@ -209,18 +171,13 @@ class SubscriptionService {
     }
   }
 
-  /// True when [host] is (or is written as) an IP address in a range a
-  /// subscription URL must never target — loopback, private, link-local, CGNAT,
-  /// IPv6 ULA. Also rejects numeric shorthands (decimal `2130706433`,
-  /// hex `0x7f000001`) that spell a private IP while sneaking past dotted-quad
-  /// string checks. A plain hostname returns false here (DNS-rebinding SSRF is
-  /// out of scope; this is input hardening, not a full egress firewall).
+  // числовые записи вроде 2130706433 и 0x7f000001 тоже бывают частным адресом
   static bool _isDisallowedIpHost(String host) {
     if (RegExp(r'^0x[0-9a-f]+$').hasMatch(host)) return true;
-    if (RegExp(r'^\d+$').hasMatch(host)) return true; // bare-integer IP form
+    if (RegExp(r'^\d+$').hasMatch(host)) return true;
 
     final addr = InternetAddress.tryParse(host);
-    if (addr == null) return false; // hostname, not a literal IP
+    if (addr == null) return false;
     if (addr.isLoopback || addr.isLinkLocal || addr.isMulticast) return true;
 
     final b = addr.rawAddress;
@@ -238,14 +195,9 @@ class SubscriptionService {
     return false;
   }
 
-  /// стабильный ключ для сопоставления серверов между обновлениями.
-  /// reality-провайдеры ротируют sid/spx/pbk, полный конфиг меняется, а сервер тот же.
-  /// ключ = scheme + uuid/userinfo + host + port. для vmess uuid внутри base64-json (поле "id"),
-  /// если распарсить не вышло — fallback на host+port.
+  // ключ без query: REALITY-провайдеры ротируют sid/spx/pbk, а сервер тот же
   static String _stableKey(String rawConfig) {
     try {
-      // Готовый конфиг ядра: сам json провайдер переписывает (ключи reality,
-      // порядок правил), стабильны имя и адрес основного аутбаунда.
       if (CustomXrayConfig.looksLikeJson(rawConfig)) {
         final custom = CustomXrayConfig.tryParse(rawConfig);
         if (custom != null) {
@@ -255,16 +207,12 @@ class SubscriptionService {
         }
       }
 
-      // Перебор портов hysteria2 пишут прямо в адресе (`host:20000-20050`), а
-      // такой порт `Uri.parse` не берёт — ключ уходил бы в грубый фолбэк по
-      // первым 80 символам и менялся вместе с именем сервера.
+      // Uri.parse не берёт порт вида host:20000-20050, ключ уходил бы в фолбэк и менялся вместе с именем
       final uri = Uri.parse(_parsableUri(rawConfig));
       final host = uri.host.toLowerCase();
       final port = uri.port.toString();
 
-      // SSR прячет в base64 всё сразу — и адрес, и пароль, и имя. Ключ по
-      // сырой ссылке менялся бы вместе с именем узла, то есть при каждом
-      // переименовании у провайдера сервер терял бы пинг и избранное.
+      // у SSR имя внутри base64, ключ по сырой ссылке менялся бы при переименовании
       if (rawConfig.toLowerCase().startsWith('ssr://')) {
         final ssr = SsrLink.tryParse(rawConfig);
         if (ssr != null) {
@@ -273,18 +221,12 @@ class SubscriptionService {
         }
       }
 
-      // vmess: uuid внутри base64-json payload. Декодируем из сырой строки:
-      // uri.host лоуэркейсит base64 (регистрозависимый), декод падает, и ключ
-      // уходит в фоллбэк с полным конфигом — тогда смена имени сервера
-      // (ps внутри payload) ломает сопоставление, теряя ping/избранное/
-      // активный сервер при обновлении подписки.
+      // из сырой строки: uri.host портит регистр base64, и ключ уходил бы в фолбэк вместе с именем
       if (rawConfig.startsWith('vmess://')) {
         try {
           final payload = rawConfig.substring('vmess://'.length);
           final decoded = _tryDecodeBase64Flexible(payload);
-          // Не декодировалось — значит ссылка формата AEAD (#716), где uuid
-          // лежит там же, где у vless. Без него ключом остался бы один адрес, и
-          // два сервера на одном хосте склеились бы в один.
+          // не декодировалось: формат AEAD (#716), uuid там же, где у vless
           if (decoded == null) {
             return 'vmess:${uri.userInfo.toLowerCase()}@$host:$port';
           }
@@ -298,7 +240,6 @@ class SubscriptionService {
         }
       }
 
-      // hysteria/hy2: стабильность по auth из query или userInfo
       final schemeLower = uri.scheme.toLowerCase();
       if (schemeLower == 'hysteria' || schemeLower == 'hysteria2' || schemeLower == 'hy2') {
         final qp = uri.queryParameters;
@@ -309,22 +250,14 @@ class SubscriptionService {
         return '$schemeLower:$auth@$host:$port';
       }
 
-      // vless/trojan/ss/ssr: userInfo (uuid/password) стабилен, меняются только query (sid, spx, pbk)
       final userInfo = uri.userInfo.toLowerCase();
       return '${uri.scheme}:$userInfo@$host:$port';
     } catch (_) {
-      // совсем крайний случай — первые 80 символов без fragment
       final noFragment = rawConfig.split('#').first;
       return noFragment.substring(0, noFragment.length.clamp(0, 80));
     }
   }
 
-  // загрузка подписки
-
-  /// качает подписку и отдаёт список raw-конфигов.
-  /// заодно парсит X-Subscription-Userinfo для трафика. при сетевой ошибке один retry через 2с.
-  /// [userAgent] — сохранённый рабочий UA подписки: первый запрос идёт с ним.
-  /// [identity] — подмена HWID/UA/device-заголовков для этой подписки.
   Future<SubscriptionFetchResult>
   fetchRaw(
     String url, {
@@ -333,22 +266,15 @@ class SubscriptionService {
     SubscriptionFetchIdentity identity = SubscriptionFetchIdentity.empty,
   }) async {
     if (!isSafeUrl(url)) {
-      // http выделяем в отдельное сообщение: у него в UI точечный фикс
-      // («Исправить на https» в карточке подписки), а не generic Forbidden URL.
       if (Uri.tryParse(url)?.scheme.toLowerCase() == 'http') {
         throw SubscriptionFetchException('Insecure http URL', url: url);
       }
       throw SubscriptionFetchException('Forbidden URL', url: url);
     }
 
-    // hwid только если разрешено в настройках. Настройку читаем на каждый
-    // запрос (getSettings кэширован), а не держим в поле: поле с дефолтом
-    // расходится с тумблером в фоновых изолятах (WorkManager, desktop-таймер)
-    // и после перезапуска.
+    // настройку читаем на каждый запрос: поле с дефолтом расходится с тумблером в фоновых изолятах
     final shareHwid = (await _storage.getSettings()).shareDeviceHwid;
-    // Тумблер приватности главнее подмены: выключённый «делиться HWID» значит
-    // «HWID с устройства не уходит», и подставной тоже. В шторке идентичности
-    // об этом сказано прямо, чтобы поле не выглядело работающим.
+    // выключенный тумблер HWID главнее подмены
     final hwid =
         shareHwid ? await _getOrCreateHwid(override: identity.activeHwid) : null;
     final hwidHeaders = hwid != null
@@ -359,10 +285,7 @@ class SubscriptionService {
             overrideOsVersion: identity.activeOsVersion,
           )
         : const <String, String>{};
-    // Закреплённый подпиской UA: перебор запасных при нём запрещён — иначе
-    // подмена молча схлопывается обратно в наш обычный клиентский UA.
-    // Введён руками, поэтому тоже чистится до ASCII: кириллица в значении
-    // заголовка роняет запрос в dart:io ещё до отправки.
+    // закреплённый UA не перебираем, иначе подмена схлопнется в наш. кириллица в заголовке роняет dart:io
     final pinnedUserAgent = _asciiHeaderValueOrNull(identity.activeUserAgent);
 
     try {
@@ -420,9 +343,6 @@ class SubscriptionService {
   }) async {
     String? usedUserAgent;
     var profile = SubscriptionProfileHeaders.empty;
-    // первый запрос: закреплённый подпиской UA, иначе сохранённый рабочий,
-    // иначе UA приложения. если он перестал работать (html/4xx/5xx) — перебор
-    // ниже, но только когда UA не закреплён
     final initialUa = pinnedUserAgent ??
         ((savedUserAgent != null && savedUserAgent.isNotEmpty)
             ? savedUserAgent
@@ -474,9 +394,7 @@ class SubscriptionService {
           looksLikeHtml = uaType.contains('text/html') ||
               effectiveBody.trimLeft().startsWith('<!doctype html') ||
               effectiveBody.trimLeft().startsWith('<html');
-          // запоминаем сработавший User-Agent
           usedUserAgent = uaResponse.requestOptions.headers['User-Agent'] as String?;
-          // часть панелей отдаёт userinfo только под клиентским User-Agent
           if (usedBytes == null || totalBytes == null || expiresAt == null) {
             final headerMetaUa = _parseUserInfoHeader(uaResponse.headers);
             profile = _parseProfileHeaders(uaResponse.headers);
@@ -486,7 +404,6 @@ class SubscriptionService {
           }
         }
       } else {
-        // первый запрос отдал payload — запоминаем его UA как рабочий
         usedUserAgent = initialUa;
       }
 
@@ -510,9 +427,6 @@ class SubscriptionService {
       } else {
         configs = await _parseBodyOffThread(effectiveBody);
       }
-      // Узлы, которых мы не умеем, до сих пор просто исчезали из списка.
-      // Молчание тут хуже короткого списка: человек видит 12 серверов вместо
-      // 20 и не знает, у кого спрашивать.
       final summary = _skippedNodesSummary(
         CustomClashConfig.looksLikeClash(effectiveBody)
             ? unsupportedClashNodes(effectiveBody)
@@ -524,7 +438,6 @@ class SubscriptionService {
         );
       }
 
-      // fallback для панелей, которые суют дату/трафик в служебные ноды
       if (usedBytes == null || totalBytes == null || expiresAt == null) {
         final meta = _extractMetaFromBody(effectiveBody);
         usedBytes ??= meta.usedBytes;
@@ -541,17 +454,13 @@ class SubscriptionService {
         profile: profile,
       );
     } on DioException catch (e) {
-      // некоторые бэкенды отдают не-200 (502 и т.п.), но в body уже валидный payload.
-      // пробуем достать конфиги из тела до общей обработки ошибки
+      // бывает не-200 (502), а в теле уже валидный payload
       final parsedFromError = await _tryParseFromErrorResponse(e);
       if (parsedFromError != null) {
         return parsedFromError;
       }
 
-      // часть панелей маршрутизирует по User-Agent: браузерному отдаёт
-      // отдельную html-страницу подписки (и её бэкенд может лежать → 502),
-      // а клиентским UA — сам payload. UA-ретрай в успешной ветке сюда не
-      // добирается (dio кидает на не-2xx раньше), поэтому пробуем здесь
+      // dio кидает на не-2xx раньше UA-перебора, а часть панелей браузерному UA отдаёт html и 502
       if ((e.response?.statusCode ?? 0) >= 400) {
         final parsedWithClientUa = await _tryParseWithClientUserAgents(
           url,
@@ -565,13 +474,7 @@ class SubscriptionService {
         }
       }
 
-      // часть cdn/waf отдаёт 502 с пустым body именно для dio.
-      // пробуем забрать payload нативным HttpClient с браузерными заголовками.
-      //
-      // Только если сервер хоть что-то ответил. Молчащий хост (при живом VPN
-      // так бывает, когда из выходного узла до него не достучаться) другой
-      // клиент не оживит, а каждый его кандидат ждёт свои 15 с: обновление
-      // растягивалось до полутора минут вместо ~30 с на запрос и повтор.
+      // только если сервер ответил: молчащий хост другой клиент не оживит, а каждый кандидат ждёт 15 с
       if (e.response != null) {
         try {
           final parsedViaHttpClient = await _tryFetchWithHttpClientFallback(
@@ -592,16 +495,12 @@ class SubscriptionService {
         }
       }
 
-      // отменённые и http-ошибки (4xx/5xx) не ретраим. Сбой сокета или TLS
-      // посреди обмена Dio отдаёт как unknown с исключением dart:io внутри —
-      // он разовый так же, как отказ соединения: у проверки обновлений ловили
-      // испорченное начало ответа, и повтор тут же проходил.
+      // сбой сокета или TLS посреди обмена dio отдаёт как unknown, он разовый
       final isRetryable = e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
           e.type == DioExceptionType.connectionError ||
           (e.type == DioExceptionType.unknown && e.error is IOException);
 
-      // один retry при сетевой ошибке через 2с
       if (isRetryable && attempt == 0) {
         await Future.delayed(const Duration(seconds: 2));
         return _fetchWithRetry(
@@ -729,9 +628,7 @@ class SubscriptionService {
       try {
         client = HttpClient()
           ..connectionTimeout = const Duration(seconds: 15);
-        // Свой клиент мимо dio — прокси ему надо выдать отдельно, иначе
-        // фолбэк уходит напрямую при живом туннеле и умирает на блокировке
-        // ровно там, где основной запрос уже проехал бы.
+        // свой клиент мимо dio, прокси ему отдельно, иначе уйдёт напрямую мимо туннеля
         final resolveProxy = _localProxyPort;
         if (resolveProxy != null) {
           configureHttpClientForLocalVpnProxy(client, resolveProxy);
@@ -773,8 +670,7 @@ class SubscriptionService {
         final looksLikeHtml = contentType.contains('text/html') ||
             body.trimLeft().startsWith('<!doctype html') ||
             body.trimLeft().startsWith('<html');
-        // Только форма ответа, без содержимого: тело подписки — это ссылки
-        // серверов с их uuid и ключами, а лог пересылают, когда жалуются.
+        // без содержимого: в теле ключи серверов, а лог пересылают при жалобах
         AppLogger.instance.debug(
           'HttpClient fallback candidate response: $candidate '
           '(status=${resp.statusCode}, type=$contentType, len=${body.length}, html=$looksLikeHtml)',
@@ -799,7 +695,6 @@ class SubscriptionService {
           try {
             configs = await _parseBodyOffThread(body);
           } on FormatException {
-            // бывает payload внутри html/js даже при text/plain
             configs = _extractConfigsFromHtml(body) ?? const [];
             if (configs.isEmpty) rethrow;
           }
@@ -848,7 +743,7 @@ class SubscriptionService {
         data = gzip.decode(data);
       }
     } on Object {
-      // keep raw payload
+      // оставляем payload как есть
     }
     try {
       return utf8.decode(data, allowMalformed: true);
@@ -862,7 +757,6 @@ class SubscriptionService {
     final uri = Uri.tryParse(url);
     if (uri == null) return out.toList();
 
-    // частый кейс: backend/cdn по-разному реагирует на trailing slash
     if (!uri.path.endsWith('/')) {
       out.add(uri.replace(path: '${uri.path}/').toString());
     } else {
@@ -870,10 +764,8 @@ class SubscriptionService {
       out.add(uri.replace(path: p.isEmpty ? '/' : p).toString());
     }
 
-    // Не добавляем http-вариант для https-подписок: URL содержит секретный
-    // токен, а к запросу идут hwid-заголовки — открытый HTTP отдал бы их
-    // любому наблюдателю сети (для VPN-клиента это недопустимо).
-    // query-вариант только для проблемного домена, чтобы не ломать обычные подписки
+    // http-вариант не пробуем: в URL токен, а в заголовках hwid.
+    // query-вариант только для одного проблемного домена
     final host = uri.host.toLowerCase();
     if (hwid != null && host.contains('warriorofblacksun.run')) {
       out.add(_appendHwidQuery(url, hwid));
@@ -899,8 +791,7 @@ class SubscriptionService {
   }
 
   String? _detectHwidGateMessage(String body) {
-    // Только специфичные фразы: голое вхождение "hwid" ловило случайный
-    // HTML/JS страниц-заглушек и подменяло реальную ошибку ложным диагнозом.
+    // только конкретные фразы: голое hwid ловило html заглушек
     final lower = body.toLowerCase();
     if (lower.contains('turn on hwid') ||
         lower.contains('enable hwid') ||
@@ -915,16 +806,13 @@ class SubscriptionService {
 
   Options _hwidOptions(Map<String, String> headers) => Options(headers: headers);
 
-  /// [override] — HWID одной подписки. Возвращается как есть: ни в кэш, ни в
-  /// storage он не попадает, иначе подставной HWID стал бы настоящим HWID
-  /// устройства и утёк бы во все остальные подписки.
+  // подставной HWID не кэшируем и не сохраняем, иначе он станет HWID устройства для всех подписок
   Future<String> _getOrCreateHwid({String? override}) async {
     final custom = override?.trim().toLowerCase();
     if (custom != null && custom.isNotEmpty) return custom;
 
     if (_cachedHwid != null && _cachedHwid!.isNotEmpty) return _cachedHwid!;
 
-    // android_id is the primary hwid source
     String? androidId;
     try {
       androidId = (await _platform.invokeMethod<String>('getAndroidId'))
@@ -937,7 +825,6 @@ class SubscriptionService {
     final fromStorage = (_storage.getHwid() ?? '').trim().toLowerCase();
     
     if (androidId != null && androidId.isNotEmpty) {
-      // prefer android_id, it's stable and device-bound
       if (fromStorage != androidId) {
         await _storage.setHwid(androidId);
       }
@@ -950,15 +837,12 @@ class SubscriptionService {
       return fromStorage;
     }
 
-    // fallback: random uuid
     final created = const Uuid().v4().replaceAll('-', '');
     await _storage.setHwid(created);
     _cachedHwid = created;
     return created;
   }
 
-  /// `override*` — device-заголовки подписки. Пустое переопределение означает
-  /// «как на этом устройстве», поэтому каждое поле решается отдельно.
   Future<Map<String, String>> _buildRemnawaveHeaders(
     String hwid, {
     String? overrideOs,
@@ -980,17 +864,12 @@ class SubscriptionService {
     final model = _trimmedOrNull(overrideModel) ?? await _getDeviceModel();
     final osVersion =
         _trimmedOrNull(overrideOsVersion) ?? Platform.operatingSystemVersion;
-    // Значения обязаны быть ASCII: Platform.operatingSystemVersion на
-    // локализованной Windows отдаёт «"Майкрософт Windows 11 Pro" 10.0 (Build
-    // 26100)», localHostname тоже бывает кириллическим, и dart:io роняет весь
-    // запрос с FormatException ещё до сети — снаружи это выглядело «Ошибкой
-    // сети» на любом обновлении подписки.
+    // только ASCII: на русской Windows версия ОС кириллицей, и dart:io роняет запрос до сети
     final osAscii = _asciiHeaderValue(os, fallback: Platform.operatingSystem);
     final verAscii = _asciiHeaderValue(osVersion, fallback: 'unknown');
     final modelAscii = _asciiHeaderValue(model, fallback: 'Unknown Device');
     return {
-      'x-hwid': hwid, // required by remnawave
-      // алиасы для панелей со строгой проверкой регистра/имени
+      'x-hwid': hwid,
       'X-HWID': hwid,
       'hwid': hwid,
       'x-device-os': osAscii,
@@ -1002,10 +881,6 @@ class SubscriptionService {
     };
   }
 
-  /// Печатный ASCII для значения HTTP-заголовка: не-ASCII выбрасывается,
-  /// осиротевшие кавычки схлопываются («"Майкрософт Windows 11 Pro" 10.0» →
-  /// «10.0»). Если от строки не осталось ни буквы, ни цифры (имя устройства
-  /// целиком кириллицей превратилось бы в «-»), берётся [fallback].
   static String _asciiHeaderValue(String value, {required String fallback}) {
     final cleaned = value
         .replaceAll(RegExp(r'[^\x20-\x7E]'), '')
@@ -1043,7 +918,7 @@ class SubscriptionService {
         return _cachedDeviceModel!;
       }
     } on Object {
-      // fallback below
+      // ниже запасное имя
     }
     _cachedDeviceModel = Platform.isAndroid ? 'Android Device' : 'Unknown Device';
     return _cachedDeviceModel!;
@@ -1070,11 +945,6 @@ class SubscriptionService {
     }
   }
 
-  /// Косметические заголовки подписки по [XTLS Subscription Standards].
-  ///
-  /// `profile-title` и `announce` спека предписывает слать с префиксом
-  /// `base64:`; часть панелей шлёт голый текст, поэтому декодируем только то,
-  /// что действительно похоже на base64 (см. [_decodeHeaderText]).
   @visibleForTesting
   static SubscriptionProfileHeaders parseProfileHeadersForTest(Headers headers) =>
       _parseProfileHeaders(headers);
@@ -1097,17 +967,11 @@ class SubscriptionService {
       announce: _decodeHeaderText(pick(['announce', 'profile-announce'])),
       supportUrl: _sanitizeUrl(pick(['support-url', 'profile-support-url'])),
       webPageUrl: _sanitizeUrl(pick(['profile-web-page-url', 'profile-webpage-url'])),
-      // Отрицательный или нулевой интервал — мусор, а не «обновлять всегда».
       updateIntervalHours: (interval != null && interval > 0) ? interval : null,
     );
   }
 
-  /// Текст заголовка: `base64:...` по спеке, иначе как есть.
-  ///
-  /// Голый base64 без префикса встречается у старых панелей, поэтому пробуем и
-  /// его — но только когда строка целиком укладывается в алфавит base64 и
-  /// раскодировалась в осмысленный UTF-8. Иначе обычное слово вроде `Announce`
-  /// (валидный base64!) превратилось бы в мусор.
+  // голый base64 только если раскодировался в осмысленный текст: Announce тоже валидный base64
   static String? _decodeHeaderText(String? raw) {
     if (raw == null || raw.isEmpty) return null;
 
@@ -1121,7 +985,6 @@ class SubscriptionService {
         if (bytes.isEmpty) return null;
         final text = utf8.decode(bytes, allowMalformed: false).trim();
         if (text.isEmpty) return null;
-        // управляющие символы = раскодировали не то
         if (text.runes.any((r) => r < 0x20 && r != 0x0A && r != 0x09)) return null;
         return text;
       } catch (_) {
@@ -1140,8 +1003,7 @@ class SubscriptionService {
     return raw;
   }
 
-  /// Пускаем только http(s): заголовок приходит с чужого сервера, а ссылка
-  /// потом открывается в браузере пользовательницы.
+  // только http(s): ссылка приходит с чужого сервера и открывается в браузере
   static String? _sanitizeUrl(String? raw) {
     if (raw == null || raw.isEmpty) return null;
     final uri = Uri.tryParse(raw);
@@ -1195,15 +1057,10 @@ class SubscriptionService {
     Set<String> skipUserAgents = const {},
     String? pinnedUserAgent,
   }) async {
-    // Подписка закрепила свой UA — перебирать нечего: любой другой сломал бы
-    // ту подмену, ради которой UA и закрепляли.
     if (pinnedUserAgent != null) return null;
-    // [skipUserAgents] — уже опробованные (первый запрос), их не повторяем
     final userAgents = <String>[
-      // свой UA первым — панели могут держать его в белом списке
       await appUserAgent(),
       ...clientUserAgents,
-      // браузерный — последний резерв
       browserUserAgent,
     ];
 
@@ -1229,25 +1086,18 @@ class SubscriptionService {
             body.startsWith('<html');
         if (!isHtml) return resp;
       } on Object {
-        // пробуем следующий ua
+        // следующий UA
       }
     }
     return null;
   }
 
-  // парсинг тела
-
-  /// Test-only hook over the private body parser (extraction → raw config list).
   @visibleForTesting
   static List<String> parseBodyForTest(String content) => _parseBody(content);
 
   @visibleForTesting
   static String stableKeyForTest(String rawConfig) => _stableKey(rawConfig);
 
-  /// [_parseBody] в отдельном изоляте. Тело подписки бывает большим (сотни
-  /// URI, несколько base64-вариантов, regex-проходы), а auto-update дёргается
-  /// на onResume — на главном изоляте это давало хитч кадров ровно в момент
-  /// разворачивания приложения. Функция статическая и чистая → compute-safe.
   static Future<List<String>> _parseBodyOffThread(String content) =>
       compute(_parseBody, content);
 
@@ -1263,16 +1113,11 @@ class SubscriptionService {
       }
           .where((c) => !_isMetadataConfig(c))
           .toList();
-      // Готовые конфиги ядра идут вперёд ссылок, но не вместо них: payload
-      // бывает смешанным (часть серверов ссылками, часть — конфигом целиком).
       final customConfigs = _extractCustomConfigs(candidate);
       if (extractedLinks.isNotEmpty || customConfigs.isNotEmpty) {
         return [...customConfigs, ...extractedLinks];
       }
 
-      // Конфиг sing-box, в отличие от xray и Clash, сервером целиком не
-      // становится: исполнить его как есть нечем. Зато его узлы — те же
-      // серверы, и ссылками их берут оба ядра.
       final singbox = SingboxOutbounds.translate(candidate)
           .links
           .where((c) => !_isMetadataConfig(c))
@@ -1282,12 +1127,6 @@ class SubscriptionService {
       final structured = _extractConfigsFromStructuredContent(candidate);
       if (structured.isNotEmpty) return structured;
 
-      // Конфиг Clash целиком — сервером, как и готовый конфиг xray, но только
-      // если по узлам его разобрать не вышло. Список узлов лучше одного
-      // «профиля»: их видно, между ними переключаются, каждый пингуется — и
-      // они работают на любом ядре. Целиком конфиг остаётся, когда узлов в нём
-      // нет (`proxy-providers`) или они неизвестного нам типа: тогда его
-      // исполнит mihomo ровно так, как написал автор.
       final clashConfigs = _extractClashConfigs(candidate);
       if (clashConfigs.isNotEmpty) return clashConfigs;
 
@@ -1317,9 +1156,6 @@ class SubscriptionService {
       }
     }
 
-    // Формат ищем по всем вариантам, а не только по последнему: у json-тела
-    // вариантов обычно один, но у завёрнутого в base64 распознаваемым будет
-    // именно распакованный — иначе диагноз подменялся общим «ссылок не нашли».
     for (final candidate in candidates) {
       final unsupported = _detectUnsupportedFormat(candidate);
       if (unsupported != null) {
@@ -1331,11 +1167,6 @@ class SubscriptionService {
     );
   }
 
-  /// Готовые конфиги ядра из payload подписки: тело целиком (json-объект или
-  /// массив объектов) либо по одному конфигу в строке, в том числе в base64.
-  ///
-  /// Так провайдеры отдают «сервера с готовым роутингом» — в v2rayNG это
-  /// CUSTOM-сервер: не ссылка, а конфиг xray со своими правилами и dns.
   static List<String> _extractCustomConfigs(String content) {
     final whole = CustomXrayConfig.extractConfigs(content);
     if (whole.isNotEmpty) {
@@ -1350,9 +1181,6 @@ class SubscriptionService {
         out.addAll(CustomXrayConfig.extractConfigs(line));
         continue;
       }
-      // Строка целиком в base64 — распространённый вид json-подписки. Гоняем
-      // декод только на то, что вообще похоже на base64: на списке из сотен
-      // ссылок это иначе лишний проход по каждой строке.
       if (line.length < 40 || !_base64Line.hasMatch(line)) continue;
       final decoded = _tryDecodeBase64Flexible(line);
       if (decoded == null) continue;
@@ -1361,38 +1189,19 @@ class SubscriptionService {
     return out.where(_isUsableCustomConfig).toList();
   }
 
-  /// Готовые конфиги Clash из payload подписки — то, что панель отдаёт
-  /// clash-клиентам, когда у подписки выставлена их идентичность.
-  ///
-  /// Отдельно от [_extractCustomConfigs]: у Clash своя проверка пригодности
-  /// (нужны `proxies` с типом и адресом) и свой разбор — YAML, а не JSON.
   static List<String> _extractClashConfigs(String content) {
     final whole = CustomClashConfig.extractConfigs(content);
     return whole.where(_isUsableClashConfig).toList();
   }
 
-  /// Конфиг без единого прокси с адресом — та же болванка, что и у xray:
-  /// панель отдаёт её на истёкшую подписку или непривязанный HWID. Сервером
-  /// такое ставить нельзя, внятная ошибка полезнее.
-  ///
-  /// Исключение — профиль на `proxy-providers`: адреса у него нет и быть не
-  /// может, список узлов ядро скачает само. Отсекать его по тому же признаку
-  /// значило бы отказывать в самом распространённом формате, который панели
-  /// отдают clash-клиентам.
+  // профиль на proxy-providers без адресов, узлы ядро скачает само
   static bool _isUsableClashConfig(String config) {
     final clash = CustomClashConfig.tryParse(config);
     if (clash == null) return false;
     return clash.address.isNotEmpty || clash.usesProviders;
   }
 
-  /// Годится ли готовый конфиг из подписки в качестве сервера.
-  ///
-  /// Кроме служебных заглушек по имени ([_isMetadataConfig]) отсекаем конфиги
-  /// без адреса сервера: панели отдают такую болванку (только `freedom`, пустой
-  /// `vnext`), когда подписка истекла или не привязан HWID. Формально это
-  /// валидный конфиг ядра, и без проверки он превращался бы в молчаливо
-  /// нерабочий сервер — весь трафик мимо туннеля, пинг никакой. Внятная ошибка
-  /// обновления полезнее (её текст даёт [_detectUnsupportedFormat]).
+  // без адреса сервера это болванка панели (истёкшая подписка, непривязанный HWID)
   static bool _isUsableCustomConfig(String config) {
     if (_isMetadataConfig(config)) return false;
     final custom = CustomXrayConfig.tryParse(config);
@@ -1402,7 +1211,7 @@ class SubscriptionService {
   static final _base64Line = RegExp(r'^[A-Za-z0-9+/_=-]+$');
 
   static List<String> _collectTextVariants(String input) {
-    // лимиты на обход: в release r8 даже итеративный код жрёт стек из-за base64+regex
+    // в релизе даже итеративный обход base64 и regex съедал стек, отсюда лимиты
     const maxVariants = 12;
     const maxQueueSize = 50;
 
@@ -1411,12 +1220,11 @@ class SubscriptionService {
     final out = <String>[];
 
     int iterations = 0;
-    const maxIterations = 200; // защита от бесконечного цикла
+    const maxIterations = 200;
 
     while (queue.isNotEmpty && out.length < maxVariants && iterations < maxIterations) {
       iterations++;
       
-      // очередь растёт слишком быстро — сбрасываем
       if (queue.length > maxQueueSize) {
         queue.clear();
         break;
@@ -1432,12 +1240,10 @@ class SubscriptionService {
       final decodedCompact = _tryDecodeBase64Flexible(current.replaceAll(RegExp(r'\s+'), ''));
       final uriDecoded = _tryUriDecode(current);
 
-      // _decodeBase64Tokens сюда не добавляем — он плодит варианты и раздувает очередь
-
       final nextCandidates = [html, js, decoded, decodedCompact, uriDecoded]
           .whereType<String>()
           .where((s) => s.trim().isNotEmpty && !seen.contains(s.trim()))
-          .take(4) // не больше 4 новых кандидатов за итерацию
+          .take(4)
           .toList();
 
       queue.addAll(nextCandidates);
@@ -1456,7 +1262,6 @@ class SubscriptionService {
   }
 
   static String? _tryDecodeBase64Flexible(String input) {
-    // чистим пробелы/переносы, поддерживаем url-safe base64 (-,_)
     final compact = input.replaceAll(RegExp(r'\s+'), '').replaceAll('-', '+').replaceAll('_', '/');
     if (compact.isEmpty) return null;
 
@@ -1481,11 +1286,6 @@ class SubscriptionService {
         lower.startsWith('mixed-port:') ||
         lower.startsWith('proxy-providers:') ||
         lower.contains('\nproxy-providers:')) {
-      // Clash мы исполняем, поэтому «формат не поддерживается» здесь было бы
-      // прямой неправдой — и так это выглядело у пользователя: подписка
-      // с UA clash-клиента отказывалась обновляться с сообщением про
-      // неподдерживаемый формат. Досюда доходит только конфиг, который не
-      // удалось взять по конкретной причине, — её и называем.
       final problem = CustomClashConfig.describeProblem(text);
       if (problem != null) return 'Clash subscription: $problem';
       return 'Clash subscription returned a config without a server address. '
@@ -1493,9 +1293,6 @@ class SubscriptionService {
           'HWID binding in the provider panel.';
     }
 
-    // sing-box доходит сюда, только если серверов из него не вышло: их нет
-    // вовсе, нет ни одного нашего типа или все они — служебные ноды панели.
-    // Последнего describeProblem не видит, отсюда запасное сообщение.
     if (SingboxOutbounds.looksLike(text)) {
       return SingboxOutbounds.describeProblem(text) ??
           SingboxOutbounds.noServers;
@@ -1507,10 +1304,6 @@ class SubscriptionService {
         if (parsed is Map<String, dynamic>) {
           final keys = parsed.keys.map((k) => k.toLowerCase()).toSet();
           if (keys.contains('outbounds') || keys.contains('inbounds') || keys.contains('proxies')) {
-            // Рабочий конфиг xray сюда не доходит — его забирает
-            // _extractCustomConfigs. Значит либо это болванка без адреса
-            // сервера (истёкшая подписка, непривязанный HWID), либо clash в
-            // json-виде, который не разобрался.
             if (CustomXrayConfig.tryParse(text) != null) {
               return 'Subscription returned an Xray config without a server address. '
                   'This is usually a provider stub: check subscription status and '
@@ -1523,7 +1316,7 @@ class SubscriptionService {
           return 'Unsupported subscription format: JSON array config';
         }
       } on Object {
-        // не json — ниже вернём общий текст ошибки
+        // не json, ниже общий текст ошибки
       }
     }
     return null;
@@ -1538,7 +1331,7 @@ class SubscriptionService {
         final parsed = jsonDecode(content);
         _walkStructured(parsed, found);
       } on Object {
-        // not json
+        // не json
       }
     }
 
@@ -1552,14 +1345,12 @@ class SubscriptionService {
     return found.toList();
   }
 
-  // итеративный обход вместо рекурсии: рекурсивная версия переполняла стек
-  // на глубоких/широких json из подписок
+  // итеративно: рекурсия переполняла стек на глубоких json
   static void _walkStructured(Object? node, Set<String> found) {
     const maxTotalNodes = 5000;
     const maxQueueSize = 200;
     const maxDepth = 8;
 
-    // очередь пар (node, depth, isDirectConfigString)
     final queue = <(Object?, int, bool)>[];
     final seen = <Object>{};
 
@@ -1568,12 +1359,11 @@ class SubscriptionService {
     }
 
     int iterations = 0;
-    const maxIterations = 1000; // защита от бесконечного цикла
+    const maxIterations = 1000;
 
     while (queue.isNotEmpty && found.length < maxTotalNodes && iterations < maxIterations) {
       iterations++;
 
-      // очередь растёт слишком быстро — подрезаем
       if (queue.length > maxQueueSize) {
         queue.removeRange(0, (queue.length - maxQueueSize ~/ 2).clamp(1, queue.length));
       }
@@ -1582,15 +1372,12 @@ class SubscriptionService {
 
       if (current == null || depth > maxDepth) continue;
 
-      // примитивы обрабатываем сразу
       if (current is String) {
         if (isDirect) {
-          // строка уже похожа на uri конфига — тащим ссылки напрямую
           for (final uri in _extractUriLinks(current)) {
             if (!_isMetadataConfig(uri)) found.add(uri);
           }
         } else {
-          // _collectTextVariants гоняем только на поверхностном уровне
           if (depth <= 2) {
             for (final v in _collectTextVariants(current)) {
               for (final uri in _extractUriLinks(v)) {
@@ -1603,7 +1390,6 @@ class SubscriptionService {
       }
 
       if (current is List) {
-        // ограничиваем размер списка
         final itemsToProcess = current.take(100);
         for (final item in itemsToProcess) {
           if (seen.add(item)) {
@@ -1619,13 +1405,11 @@ class SubscriptionService {
           map[k.toString()] = v;
         });
 
-        // пробуем собрать uri конфига из map
         final uri = _proxyMapToUri(map);
         if (uri != null && !_isMetadataConfig(uri)) {
           found.add(uri);
         }
 
-        // в очередь кладём только важные значения
         var entriesAdded = 0;
         for (final entry in map.entries.take(50)) {
           final value = entry.value;
@@ -1639,7 +1423,7 @@ class SubscriptionService {
             if (seen.add(value)) {
               queue.add((value, depth + 1, isLikelyConfig));
               entriesAdded++;
-              if (entriesAdded >= 20) break; // не больше 20 записей на map
+              if (entriesAdded >= 20) break;
             }
           } else if (seen.add(value)) {
             queue.add((value, depth + 1, false));
@@ -1651,24 +1435,7 @@ class SubscriptionService {
     }
   }
 
-  /// Прокси из конфига Clash.
-  ///
-  /// Сначала настоящим YAML-парсером: построчный сканер ниже видит только
-  /// плоские `ключ: значение` и теряет всё, что лежит вложенными картами —
-  /// `reality-opts` (public-key, short-id), `grpc-opts`, заголовки `ws-opts`.
-  /// Для современного узла это разница между рабочей ссылкой и ссылкой без
-  /// ключа REALITY, то есть между сервером и его видимостью в списке.
-  /// Сканер остаётся запасным путём: payload бывает битым (обрезан, склеен с
-  /// html), и тогда «хоть что-то» лучше, чем ничего.
-  /// Узлы Clash, которые мы не умеем: тип → сколько их.
-  ///
-  /// Считается отдельно от разбора: сам разбор уезжает в изолят и возвращает
-  /// оттуда только ссылки, а сказать про пропущенные надо на главном. Проход
-  /// дешёвый — построчный сканер по тому же телу, и только если оно вообще
-  /// похоже на Clash.
-  ///
-  /// Зачем вообще: узел неизвестного типа (snell, ssh, wireguard) молча
-  /// исчезал, и подписка на 20 серверов приезжала как 12 без единого слова.
+  // узлы неизвестного типа молча пропадали, и подписка на 20 серверов приезжала как 12
   @visibleForTesting
   static Map<String, int> unsupportedClashNodes(String content) {
     final counts = <String, int>{};
@@ -1684,7 +1451,6 @@ class SubscriptionService {
     return counts;
   }
 
-  /// Строка для лога: «пропущено 3 узла типа snell, 1 типа ssh».
   static String? _skippedNodesSummary(Map<String, int> counts) {
     if (counts.isEmpty) return null;
     final parts = counts.entries.toList()
@@ -1716,7 +1482,6 @@ class SubscriptionService {
       }
       if (!inProxiesSection) continue;
       if (!line.startsWith(' ') && !trimmed.startsWith('- ')) {
-        // вышли из секции proxies
         if (current != null && current.isNotEmpty) proxies.add(current);
         current = null;
         inProxiesSection = false;
@@ -1753,11 +1518,7 @@ class SubscriptionService {
     return v;
   }
 
-  /// Вложенные карты Clash → плоские ключи, которыми оперирует [_proxyMapToUri].
-  ///
-  /// Без этого прокси теряет то, что делает его рабочим: ключ REALITY,
-  /// имя grpc-сервиса, Host из заголовков ws. Ссылка при этом собирается
-  /// «успешно» — и молча не подключается.
+  // без вложенных карт ссылка теряет ключ REALITY и имя grpc-сервиса, собирается и молча не подключается
   static Map<String, String> _flattenClashProxy(Map<String, dynamic> raw) {
     final map = <String, String>{};
     String text(Object? v) {
@@ -1773,7 +1534,6 @@ class SubscriptionService {
 
     raw.forEach((k, v) {
       if (v is Map || v is List) {
-        // Списки (alpn) плоские по смыслу, карты разбираем ниже.
         if (v is List) put(k.toLowerCase(), v);
         return;
       }
@@ -1804,8 +1564,7 @@ class SubscriptionService {
       put('method', http['method']);
       final path = http['path'];
       put('path', path is List && path.isNotEmpty ? path.first : path);
-      // У h2-opts имя сервера — поле `host`, у http-opts такого поля нет вовсе:
-      // Host там заголовок (HTTPOptions в adapter/outbound/vmess.go).
+      // у h2-opts host полем, у http-opts только заголовком (HTTPOptions в adapter/outbound/vmess.go)
       var host = http['host'] ?? http['Host'];
       final headers = http['headers'];
       if (host == null && headers is Map) {
@@ -1821,9 +1580,7 @@ class SubscriptionService {
     if (reality != null) {
       put('pbk', reality['public-key']);
       put('sid', reality['short-id']);
-      // `spx` сюда не пишем: это spiderX у REALITY, а у Clash такого поля нет
-      // вовсе. Раньше в него уезжал флаг постквантового ключа
-      // (`support-x25519mlkem768`) — ядро получало мусор вместо адреса.
+      // spx не пишем: у Clash такого поля нет, раньше сюда уезжал флаг support-x25519mlkem768
     }
     final xhttp = nested('xhttp-opts');
     if (xhttp != null) {
@@ -1835,7 +1592,6 @@ class SubscriptionService {
     if (ech != null) put('ech', ech['config']);
     final plugin = nested('plugin-opts');
     if (plugin != null) {
-      // Плагин в ссылке — одна строка с точками с запятой, как в SIP002.
       final name = text(raw['plugin']);
       if (name.isNotEmpty) {
         final parts = <String>[
@@ -1851,13 +1607,11 @@ class SubscriptionService {
             if (text(plugin['path']).isNotEmpty) 'path=${text(plugin['path'])}',
           ],
         ];
-        // Не `put`: в `plugin` уже лежит имя плагина из плоского обхода выше,
-        // а нужна вся строка целиком.
+        // не put: в plugin уже лежит имя, а нужна вся строка
         if (parts.length > 1) map['plugin'] = parts.join(';');
       }
     }
 
-    // Имена, под которыми те же вещи знает ссылка.
     put('fp', raw['client-fingerprint']);
     put('sni', raw['servername']);
     return map;
@@ -1883,18 +1637,12 @@ class SubscriptionService {
     if (type == 'vmess' || (type.isEmpty && map.containsKey('uuid') && map.containsKey('cipher'))) {
       final id = pick(['uuid', 'id']);
       if (host.isEmpty || port <= 0 || id.isEmpty) return null;
-      // Параметры — теми же разборщиками, что у vless и trojan. Свой json мимо
-      // них терял имя gRPC-сервиса, отдельный sni, отпечаток и ранние данные,
-      // а `network: http` уезжал как `net: http` — это HTTP/2, а не
-      // маскировка поверх tcp.
       final query = {
         ..._clashTransportQuery(pick),
         ..._clashSecurityQuery(pick),
       };
-      // REALITY у vmess не соберёт ни одно ядро.
       if (query['security'] == 'reality') return null;
-      // `security` у vmess бывает шифром (auto, aes-128-gcm), поэтому TLS —
-      // по `tls` в первую очередь, как и прежде.
+      // security у vmess бывает шифром (auto, aes-128-gcm), поэтому TLS сперва по tls
       query['security'] = _normalizeTlsValue(pick(['tls', 'security']));
       final header = pick(['header', 'header_type']);
       if (header.isNotEmpty && header != 'none') {
@@ -1915,9 +1663,6 @@ class SubscriptionService {
       final id = pick(['uuid', 'id']);
       if (host.isEmpty || port <= 0 || id.isEmpty) return null;
       final query = <String, String>{
-        // Транспорт и его параметры. `type` тут не синоним `network`: у Clash
-        // это протокол узла, и подставленный в транспорт он давал ссылку с
-        // `type=vless`, то есть узел с несуществующим транспортом.
         ..._clashTransportQuery(pick),
         ..._clashSecurityQuery(pick),
       };
@@ -1997,7 +1742,6 @@ class SubscriptionService {
       final uuid = pick(['uuid']);
       final token = pick(['token']);
       final password = pick(['password']);
-      // Пятая версия — пара, четвёртая — токен. Ни того ни другого не бывает.
       final userInfo = uuid.isNotEmpty
           ? '${Uri.encodeComponent(uuid)}:${Uri.encodeComponent(password)}'
           : Uri.encodeComponent(token);
@@ -2033,7 +1777,7 @@ class SubscriptionService {
         if (pick(['alpn']).isNotEmpty) 'alpn': pick(['alpn']),
         if (pick(['client-fingerprint']).isNotEmpty)
           'fp': pick(['client-fingerprint']),
-        // У anytls пин сертификата зовётся `hpkp`, а не `pcs`.
+        // у anytls пин сертификата зовётся hpkp
         if (pick(['fingerprint']).isNotEmpty) 'hpkp': pick(['fingerprint']),
       };
       return Uri(
@@ -2057,7 +1801,6 @@ class SubscriptionService {
           (port <= 0 && portRange.isEmpty)) {
         return null;
       }
-      // Порт у mieru не в адресе, а в запросе — парой с транспортом.
       final query = <String, String>{
         'port': portRange.isNotEmpty ? portRange : '$port',
         'protocol': transport,
@@ -2078,15 +1821,13 @@ class SubscriptionService {
       ).toString();
     }
 
-    // `type: hysteria` у Clash — всегда первая версия: у второй свой тип. Раньше
-    // такому узлу приписывался `version=2` и он уезжал в ядро как hysteria2 —
-    // конфиг не того протокола и сервер, который не отвечает.
+    // hysteria у Clash всегда первая версия, у второй свой тип
     if (type == 'hysteria') return null;
     if (type == 'hysteria2' || type == 'hy2') {
       final auth = pick(['auth', 'password', 'psk', 'auth_str', 'auth-str']);
       if (host.isEmpty || port <= 0 || auth.isEmpty) return null;
       const scheme = 'hy2';
-      // xray 26+ hysteria outbound takes only version 2 in hysteriaSettings
+      // hysteria-аутбаунд xray 26+ принимает только version 2
       final query = <String, String>{'auth': auth, 'version': '2'};
       final sni = pick(['sni', 'servername', 'server_name']);
       if (sni.isNotEmpty) query['sni'] = sni;
@@ -2104,7 +1845,6 @@ class SubscriptionService {
       if (down.isNotEmpty) query['down'] = down;
       final pin = pick(['pinSHA256', 'pinsha256', 'fingerprint']);
       if (pin.isNotEmpty) query['pinSHA256'] = pin;
-      // Перебор портов: у Clash это `ports`, в ссылке — `mport`.
       final ports = pick(['ports']);
       if (ports.isNotEmpty) query['mport'] = ports;
       final hop = pick(['hop-interval']);
@@ -2122,8 +1862,7 @@ class SubscriptionService {
     return null;
   }
 
-  /// Транспорт узла Clash в параметрах ссылки. `type` в источнике — протокол,
-  /// а не транспорт, поэтому в `network` он не годится ни при каких условиях.
+  // type у Clash это протокол узла, в транспорт он не годится
   static Map<String, String> _clashTransportQuery(
     String Function(List<String>) pick,
   ) {
@@ -2138,8 +1877,7 @@ class SubscriptionService {
     if (serviceName.isNotEmpty) query['serviceName'] = serviceName;
     final mode = pick(['mode']);
     if (mode.isNotEmpty) query['mode'] = mode;
-    // `network: http` у Clash — это маскировка поверх tcp, а в ссылке она
-    // называется иначе: транспорт `tcp` плюс `headerType=http`.
+    // network: http у Clash это маскировка поверх tcp, в ссылке tcp и headerType=http
     if (network.toLowerCase() == 'http') {
       query['type'] = 'tcp';
       query['headerType'] = 'http';
@@ -2153,8 +1891,6 @@ class SubscriptionService {
     return query;
   }
 
-  /// TLS/REALITY: без `pbk` (а часто и без `fp`) узел REALITY не подключается
-  /// вовсе, а ссылка при этом собирается как будто успешно.
   static Map<String, String> _clashSecurityQuery(
     String Function(List<String>) pick, {
     String defaultSecurity = '',
@@ -2180,14 +1916,11 @@ class SubscriptionService {
     if (flow.isNotEmpty) query['flow'] = flow;
     final alpn = pick(['alpn']);
     if (alpn.isNotEmpty) query['alpn'] = alpn;
-    // `fingerprint` у Clash — пин сертификата, а не отпечаток uTLS: тот лежит
-    // в `client-fingerprint` и уехал выше.
+    // fingerprint у Clash это пин сертификата, отпечаток uTLS лежит в client-fingerprint
     final pin = pick(['fingerprint']);
     if (pin.isNotEmpty) query['pcs'] = pin;
     final verify = pick(['name-cert-verify']);
     if (verify.isNotEmpty) query['vcn'] = verify;
-    // Только сам список ECH: «спроси у DNS» ссылкой не выразить — там нужен
-    // адрес резолвера, которого у узла Clash нет.
     final ech = pick(['ech']);
     if (ech.isNotEmpty) query['ech'] = ech;
     return query;
@@ -2203,7 +1936,6 @@ class SubscriptionService {
   static List<String>? _extractConfigsFromHtml(String html) {
     final candidates = <String>[];
 
-    // частые контейнеры с payload
     final blockMatches = RegExp(
       r'<(?:pre|code|textarea)[^>]*>([\s\S]*?)</(?:pre|code|textarea)>',
       caseSensitive: false,
@@ -2213,7 +1945,6 @@ class SubscriptionService {
       if (v != null && v.trim().isNotEmpty) candidates.add(v);
     }
 
-    // в скриптах payload бывает строкой/переменной
     final scriptMatches = RegExp(
       r'<script[^>]*>([\s\S]*?)</script>',
       caseSensitive: false,
@@ -2223,7 +1954,6 @@ class SubscriptionService {
       if (v != null && v.trim().isNotEmpty) candidates.add(v);
     }
 
-    // js-переменные вида payload="...", subData='...'
     final jsMatches = RegExp(
       r'''(?:payload|subscription|subdata|content|data)\s*[:=]\s*["']([\s\S]*?)["']''',
       caseSensitive: false,
@@ -2233,7 +1963,6 @@ class SubscriptionService {
       if (v != null && v.trim().isNotEmpty) candidates.add(v);
     }
 
-    // длинные base64-подобные блоки внутри html
     final base64Like = RegExp(
       r'[A-Za-z0-9+/_=\r\n-]{300,}',
       caseSensitive: false,
@@ -2243,7 +1972,6 @@ class SubscriptionService {
       if (v != null && v.trim().isNotEmpty) candidates.add(v);
     }
 
-    // иногда backend ставит text/html, а тело уже сырое
     candidates.add(html);
 
     for (final raw in candidates) {
@@ -2256,11 +1984,10 @@ class SubscriptionService {
         final cleaned = variant.replaceAll(RegExp(r'<[^>]+>'), ' ').trim();
         if (cleaned.isEmpty) continue;
 
-        // прямой поиск uri в тексте
         final directLinks = _extractUriLinks(cleaned);
         if (directLinks.isNotEmpty) return directLinks;
 
-        // без рекурсивного _parseBody — он давал stackoverflow в release, тут ограниченные трансформации
+        // без рекурсивного _parseBody: в релизе он давал stack overflow
         final configs = _parseBodyNoRecursion(cleaned);
         if (configs.isNotEmpty) return configs;
       }
@@ -2268,18 +1995,12 @@ class SubscriptionService {
     return null;
   }
 
-  /// упрощённый _parseBody без рекурсии — чтобы не зациклить
-  /// parseBody → extractStructured → walkStructured → collectVariants → parseBody
   static List<String> _parseBodyNoRecursion(String content) {
     final original = content.trim();
 
-    // Готовый конфиг ядра. Сюда payload приходит из html-ветки (панель отдаёт
-    // подписку страницей, конфиг лежит в <pre>/<script>/js-переменной), а по
-    // одним ссылкам её экстрактор конфиг найти не мог.
     final custom = _extractCustomConfigs(original);
     if (custom.isNotEmpty) return custom;
 
-    // одинарный base64
     final singleDecoded = _tryDecodeBase64Flexible(original);
     if (singleDecoded != null && singleDecoded.trim().isNotEmpty) {
       final configs = _extractUrisDirectly(singleDecoded);
@@ -2288,7 +2009,6 @@ class SubscriptionService {
       if (customDecoded.isNotEmpty) return customDecoded;
     }
 
-    // double-decode (base64 в base64)
     if (singleDecoded != null) {
       final doubleDecoded = _tryDecodeBase64Flexible(singleDecoded);
       if (doubleDecoded != null && doubleDecoded.trim().isNotEmpty) {
@@ -2297,14 +2017,12 @@ class SubscriptionService {
       }
     }
 
-    // plain-text uri
     final directConfigs = _extractUrisDirectly(original);
     if (directConfigs.isNotEmpty) return directConfigs;
 
     return const [];
   }
 
-  /// тащит uri напрямую, без других парсеров
   static List<String> _extractUrisDirectly(String text) {
     final lines = LineSplitter.split(text)
         .map((l) => l.trim())
@@ -2322,11 +2040,8 @@ class SubscriptionService {
 
     final found = <String>{};
     final patterns = <RegExp>[
-      // href="...", src="...", data-url="..."
       RegExp(r'''(?:href|src|data-url)\s*=\s*["']([^"']+)["']''', caseSensitive: false),
-      // fetch("..."), axios.get("..."), open("...")
       RegExp(r'''(?:fetch|axios\.get|open)\s*\(\s*["']([^"']+)["']''', caseSensitive: false),
-      // location = "...", window.location = "..."
       RegExp(r'''(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']''', caseSensitive: false),
     ];
 
@@ -2337,7 +2052,6 @@ class SubscriptionService {
         final unescaped = _htmlUnescape(raw).replaceAll(r'\/', '/');
         final resolved = base.resolve(unescaped).toString();
         final lower = resolved.toLowerCase();
-        // отсекаем явно не-подписочные ссылки
         if (lower.endsWith('.js') ||
             lower.endsWith('.css') ||
             lower.endsWith('.png') ||
@@ -2347,7 +2061,6 @@ class SubscriptionService {
             lower.contains('/register')) {
           continue;
         }
-        // берём то, что похоже на subscription/api
         if (lower.contains('/sub') ||
             lower.contains('token=') ||
             lower.contains('subscription') ||
@@ -2393,7 +2106,6 @@ class SubscriptionService {
               final parsed = await _parseBodyOffThread(body);
               if (parsed.isNotEmpty) return parsed;
             } on Object {
-              // как сырую подписку не зашло — пробуем html-экстрактор
               final extracted = _extractConfigsFromHtml(body);
               if (extracted != null && extracted.isNotEmpty) return extracted;
             }
@@ -2403,7 +2115,7 @@ class SubscriptionService {
             next.addAll(_extractSubscriptionUrlsFromHtml(body, baseUrl: u));
           }
         } on Object {
-          // отдельные неудачные fallback-запросы просто игнорим
+          // неудачный фолбэк-запрос не страшен
         }
       }
       frontier = next;
@@ -2447,15 +2159,8 @@ class SubscriptionService {
   }
 
   static List<String> _extractUriLinks(String text) {
-    // Пробел внутри ссылки — валиден: во fragment'е (#имя сервера) он встречается
-    // сплошь и рядом ("#🇷🇺 Белый интернет #1 | Все операторы"), и обрыв по первому
-    // пробелу оставлял от имени один флаг-эмодзи (который cleanDisplayName затем
-    // срезает — имя пустое). Поэтому режем только по переводам строк / html-кавычкам,
-    // а negative lookahead разделяет два URI на одной строке. Сырые пробелы
-    // Uri.parse перекодирует сам, внутренний '#' остаётся текстом fragment'а.
-    // Negative lookbehind по символам scheme (RFC 3986: ALPHA/DIGIT/+/-/.) —
-    // иначе `wss://host` из JS/HTML панелей матчился как `ss://host`, плодя
-    // фантомные shadowsocks-сервера при HTML-краулинге подписки.
+    // пробел внутри ссылки допустим (имя сервера во fragment), режем по переводам строк.
+    // lookbehind по символам схемы: иначе wss://host из html матчился как ss://host
     final matches = RegExp(
       r'''(?<![A-Za-z0-9+.\-])(?:vless|vmess|trojan|ss|ssr|hysteria2?|hy2|tuic|anytls|mierus)://(?:(?!(?:vless|vmess|trojan|ssr|ss|hysteria2?|hy2|tuic|anytls|mierus)://)[^\r\n<>"'])+''',
       caseSensitive: false,
@@ -2469,18 +2174,12 @@ class SubscriptionService {
           .replaceAll('&#38;', '&')
           .replaceAll('\\/', '/');
       if (_isValidConfig(normalized)) {
-        // Одна ссылка mieru описывает столько серверов, сколько в ней пар
-        // порт/протокол; остальные форматы разворачиваются сами в себя.
         links.addAll(MieruLink.expand(normalized));
       }
     }
     return links.toSet().toList();
   }
 
-  /// Ссылка в виде, который переварит `Uri.parse`.
-  ///
-  /// Отличается от исходной только у hysteria2 со списком портов в адресе: там
-  /// в адресе остаётся первый порт. Всё остальное возвращается как есть.
   static String _parsableUri(String raw) {
     final lower = raw.trimLeft().toLowerCase();
     if (!lower.startsWith('hysteria2://') &&
@@ -2493,8 +2192,7 @@ class SubscriptionService {
 
   static bool _isValidConfig(String s) {
     final lower = s.toLowerCase();
-    // Hysteria v1 в список не берём вовсе: ни одно ядро её не собирает, а под
-    // общей схемой она выглядит рабочим сервером и молчит после подключения.
+    // hysteria v1 не собирает ни одно ядро, а под общей схемой она выглядит рабочей
     if (HysteriaLinkParams.isV1(s)) return false;
     return lower.startsWith('vless://') ||
         lower.startsWith('vmess://') ||
@@ -2510,7 +2208,6 @@ class SubscriptionService {
   }
 
   static bool _isMetadataConfig(String raw) {
-    // заглушка от панелей: не сервер, а служебный маркер
     try {
       final uri = Uri.parse(raw);
       final host = uri.host.toLowerCase();
@@ -2518,7 +2215,7 @@ class SubscriptionService {
         return true;
       }
     } on Object {
-      // ignore parse errors; continue with name markers
+      // не разобралось, смотрим по имени
     }
 
     final name = _extractConfigName(raw);
@@ -2566,7 +2263,7 @@ class SubscriptionService {
           hasNullRouteEndpoint = true;
         }
       } on Object {
-        // ignore parse errors
+        // не разобралось
       }
       final name = (_extractConfigName(line) ?? '').toLowerCase();
       if (name.isNotEmpty) names.add(name);
@@ -2635,13 +2332,11 @@ class SubscriptionService {
 
   static String? _extractConfigName(String raw) {
     try {
-      // Готовый конфиг ядра: имя лежит в корневом `remarks` (как в v2rayNG).
       if (CustomXrayConfig.looksLikeJson(raw)) {
         final remarks = CustomXrayConfig.tryParse(raw)?.remarks ?? '';
         return remarks.isEmpty ? null : remarks;
       }
 
-      // Имя узла SSR лежит в `remarks` внутри base64, фрагмента у него нет.
       if (raw.toLowerCase().startsWith('ssr://')) {
         final remarks = SsrLink.tryParse(raw)?.remarks.trim() ?? '';
         if (remarks.isNotEmpty) return remarks;
@@ -2699,7 +2394,6 @@ class SubscriptionService {
     DateTime? expiresAt;
 
     for (final remark in remarks) {
-      // дата вида "До: 24.04.2026" / "expire: 24.04.2026"
       final dateMatch = RegExp(r'(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})').firstMatch(remark);
       if (dateMatch != null && expiresAt == null) {
         final d = int.tryParse(dateMatch.group(1)!);
@@ -2710,12 +2404,11 @@ class SubscriptionService {
           try {
             expiresAt = DateTime(y, m, d, 23, 59, 59);
           } on Object {
-            // ignore invalid date
+            // дата битая
           }
         }
       }
 
-      // трафик вида "12.5 / 100 GB", "1200MB/∞"
       final trafficMatch = RegExp(
         r'(\d+(?:[.,]\d+)?)\s*(kb|mb|gb|tb|кб|мб|гб|тб)\s*[/|]\s*(\d+(?:[.,]\d+)?|∞|infinity|unlimited)\s*(kb|mb|gb|tb|кб|мб|гб|тб)?',
         caseSensitive: false,
@@ -2732,7 +2425,6 @@ class SubscriptionService {
           );
         }
       } else {
-        // вариант "used: 12.3 GB"
         final usedOnly = RegExp(
           r'(?:used|usage|трафик|израсходовано)\D*(\d+(?:[.,]\d+)?)\s*(kb|mb|gb|tb|кб|мб|гб|тб)',
           caseSensitive: false,
@@ -2762,8 +2454,6 @@ class SubscriptionService {
     return (v * multiplier).round();
   }
 
-  // полное обновление подписки
-
   Future<UpdateResult> updateSubscription(Subscription sub,
       {CancelToken? cancelToken}) async {
     try {
@@ -2779,21 +2469,16 @@ class SubscriptionService {
           .where((s) => s.subscriptionId == sub.id)
           .toList();
 
-      // индекс старых серверов по стабильному ключу — чтобы найти тот же сервер при смене sid/spx/pbk
       final oldByStableKey = <String, ServerItem>{
         for (final s in oldServers) _stableKey(s.config): s,
       };
 
-      // Дедуп конфигов: построчные пути парсера не дедуплицируют, а два
-      // одинаковых конфига дали бы два ServerItem с одним id (exactMatch
-      // возвращает один и тот же элемент) → duplicate ValueKey в списке UI.
+      // дубли конфигов дали бы два сервера с одним id и duplicate ValueKey в списке
       final uniqueConfigs = result.configs.toSet().toList();
 
-      // Один старый сервер нельзя переиспользовать дважды: близкие конфиги
-      // могут сойтись на одном stable-ключе — второму выдаём новый id.
+      // близкие конфиги могут сойтись на одном stable-ключе, второму новый id
       final usedOldIds = <String>{};
       final servers = uniqueConfigs.map((config) {
-        // быстрый путь: точное совпадение конфига
         final exactMatch = oldServers.cast<ServerItem?>().firstWhere(
               (s) => s?.config == config,
           orElse: () => null,
@@ -2802,14 +2487,10 @@ class SubscriptionService {
           return exactMatch;
         }
 
-        // медленный путь: совпадение по uuid+host+port
         final key = _stableKey(config);
         final stableMatch = oldByStableKey[key];
         if (stableMatch != null && usedOldIds.add(stableMatch.id)) {
-          // Переиспользуем id и метаданные (pingMs, customName, pinnedAt и
-          // т.д.), но берём новый конфиг. Исключение — пользователь правил
-          // конфиг руками (configOverridden): его правки не затираем, пока
-          // сервер остаётся тем же (stable key совпал).
+          // правленный руками конфиг не затираем, пока сервер тот же
           if (stableMatch.configOverridden) return stableMatch;
           return stableMatch.copyWith(config: config);
         }
@@ -2817,10 +2498,7 @@ class SubscriptionService {
         return ServerItem.fromRaw(config, subscriptionId: sub.id);
       }).toList();
 
-      // Правленные вручную серверы, не совпавшие ни с одним конфигом подписки
-      // (пользователь сменил host/port/uuid — stable key разошёлся): рефреш не
-      // должен молча стирать правки, оставляем их в группе. Удалить такой
-      // сервер можно только вручную.
+      // правленные руками серверы, разошедшиеся по ключу, рефреш не стирает
       servers.addAll(
         oldServers.where(
           (s) => s.configOverridden && !usedOldIds.contains(s.id),
@@ -2829,7 +2507,6 @@ class SubscriptionService {
 
       await _storage.replaceServersBySubscription(sub.id, servers);
 
-      // сбрасываем activeServerId только если сервер реально пропал
       if (activeId != null) {
         final wasInThisSub = oldServers.any((s) => s.id == activeId);
         final stillExists  = servers.any((s) => s.id == activeId);
@@ -2846,10 +2523,7 @@ class SubscriptionService {
             totalBytes: result.totalBytes,
             expiresAt: result.expiresAt,
             serverCount: servers.length,
-            // null (payload пришёл фолбэком без UA-перебора) не затирает сохранённый.
-            // Закреплённый идентичностью UA тоже не сохраняем: это выбор
-            // пользовательницы для подписки, а не «UA, который тут работает» —
-            // иначе после выключения подмены он остался бы действовать молча.
+            // закреплённый UA не сохраняем как рабочий, иначе после выключения подмены он действовал бы молча
             userAgent: sub.fetchIdentity.activeUserAgent != null
                 ? null
                 : result.usedUserAgent,
@@ -2859,9 +2533,7 @@ class SubscriptionService {
             announce: result.profile.announce,
             supportUrl: result.profile.supportUrl,
             webPageUrl: result.profile.webPageUrl,
-            // Предложенный панелью интервал берём только на первой загрузке:
-            // дальше это уже выбор пользовательницы, и перетирать его на
-            // каждом обновлении нельзя.
+            // интервал панели только при первой загрузке, дальше это выбор человека
             updateIntervalHours:
                 wasFirstFetch ? result.profile.updateIntervalHours : null,
           );
@@ -2873,7 +2545,7 @@ class SubscriptionService {
         subscription: updated,
       );
     } catch (e, st) {
-      // Только хост: полный URL подписки содержит секретный токен.
+      // только хост: в полном URL секретный токен
       final host = Uri.tryParse(sub.url)?.host ?? '<unparsable url>';
       AppLogger.instance.error(
         'Subscription update failed for $host',
@@ -2888,8 +2560,6 @@ class SubscriptionService {
     }
   }
 
-  /// обновляет все подписки с autoUpdate=true, батчами по 3.
-  /// ошибка одного батча не валит остальные — updateSubscription сам ловит их в UpdateResult.
   Future<List<UpdateResult>> updateAll() async {
     final subs = await _storage.getSubscriptions();
     final toUpdate = subs.where((s) => s.autoUpdate).toList();
@@ -2906,8 +2576,6 @@ class SubscriptionService {
     return results;
   }
 
-  /// подписки, у которых истёк интервал обновления.
-  /// defaultInterval — fallback, если updateIntervalHours не задан (0).
   Future<List<Subscription>> getDueForUpdate({
     Duration defaultInterval = const Duration(hours: 12),
   }) async {

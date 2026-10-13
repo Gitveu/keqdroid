@@ -1,8 +1,5 @@
 import '../models/subscription.dart';
 
-/// true, если списки подписок отличаются по составу или по любому отображаемому
-/// в UI полю. Сравнение по id (порядок не важен), затем по полям. Нужно, чтобы
-/// фоновая синхронизация дёргала state только при реальном изменении.
 bool subscriptionsDiffer(List<Subscription> a, List<Subscription> b) {
   if (identical(a, b)) return false;
   if (a.length != b.length) return true;

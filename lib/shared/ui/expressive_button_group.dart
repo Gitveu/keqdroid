@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'expressive.dart';
 import 'haptics.dart';
 
-/// Один вариант в [ExpressiveConnectedButtons].
 class ExpressiveSegment<T> {
   const ExpressiveSegment({
     required this.value,
@@ -16,30 +15,9 @@ class ExpressiveSegment<T> {
   final String label;
   final IconData? icon;
 
-  /// Цвет иконки в НЕвыбранном состоянии.
-  ///
-  /// Нужен там, где варианты сами по себе цветные по смыслу — «блокировать»
-  /// красным, «мимо VPN» зелёным. У выбранного цвет всё равно уходит в
-  /// `onPrimary`: он на заливке акцента, и своего оттенка там быть не может.
-  /// Так смысловая раскраска остаётся видна, а контракт цветов компонента не
-  /// ломается.
   final Color? iconColor;
 }
 
-/// Связанная группа кнопок — замена устаревшего `SegmentedButton`.
-///
-/// Выбранная плитка меняет форму на пилюлю и заливается акцентом. Форма здесь и
-/// есть индикатор выбора: он виден боковым зрением и на монохромном экране, а у
-/// сегментированной кнопки выбор отличался только заливкой да галочкой, которая
-/// ещё и съедала ширину подписи.
-///
-/// Числа из спеки: зазор [_gap] одинаковый на любом размере, внешние углы
-/// крайних кнопок полные, внутренние почти квадратные ([_innerCorner]). Соседи
-/// на нажатие не реагируют — раздвигаются они только в обычной группе, не в
-/// связанной.
-///
-/// Ширины равные: группа стоит в узком сайдбаре, и плитки по содержимому
-/// прыгали бы на каждом переключении — «TUN» вдвое короче «Proxy».
 class ExpressiveConnectedButtons<T> extends StatelessWidget {
   const ExpressiveConnectedButtons({
     super.key,
@@ -54,25 +32,14 @@ class ExpressiveConnectedButtons<T> extends StatelessWidget {
   final ValueChanged<T> onChanged;
   final double height;
 
-  /// Зазор между плитками — 2dp, как велит спека связанной группы на любом её
-  /// размере. Группа остаётся единым элементом, а не россыпью кнопок.
   static const double _gap = ExpressiveSpacing.hairline;
 
-  /// Углы на стыках. 8dp — значение спеки для размеров S и M (высота 40 и 56).
   static const double _innerCorner = ExpressiveShape.small;
 
-  /// Радиус пилюли — геометрический, половина высоты, а не признак
-  /// [ExpressiveShape.full].
-  ///
-  /// Разница видна только в анимации, и она решающая. `full` рисуется радиусом
-  /// 999, а движок всё равно зажимает его половиной высоты, то есть 20. Лерп от
-  /// 999 к 8 почти всю дорогу держится выше этого потолка — кнопка стоит
-  /// пилюлей, — и вся видимая часть перехода сваливается в последние проценты
-  /// шкалы. Со стороны это то, чем и выглядело: снятая с выбора кнопка
-  /// возвращала форму рывком. От 20 к 8 морфинг идёт весь, с первого кадра.
+  // половина высоты, а не full: лерп от 999 почти всю дорогу держится выше потолка,
+  // и форма возвращается рывком
   static double _pillCorner(double height) => height / 2;
 
-  /// Форма кнопки [index] из [count] в покоящемся (невыбранном) состоянии.
   static BorderRadius _restRadius(int index, int count, double height) {
     final outer = Radius.circular(_pillCorner(height));
     const inner = Radius.circular(_innerCorner);
@@ -112,14 +79,6 @@ class ExpressiveConnectedButtons<T> extends StatelessWidget {
   }
 }
 
-/// Плитка группы: форма, заливка и обе анимации.
-///
-/// Движение пружинное, а не по кривой с длительностью, и пружины разные. Форма
-/// слегка перелетает цель — это и есть физика, по которой узнаётся M3E; ровная
-/// `emphasized`-кривая давала правильную геометрию и никакого характера. Цвет,
-/// наоборот, задемпфирован критически: колебание яркости читается дефектом.
-/// У нажатия пружина своя — вниз быстро и без отскока, пока палец на экране,
-/// обратно с отдачей; кнопка при этом и поджимается, и становится квадратнее.
 class _Segment<T> extends StatefulWidget {
   const _Segment({
     required this.segment,
@@ -134,8 +93,6 @@ class _Segment<T> extends StatefulWidget {
   final bool selected;
   final BorderRadius radius;
 
-  /// Углы выбранной кнопки. Приезжают числом, а не берутся из
-  /// [ExpressiveShape.full] — см. `_pillCorner`.
   final double pillCorner;
   final ColorScheme scheme;
   final VoidCallback onTap;
@@ -198,9 +155,6 @@ class _SegmentState<T> extends State<_Segment<T>>
     final labelBase = textTheme.labelLarge ?? const TextStyle();
     final selectedRadius = BorderRadius.circular(widget.pillCorner);
 
-    // Стиль filled-кнопки: невыбранная на поверхности, выбранная на `primary`.
-    // Уровень `surfaceContainerHighest` — потому что группа живёт в шторке
-    // (`surfaceContainerLow`), и на шаг выше она бы с неё не считывалась.
     final restStyle = labelBase.copyWith(color: scheme.onSurfaceVariant);
     final selectedStyle = textTheme
         .emphasized(labelBase)!
@@ -209,8 +163,6 @@ class _SegmentState<T> extends State<_Segment<T>>
     return AnimatedBuilder(
       animation: Listenable.merge([_shape, _tint, _press]),
       builder: (context, _) {
-        // Пружина перелетает за единицу — форме и цвету это лишнее, отдача
-        // остаётся во времени возврата.
         final shapeT = _shape.value.clamp(0.0, 1.0);
         final tint = _tint.value.clamp(0.0, 1.0);
         final press = _press.value.clamp(0.0, 1.0);
@@ -229,8 +181,6 @@ class _SegmentState<T> extends State<_Segment<T>>
         )!;
 
         return Transform.scale(
-          // Поджатие вместе с морфом. Без него нажатие по уже выбранной
-          // пилюле не отзывалось ничем: её углы морфить некуда.
           scale: 1 - 0.04 * press,
           child: Material(
             color: Color.lerp(
@@ -240,8 +190,7 @@ class _SegmentState<T> extends State<_Segment<T>>
             ),
             shape: shape,
             clipBehavior: Clip.antiAlias,
-            // Material сама доводит форму и цвет за 200 мс, а мы меняем их
-            // покадрово — её неявная анимация только перезапускалась бы.
+            // форму и цвет меняем покадрово, неявная анимация Material только перезапускалась бы
             animationDuration: Duration.zero,
             child: InkWell(
               onTap: widget.onTap,
@@ -266,8 +215,6 @@ class _SegmentState<T> extends State<_Segment<T>>
                         widget.segment.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        // Вес и цвет едут одним лерпом: выбранное состояние
-                        // весит больше — это роль усиленного варианта у M3E.
                         style: TextStyle.lerp(restStyle, selectedStyle, tint),
                       ),
                     ),

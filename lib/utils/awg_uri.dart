@@ -1,27 +1,9 @@
-/// Ссылка `wg://` → текст `.conf`.
-///
-/// Amnezia, Happ и панели раздают AmneziaWG не только файлом, но и одной
-/// строкой: `wg://host:port?private_key=…&jc=4&…`. Внутри то же, что в
-/// `.conf`, поэтому ссылку разворачиваем прямо на импорте, а дальше по
-/// приложению живёт один формат — `.conf`. Второй пришлось бы учить каждому,
-/// кто трогает конфиг сервера: пингу, редактору, генератору mihomo, бэкапу и
-/// подписочному диффу.
-///
-/// Разбор намеренно снисходительный к именам параметров (`private_key`,
-/// `privatekey`, `sk` — одно и то же) и строгий к сути: без ключей, адреса и
-/// endpoint'а ссылка не конфиг, и лучше сказать об этом на импорте, чем отдать
-/// ядру профиль, который не поднимется.
 library;
 
 abstract final class AwgUri {
   static const _schemes = ['wg://', 'wireguard://', 'awg://'];
 
-  /// AWG-параметры: имя в ссылке (без `_`/`-`, в нижнем регистре) → ключ
-  /// `.conf`. Порядок объявления — порядок строк в готовом конфиге.
-  ///
-  /// Список закрытый по той же причине, что и таблица UAPI в `AwgProfile`:
-  /// незнакомый ключ в `[Interface]` ядро не игнорирует, а роняет им весь
-  /// профиль. Чего здесь нет — в конфиг не попадает.
+  // список закрытый: незнакомый ключ в [Interface] ядро не пропускает и роняет профиль
   static const _awgParams = <String, String>{
     'jc': 'Jc',
     'jmin': 'Jmin',
@@ -50,9 +32,7 @@ abstract final class AwgUri {
     'disablecookies': 'DisableCookies',
   };
 
-  /// Адреса в таких ссылках разделяют то запятой, то дефисом
-  /// (`172.16.0.2/32-2606:4700::2/128`) — дефис безопасен: ни в IPv4, ни в
-  /// IPv6, ни в маске его быть не может.
+  // адреса разделяют и дефисом: ни в IPv4, ни в IPv6, ни в маске его не бывает
   static final _listSeparator = RegExp(r'[,\-]');
 
   static bool looksLikeUri(String raw) {
@@ -60,8 +40,6 @@ abstract final class AwgUri {
     return _schemes.any(lower.startsWith);
   }
 
-  /// Разворачивает ссылку в `.conf`. Бросает [ArgumentError] с человеческой
-  /// причиной — её показывает импорт.
   static String toConf(String raw) {
     final text = raw.trim();
     if (!looksLikeUri(text)) {
@@ -96,7 +74,6 @@ abstract final class AwgUri {
     if (!uri.hasPort) {
       throw ArgumentError('wg:// link: endpoint port is required');
     }
-    // Uri отдаёт IPv6-хост без скобок, а Endpoint без них не разобрать.
     final endpoint =
         host.contains(':') ? '[$host]:${uri.port}' : '$host:${uri.port}';
 
@@ -110,19 +87,15 @@ abstract final class AwgUri {
     final dns = _list(_first(q, const ['dns', 'dnsservers']));
     final mtu = _first(q, const ['mtu']);
     final presharedKey = _first(q, const ['presharedkey', 'psk']);
-    // AllowedIPs в ссылках обычно нет вовсе, а пустой список — это туннель,
-    // который поднялся и не пропускает ничего.
+    // AllowedIPs в ссылках обычно нет, а пустой список это туннель, который не пропускает ничего
     final allowedIps = _list(_first(q, const ['allowedips', 'allowedip']));
-    // Ссылки почти никогда не несут keepalive, а WG за NAT без него замолкает
-    // через минуту тишины; 25 секунд — то же значение, что пишет в `.conf`
-    // сама Amnezia.
+    // без keepalive WG за NAT замолкает через минуту тишины, 25 пишет в .conf сама Amnezia
     final keepalive =
         _first(q, const ['persistentkeepalive', 'keepalive']) ?? '25';
 
     final conf = StringBuffer();
     final name = uri.fragment.trim();
     if (name.isNotEmpty) {
-      // Имя сервера приложение берёт из ведущего комментария .conf.
       conf.writeln('# ${name.replaceAll(RegExp(r'\s+'), ' ')}');
     }
     conf
@@ -155,20 +128,13 @@ abstract final class AwgUri {
     return conf.toString();
   }
 
-  /// `enable_amnezia=false` — ссылка на обычный WireGuard, и обфускация из неё
-  /// (если её вообще положили) в конфиг идти не должна.
   static bool _amneziaEnabled(Map<String, String> q) {
     final raw = _first(q, const ['enableamnezia', 'enableamneziawg', 'amnezia']);
     if (raw == null) return true;
     return !const ['false', '0', 'no', 'off'].contains(raw.trim().toLowerCase());
   }
 
-  /// Отрезает `userInfo` (ключ до `@`) сам, до `Uri.parse`.
-  ///
-  /// В части ссылок приватный ключ кладут в userInfo как есть, а base64 с `/`
-  /// и `=` в авторити не живёт: `Uri` обрывает хост по первому же слэшу, и
-  /// ключа не видит вовсе — ссылка выглядит как «нет private_key». Ищем
-  /// последний `@` до `?`/`#` и вырезаем всё до него.
+  // base64 с / и = в авторити не живёт: Uri обрывает хост по первому слэшу и ключа не видит
   static (String?, String) _cutUserInfo(String text) {
     final schemeEnd = text.indexOf('://') + 3;
     var end = text.length;
@@ -184,9 +150,7 @@ abstract final class AwgUri {
     );
   }
 
-  /// Разбор query руками, а не через `uri.queryParameters`: тот декодирует
-  /// значения как form-urlencoded и превращает `+` в пробел — а `+` есть
-  /// ровно в каждом втором base64-ключе WireGuard, и ключ молча портится.
+  // руками: queryParameters превращает + в пробел, а + есть в каждом втором ключе WireGuard
   static Map<String, String> _queryParams(Uri uri) {
     final out = <String, String>{};
     for (final pair in uri.query.split('&')) {
@@ -220,9 +184,6 @@ abstract final class AwgUri {
         .toList();
   }
 
-  /// `%`-декодирование там, где оно есть. Значение может приехать и уже
-  /// разобранным (`Uri.userInfo`), и битым — на битом декодировать нечего,
-  /// отдаём как есть, а причину назовёт разбор `.conf`.
   static String? _decodeMaybe(String? raw) {
     if (raw == null || !raw.contains('%')) return raw;
     try {

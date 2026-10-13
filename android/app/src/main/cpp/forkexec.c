@@ -22,38 +22,20 @@
 #define TAG "KEQDIS"
 #define XTAG "KEQDIS_XRAY"
 
-/* Кольцевой файл логов ядра: при превышении усекаем в ноль. */
+/* больше этого файл логов обнуляется */
 #define CORE_LOG_MAX (512 * 1024)
 
-/* Аргумент фонового читателя: fd пайпа + путь к файлу логов (может быть пустым). */
 typedef struct { int fd; char logpath[1024]; } xray_log_arg;
 
-/* Forward declaration — определение в конце файла */
 static void *xray_log_reader(void *arg);
 
-/*
- * Счётчик неудачных дозвонов ядра сессии до своего сервера — тихая прослушка
- * для автовыбора.
- *
- * mihomo пишет о таком на уровне warning: «[TCP] dial <прокси> (match ...)
- * ... error: ...». xray 26.x — только на info («failed to find an available
- * destination» внутри «failed to process outbound traffic»). Поэтому сессия
- * обоих ядер работает не тише info, а лишнее срезает g_log_threshold.
- * Считаем здесь, где строка уже в руках, а приложение раз в секунду читает
- * число: ни сети, ни радио, ни лишнего разбора.
- *
- * Прямые соединения (DIRECT, REJECT) не считаются: мёртвый сайт — не мёртвый
- * сервер. Ядра замера сюда не попадают вовсе — у них нет файла лога, а их
- * отказы про чужие серверы.
- */
+/* отказы дозвона ядра сессии до своего сервера, для автовыбора. xray 26 пишет их только на info, поэтому сессия на info,
+ * а лишнее режет g_log_threshold. DIRECT и REJECT не считаем: мёртвый сайт не мёртвый сервер */
 static long g_dial_failures = 0;
 
 static int is_server_dial_failure(const char *line) {
     if (strstr(line, "failed to find an available destination")) return 1;
-    /* XHTTP дозванивается лениво: ядро сразу отдаёт соединение и пишет
-     * «tunneling request», а отказ сервера приходит отдельной строкой
-     * транспорта — «splithttp: failed to POST ... connection refused» или
-     * «unexpected status 502» от фронта, за которым сервер умер. */
+    /* XHTTP дозванивается лениво: отказ сервера приходит отдельной строкой транспорта (failed to POST, unexpected status 502) */
     const char *xhttp = strstr(line, "splithttp: ");
     if (xhttp) {
         xhttp += 11;
@@ -61,9 +43,7 @@ static int is_server_dial_failure(const char *line) {
         return strncmp(xhttp, "failed to ", 10) == 0 ||
                strncmp(xhttp, "unexpected status ", 18) == 0;
     }
-    /* Только TCP: сервер без UDP на каждый QUIC-запрос отвечает отказом, и
-     * живой сервер сыпал бы «отказами» от одного открытого ютуба. Проба,
-     * которой потом проверяют сервер, всё равно идёт по TCP. */
+    /* только TCP: сервер без UDP отказывает каждому QUIC-запросу, и живой сыпал бы отказами от одного ютуба */
     const char *dial = strstr(line, "[TCP] dial ");
     if (!dial || !strstr(line, " error: ")) return 0;
     dial += 11;
@@ -77,12 +57,7 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeDialFailures(JNIEnv *env, jclass c
     return (jlong)__atomic_load_n(&g_dial_failures, __ATOMIC_RELAXED);
 }
 
-/*
- * С какого уровня строки ядра идут в лог и logcat: 0 debug, 1 info, 2 warning,
- * 3 error, 4 none/silent; 0 пропускает всё. Это уровень, выбранный человеком,
- * когда сессию подняли до info ради счётчиков (sessionConfigFor в
- * KeqdisVpnService): лог остаётся таким, каким он его заказывал.
- */
+/* уровень, который выбрал человек: сессию подняли до info ради счётчиков, а лог остаётся заказанным. 0 пропускает всё */
 static int g_log_threshold = 0;
 
 JNIEXPORT void JNICALL
@@ -92,12 +67,8 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeSetCoreLogLevel(
     __atomic_store_n(&g_log_threshold, (int)level, __ATOMIC_RELAXED);
 }
 
-/*
- * «[TUN] Tun adapter listening at:» — mihomo взял дескриптор туннеля. Пишет он
- * это уровнем info, и при выбранном warning строка в лог не попадает, поэтому
- * сервис ждёт её здесь, до порога (awaitMihomoTun). Без этого каждое
- * подключение стояло четыре секунды до таймаута.
- */
+/* mihomo пишет это на info, и при warning строка в лог не попадает, поэтому ждём её до порога.
+ * без этого каждое подключение стояло четыре секунды до таймаута */
 static long g_tun_ready = 0;
 
 JNIEXPORT jlong JNICALL
@@ -106,9 +77,7 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeTunReadyCount(JNIEnv *env, jclass 
     return (jlong)__atomic_load_n(&g_tun_ready, __ATOMIC_RELAXED);
 }
 
-/* Уровень строки ядра. mihomo: «time="..." level=info msg="..."». xray — по
- * метке после времени: «2026/09/23 02:09:14.123456 [Info] ...». Строка без
- * уровня (баннер, access-лог) не режется никогда. */
+/* строку без уровня (баннер, access-лог) не режем никогда */
 static int core_line_level(const char *line) {
     if (strncmp(line, "time=\"", 6) == 0) {
         const char *lv = strstr(line, " level=");
@@ -129,15 +98,10 @@ static int core_line_level(const char *line) {
     return 4;
 }
 
-/*
- * Пишет строку ядра в logcat (XTAG) и, если задан logpath, дублирует её в файл.
- * Дублирование в файл нужно потому, что на Android 13+ untrusted_app не может
- * читать logcat (SELinux), поэтому in-app экран логов опирается на этот файл.
- * Файл кольцуется по размеру (CORE_LOG_MAX). logpath == "" → только logcat.
- */
+/* дублируем в файл: на Android 13+ приложению logcat не читается (SELinux), экран логов живёт на этом файле */
 static void core_log_line(const char *logpath, const char *line) {
     if (!line || !*line) return;
-    /* Счётчики — до порога: ради них сессия и работает на info. */
+    /* счётчики до порога: ради них сессия и работает на info */
     if (logpath && *logpath) {
         if (is_server_dial_failure(line))
             __atomic_add_fetch(&g_dial_failures, 1, __ATOMIC_RELAXED);
@@ -165,8 +129,6 @@ static void core_log_line(const char *logpath, const char *line) {
     close(lf);
 }
 
-/* ── Ядро прокси (xray / mihomo) ─────────────────────────────────────────── */
-
 JNIEXPORT jint JNICALL
 Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
         JNIEnv *env, jclass clazz,
@@ -178,9 +140,7 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
     const char *assetDir   = (*env)->GetStringUTFChars(env, jAssetDir,   NULL);
     const char *logName    = jLogName ? (*env)->GetStringUTFChars(env, jLogName, NULL) : NULL;
 
-    /* Какое ядро запускаем: у них разный argv и разный способ показать базы geo.
-     * Копируем в свой буфер ДО fork: в ребёнке JNI-вызовы делать нельзя, а
-     * стековый буфер наследуется как есть. */
+    /* копируем до fork: в ребёнке JNI звать нельзя */
     char coreKind[16];
     coreKind[0] = '\0';
     if (jCoreKind) {
@@ -202,8 +162,7 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
         }
     }
 
-    /* Путь к файлу логов ядра: <assetDir>/<logName>. Пустое имя → файл выключен
-     * (ping/спидтест им пользоваться не должны, чтобы не засорять лог соединения). */
+    /* пустое имя выключает файл: пинг и спидтест не должны засорять лог соединения */
     char logpath[1024];
     logpath[0] = '\0';
     if (logName && logName[0])
@@ -229,14 +188,8 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
                         "startCore: kind=%s bin=%s config=%s dir=%s tunFd=%d",
                         coreKind[0] ? coreKind : "xray", binPath, configPath, assetDir, (int)jTunFd);
 
-    /*
-     * Дескриптор TUN, если ядро само владеет туннелем (mihomo читает его номер
-     * из `tun.file-descriptor` в конфиге, xray — из окружения). Снимаем
-     * FD_CLOEXEC — иначе execv закроет его, и ядро получит «bad file
-     * descriptor» на устройстве, которого уже нет. Владение остаётся за
-     * ParcelFileDescriptor на стороне сервиса: у ребёнка своя копия таблицы
-     * дескрипторов, и его close() нашего не трогает.
-     */
+    /* снимаем FD_CLOEXEC, иначе execv закроет дескриптор и ядро получит bad file descriptor.
+     * владеет им ParcelFileDescriptor сервиса, close() у ребёнка нашего не трогает */
     const int tunFd = (int)jTunFd;
     if (tunFd >= 0) {
         fcntl(tunFd, F_SETFD, fcntl(tunFd, F_GETFD) & ~FD_CLOEXEC);
@@ -261,12 +214,8 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
         return -3;
     }
 
-    /*
-     * Двойной fork с setsid: ядро усыновляет init, и JVM не нужно его
-     * дожидаться. От ограничения дочерних процессов (Android 12+) это не
-     * прячет: система ищет их по cgroup приложения, а не по родителю, поэтому
-     * смерть ядра сервис переживает сам (см. reviveCore в KeqdisVpnService).
-     */
+    /* двойной fork: ядро усыновляет init. от лимита дочерних процессов Android 12+ это не прячет, система ищет по cgroup,
+     * поэтому смерть ядра сервис переживает сам (reviveCore) */
     pid_t pid1 = fork();
     if (pid1 < 0) {
         __android_log_print(ANDROID_LOG_ERROR, TAG, "startCore: first fork failed errno=%d", errno);
@@ -310,9 +259,7 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
 
             /* владельца соединения ядро спрашивает у нас, см. mihomo- и xray-android-uid-owner.patch */
             if (ownerSocket[0]) setenv("KEQDROID_OWNER_SOCKET", ownerSocket, 1);
-            /* xray ищет geoip.dat/geosite.dat по XRAY_LOCATION_ASSET, mihomo —
-             * в своём рабочем каталоге (`-d`). Каталог один и тот же (filesDir),
-             * различается только способ его назвать. */
+            /* geo xray ищет по XRAY_LOCATION_ASSET, mihomo в рабочем каталоге -d, каталог один */
             if (isMihomo) {
                 char *argv[] = {
                     (char *)binPath, "-d", (char *)assetDir, "-f", (char *)configPath, NULL
@@ -320,10 +267,8 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
                 execv(binPath, argv);
             } else {
                 setenv("XRAY_LOCATION_ASSET", assetDir, 1);
-                /* Дескриптор туннеля xray берёт только отсюда: в его конфиге
-                 * места под номер нет вовсе (proxy/tun/tun_android.go читает
-                 * переменную окружения). Ставим лишь когда номер дали — иначе
-                 * ядро сочло бы за дескриптор ноль, то есть наш stdin. */
+                /* номер дескриптора xray читает только из окружения (proxy/tun/tun_android.go).
+                 * без номера не ставим, иначе ядро взяло бы ноль, то есть stdin */
                 if (tunFd >= 0) {
                     char fdEnv[16];
                     snprintf(fdEnv, sizeof(fdEnv), "%d", tunFd);
@@ -369,26 +314,9 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
         char buf[4096], line[512];
         int linepos = 0, died = 0;
 
-        /*
-         * Короткое окно перед тем, как отдать pid: ловим ядро, умершее сразу
-         * (нет бинаря под эту архитектуру, конфиг не разобрался). Признак —
-         * закрытая труба: оба её конца висят на stdout/stderr ядра и уходят
-         * вместе с процессом. waitpid тут не годится — после двойного fork
-         * ядро нам не ребёнок, а внук, усыновлённый init, и звать его некому.
-         *
-         * Окно короткое намеренно, и это не осторожность, а цена. Здоровое
-         * ядро трубу держит и всё время в неё пишет, поэтому сколько тут
-         * стоим, столько платит КАЖДОЕ подключение: прежние три секунды были
-         * ровно тем зазором, когда туннель уже поднят и трафик идёт, а
-         * приложение всё ещё крутит кружок. Негодный конфиг роняет ядро за
-         * 60-100 мс (замерено на mihomo), так что четверти секунды хватает, а
-         * смерть позже подберёт ожидание SOCKS-порта в KeqdisVpnService — оно
-         * смотрит /proc и покажет ту же жалобу ядра из лога.
-         *
-         * Убрать окно совсем всё же нельзя: у временных ядер замера проверки
-         * по /proc нет, и для них это единственный признак «не взлетело» —
-         * без него батч ждал бы порт все восемь секунд таймаута.
-         */
+        /* ловим ядро, умершее сразу, по закрытой трубе. waitpid не годится: после двойного fork ядро нам внук.
+         * окно добавляется к каждому подключению, а плохой конфиг роняет mihomo за 60-100 мс, четверти секунды хватает.
+         * убрать нельзя: у ядер замера нет проверки по /proc, без окна батч ждал бы порт все восемь секунд */
         struct timespec t0, now;
         clock_gettime(CLOCK_MONOTONIC, &t0);
         for (;;) {
@@ -456,12 +384,7 @@ Java_com_keqdroid_keqdroid_NativeHelper_nativeStartCore(
     return (jint)pid2;
 }
 
-/* ── Фоновый читатель вывода Xray ─────────────────────────────────────────
- *
- * Читает pipe до EOF (Xray завершился) и пишет каждую строку в logcat.
- * Запускается как detached pthread — не нужно join().
- * fd закрывает сам перед выходом.
- */
+/* detached-поток, трубу закрывает сам */
 static void *xray_log_reader(void *arg) {
     xray_log_arg *a = (xray_log_arg *)arg;
     int fd = a->fd;
@@ -474,7 +397,7 @@ static void *xray_log_reader(void *arg) {
 
     while (1) {
         ssize_t n = read(fd, buf, sizeof(buf));
-        if (n <= 0) break;   /* EOF или ошибка — Xray умер */
+        if (n <= 0) break;
         for (ssize_t i = 0; i < n; i++) {
             char c = buf[i];
             if (c == '\n' || linepos >= (int)sizeof(line) - 1) {

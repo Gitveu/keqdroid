@@ -1,19 +1,6 @@
 part of '../settings_tab.dart';
 
-/// Подбор своего цвета темы.
-///
-/// Тремя ползунками, а не палитрой-квадратом: квадрат с пипеткой пришлось бы
-/// рисовать самим, а M3 такого органа управления не знает вовсе — в отличие от
-/// ползунка, который здесь тот же самый, что у размера интерфейса.
-///
-/// Ползунков три, но работают они ровно настолько, насколько позволяет вариант
-/// палитры, — поэтому он выбирается здесь же, над ними.
-///
-/// Правки живут в шторке и уезжают в настройки по «Применить», а не сразу.
-/// Смена темы пересобирает всё дерево виджетов (замер — 55 мс на Pixel 6a), и
-/// применять её на каждый кадр перетаскивания значит показывать рывки вместо
-/// цвета. Образец при этом обновляется непрерывно: считается одна схема, а не
-/// две темы, и это единицы миллисекунд.
+// применяем по кнопке: смена темы пересобирает всё дерево, 55 мс на Pixel 6a
 Future<void> _showCustomColorSheet(
   BuildContext context, {
   required AppSettings current,
@@ -38,17 +25,7 @@ class _CustomColorSheet extends StatefulWidget {
 }
 
 class _CustomColorSheetState extends State<_CustomColorSheet> {
-  /// Ниже этого ползунки не опускаются, и это не вкусовщина, а замер.
-  ///
-  /// Палитру Material строит из ОТТЕНКА сида, а у чёрного, белого и серого
-  /// оттенка нет: конвертер отдаёт для них 0° либо 209.5° — что угодно, только
-  /// не выбранное человеком. Отсюда и «выкрутил всё в ноль, получил розовый»:
-  /// ноль градусов в HCT это красно-розовый угол.
-  ///
-  /// Порог взят по замеру, где оттенок ещё доезжает до палитры: при
-  /// насыщенности 0.03 и яркости 0.06 все четыре пробных оттенка (0/90/210/300)
-  /// дали одну и ту же схему — на такой темноте 8-битный цвет округляется в
-  /// один и тот же серый. При 0.10/0.15 оттенки расходятся честно.
+  // у серого нет оттенка, HCT отдаёт 0° (розовый). ниже этих порогов выбранный оттенок теряется
   static const double _minSaturation = 0.10;
   static const double _minValue = 0.15;
 
@@ -56,8 +33,7 @@ class _CustomColorSheetState extends State<_CustomColorSheet> {
   late DynamicSchemeVariant _variant;
   late final TextEditingController _hex;
 
-  /// Ползунок правит поле, поле правит ползунок — и без флага каждая правка
-  /// возвращалась бы вторым кругом обратно, переставляя курсор в поле.
+  // без флага правка ходила по кругу поле - ползунок и переставляла курсор
   bool _syncing = false;
 
   @override
@@ -65,8 +41,6 @@ class _CustomColorSheetState extends State<_CustomColorSheet> {
     super.initState();
     final seed = parseThemeSeed(widget.current.customThemeSeed) ??
         kCustomThemeDefaultSeed;
-    // В диапазон ползунков: иначе сохранённый когда-то чёрный открывал бы
-    // шторку с бегунками на краю и палитрой, к этому краю не относящейся.
     _color = _inRange(HSVColor.fromColor(seed));
     _variant = parseThemeVariant(widget.current.customThemeVariant);
     _hex = TextEditingController(text: formatThemeSeed(_color.toColor()));
@@ -78,7 +52,6 @@ class _CustomColorSheetState extends State<_CustomColorSheet> {
     super.dispose();
   }
 
-  /// Цвет, из которого палитра ещё получается осмысленной.
   static HSVColor _inRange(HSVColor color) => color
       .withSaturation(color.saturation.clamp(_minSaturation, 1.0))
       .withValue(color.value.clamp(_minValue, 1.0));
@@ -98,9 +71,6 @@ class _CustomColorSheetState extends State<_CustomColorSheet> {
   }
 
   Future<void> _apply() async {
-    // Выбор своего цвета выключает системные цвета по той же причине, что и
-    // выбор готового пресета: пока они включены, палитра берётся у системы, и
-    // тап выглядел бы «ничего не делает».
     await widget.onSave(widget.current.copyWith(
       themePresetId: kCustomThemePresetId,
       customThemeSeed: formatThemeSeed(_color.toColor()),
@@ -142,10 +112,6 @@ class _CustomColorSheetState extends State<_CustomColorSheet> {
               child: SmoothScroll(
                 builder: (context, controller) => ListView(
                   controller: controller,
-                  // Иначе список забирает всю высоту, отпущенную шторке, и на
-                  // высоком экране получается панель во весь рост с пустотой
-                  // между полем и кнопкой. С shrinkWrap шторка ровно по
-                  // содержимому, а прокрутка появляется, когда оно не влезло.
                   shrinkWrap: true,
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   children: [
@@ -158,19 +124,6 @@ class _CustomColorSheetState extends State<_CustomColorSheet> {
                       ),
                     ),
                     const SizedBox(height: ExpressiveSpacing.large),
-                    // Вариант стоит НАД ползунками, потому что решает, что
-                    // они делают. На `tonalSpot` Material приводит цвет к своим
-                    // тонам, и до палитры доезжает почти один оттенок: замер
-                    // сдвига `primary` (сумма по каналам, 0..765) при уходе
-                    // насыщенности с 0.9 на 0.15 — 28, при уходе яркости с 0.9
-                    // на 0.25 — 7. Два ползунка из трёх не делали ничего. На
-                    // `fidelity` те же движения дают 147 и 224.
-                    //
-                    // Почему выбор, а не просто перевод всех своих тем на
-                    // `fidelity`: в тёмной схеме он кладёт сид в контейнеры на
-                    // полной насыщенности, и экран светится целиком — ровно то,
-                    // из-за чего у пресетов умолчанием стоит `tonalSpot` (см.
-                    // ThemePreset.variant). Здесь оно тоже остаётся прежним.
                     Text(
                       l10n.appearanceCustomColorVariant,
                       style: theme.textTheme.labelLarge,
@@ -194,9 +147,6 @@ class _CustomColorSheetState extends State<_CustomColorSheet> {
                       selected: _variant,
                       onChanged: (v) => setState(() => _variant = v),
                     ),
-                    // Подпись тем же приёмом, что пояснения на экране тем:
-                    // bodySmall приглушённым цветом с отступом 4 слева — так
-                    // она читается продолжением группы, а не отдельным абзацем.
                     Padding(
                       padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
                       child: Text(
@@ -212,8 +162,6 @@ class _CustomColorSheetState extends State<_CustomColorSheet> {
                       label: l10n.appearanceCustomColorHue,
                       value: _color.hue,
                       max: 360,
-                      // Целые градусы: доли градуса на глаз неотличимы, а
-                      // деления дают ползунку внятные остановки.
                       divisions: 360,
                       activeColor: seed,
                       onChanged: (v) => _setColor(_color.withHue(v)),
@@ -242,9 +190,6 @@ class _CustomColorSheetState extends State<_CustomColorSheet> {
                       textDirection: technicalInputDirection,
                       onChanged: _onHexChanged,
                       textCapitalization: TextCapitalization.characters,
-                      // Ровно шесть цифр и только шестнадцатеричные: иначе
-                      // строка растёт бесконечно, а разбор молча не срабатывает
-                      // — снаружи это «ввожу код, ничего не происходит».
                       inputFormatters: [
                         LengthLimitingTextInputFormatter(6),
                         FilteringTextInputFormatter.allow(
@@ -253,10 +198,6 @@ class _CustomColorSheetState extends State<_CustomColorSheet> {
                       ],
                       decoration: InputDecoration(
                         labelText: l10n.appearanceCustomColorHex,
-                        // Префикс стоит у начала интерфейса, а код пишется
-                        // слева направо: в персидском выходило «BE74CF #».
-                        // Там решётка уходит в суффикс — он у левого края,
-                        // прямо перед кодом.
                         prefixText: rtl ? null : '#  ',
                         suffixText: rtl ? '  #' : null,
                         helperText: l10n.appearanceCustomColorInvalid,
@@ -283,9 +224,6 @@ class _CustomColorSheetState extends State<_CustomColorSheet> {
   }
 }
 
-/// Строка «подпись — ползунок». Ползунок штатный: обновлённую отрисовку M3 ему
-/// даёт тема приложения (`SliderThemeData(year2023: false)`), поэтому своей
-/// геометрии тут нет и быть не должно.
 class _ColorSlider extends StatelessWidget {
   final String label;
   final double value;
@@ -312,13 +250,10 @@ class _ColorSlider extends StatelessWidget {
       children: [
         Text(label, style: Theme.of(context).textTheme.labelLarge),
         Slider(
-          // Набранный руками hex может лежать вне шкалы (чёрный, белый) —
-          // ползунок тогда встаёт на край, а цвет остаётся тем, что набрали.
           value: value.clamp(min, max),
           min: min,
           max: max,
           divisions: divisions,
-          // Ползунок красится набранным цветом — на нём и видно, что крутишь.
           activeColor: activeColor,
           onChanged: onChanged,
         ),

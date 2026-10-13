@@ -10,27 +10,19 @@ import '../../utils/bidi.dart';
 import '../../utils/error_messages.dart';
 import 'app_theme.dart';
 
-/// «Добавить приложение» на ПК: имя процесса или путь к файлу, с выбором
-/// файла. Общий у сплита и у шторки «Кто» маршрута: программа, которая сейчас
-/// не запущена, в списке процессов отсутствует, и иначе её не выбрать.
-///
-/// Возвращает введённое как есть — выбранный файл важнее текста поля; null —
-/// отмена. Проверку имени делает вызывающий: у него своё сообщение об ошибке.
+// программа, которая не запущена, в списке процессов отсутствует, и иначе её не выбрать. проверку имени делает вызывающий
 Future<String?> showAddProcessDialog(BuildContext context) async {
   final l10n = AppLocalizations.of(context)!;
   final ctrl = TextEditingController();
   var pickedPath = '';
 
-  // Почему не открылся выбор файла — прямо в диалоге: снекбар Scaffold
-  // рисует под ним, и объяснение осталось бы за модальным барьером.
+  // ошибка выбора файла прямо в диалоге: снекбар Scaffold рисует под ним, за модальным барьером
   String? pickError;
 
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(
-      // Заливка и форма — из `dialogTheme`: локальный `backgroundColor`
-      // повторял тот же `surfaceContainerHigh`, но мимо темы, и в flair-темах
-      // диалог не получал их усиленных скруглений.
+      // заливка и форма из dialogTheme: локальный backgroundColor шёл мимо темы, и flair-темы не получали скруглений
       builder: (ctx, setDialogState) => AlertDialog(
         title: Text(l10n.splitAddAppTitle),
         content: Column(
@@ -53,8 +45,7 @@ Future<String?> showAddProcessDialog(BuildContext context) async {
                 child: TextButton.icon(
                   onPressed: () async {
                     try {
-                      // У программ Linux расширения нет, и фильтр по
-                      // `.exe` не дал бы выбрать ни одну.
+                      // у программ Linux расширения нет, фильтр по .exe не дал бы выбрать ни одну
                       final r = await AppFileDialogs.pickFile(
                         dialogTitle: l10n.splitAddAppPickFile,
                         type: Platform.isLinux ? FileType.any : FileType.custom,
@@ -67,8 +58,7 @@ Future<String?> showAddProcessDialog(BuildContext context) async {
                         ctrl.text = pickedPath;
                       }
                     } catch (e) {
-                      // Путь всё ещё можно вписать руками в поле выше —
-                      // поэтому только объясняем, а диалог не закрываем.
+                      // путь можно вписать руками, поэтому диалог не закрываем
                       setDialogState(
                         () => pickError = friendlyErrorDetailed(e, ctx),
                       );

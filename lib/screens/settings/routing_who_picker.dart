@@ -1,11 +1,7 @@
 part of '../settings_tab.dart';
 
-/// Шторка «Кто»: «Все приложения» — одним нажатием, отдельные — отметками и
-/// «Готово». Записи те же, что у сплита (имя процесса или путь на ПК, имя
-/// пакета на Android), и отмечаются так же, поэтому одно приложение в сплите
-/// и в маршруте — одна и та же запись.
-///
-/// Возвращает пустой список для всех приложений и null, если шторку закрыли.
+// записи те же, что у сплита, поэтому одно приложение в сплите и в маршруте это одна запись.
+// пустой список значит все приложения, null значит шторку закрыли
 class _WhoPickerSheet extends ConsumerStatefulWidget {
   const _WhoPickerSheet({required this.initial});
 
@@ -20,8 +16,7 @@ class _WhoPickerSheetState extends ConsumerState<_WhoPickerSheet> {
   final _query = TextEditingController();
   bool _showSystem = false;
 
-  /// Строки в порядке первой загрузки: отмеченные сверху. Пересортировка на
-  /// каждое нажатие уводила бы строку из-под пальца.
+  // порядок первой загрузки: пересортировка на каждое нажатие уводила бы строку из-под пальца
   List<AppInfo>? _rows;
 
   @override
@@ -30,8 +25,6 @@ class _WhoPickerSheetState extends ConsumerState<_WhoPickerSheet> {
     super.dispose();
   }
 
-  /// Отмеченные записи, которых нет среди приложений системы (программа не
-  /// запущена, добавлена руками), — своими строками в начале, как в сплите.
   List<AppInfo> _arrange(List<AppInfo> apps) {
     final stubs = [
       for (final entry in _selected)
@@ -63,7 +56,6 @@ class _WhoPickerSheetState extends ConsumerState<_WhoPickerSheet> {
             SplitTunnelingNotifier.toggledEntries(_selected, app),
       );
 
-  /// Программа, которой нет в списке процессов: тот же диалог, что в сплите.
   Future<void> _addByHand() async {
     final raw = await showAddProcessDialog(context);
     if (raw == null || !mounted) return;
@@ -223,8 +215,6 @@ class _WhoPickerSheetState extends ConsumerState<_WhoPickerSheet> {
     final iconCache = ref.read(appIconCacheProvider);
     final direction = Directionality.of(context);
     final mark = AppTheme.green(context);
-    // Строк бывают сотни, поэтому список ленивый и с постоянным шагом — как
-    // в сплите.
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemExtent: AppListTile.height,

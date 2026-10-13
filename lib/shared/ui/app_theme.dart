@@ -15,8 +15,6 @@ class AppTheme {
   static Color textLight(BuildContext ctx) => _cs(ctx).onSurfaceVariant;
   static Color red(BuildContext ctx) => _cs(ctx).error;
 
-  /// Текст и иконки поверх [red]. Белым тут не отделаться: в тёмной схеме
-  /// `error` сам светло-красный, и белая надпись на нём почти не читается.
   static Color onRed(BuildContext ctx) => _cs(ctx).onError;
   static Color divider(BuildContext ctx) => _cs(ctx).outlineVariant;
   static Color accentContainer(BuildContext ctx) => _cs(ctx).primaryContainer;
@@ -24,12 +22,6 @@ class AppTheme {
   static Color green(BuildContext ctx) => harmonize(ctx, _kGreen);
   static Color orange(BuildContext ctx) => harmonize(ctx, _kOrange);
 
-  /// Подтягивает произвольный цвет к текущей схеме.
-  ///
-  /// M3 требует «designing with roles, never raw hexes». Там, где цвет несёт
-  /// собственный смысл и ролью не заменяется (протоколы, статусы), спека
-  /// разрешает свой цвет — но гармонизированный, иначе на цветной динамической
-  /// теме он читается как чужеродный.
   static Color harmonize(BuildContext ctx, Color color) =>
       color.harmonizeWith(_cs(ctx).primary);
 }

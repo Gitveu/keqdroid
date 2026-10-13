@@ -2,18 +2,6 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// «Свой» сервер автовыбора: тот, с которого увёз аварийный переезд.
-///
-/// Автовыбор уходит с сервера, только когда тот не ответил, и уходит на
-/// первого живого соседа — не на лучшего вообще, а на того, кто ответил в эту
-/// секунду. Когда свой сервер оживает, на него возвращаемся. Только после
-/// нескольких удачных проверок подряд ([returnAfter]): возврат рвёт открытые
-/// соединения, и прыгать туда-сюда за сервером, который мигает, хуже, чем
-/// посидеть на соседе.
-///
-/// Цепочка переездов свой сервер не меняет: упал и сосед — едем к третьему, а
-/// ждать по-прежнему первого. Сбрасывается он, когда сервер выбрал не
-/// автовыбор: человек ткнул руками, включил «Авто» заново, подписка сменилась.
 class AutoSelectHome {
   const AutoSelectHome({
     required this.subscriptionId,
@@ -22,24 +10,18 @@ class AutoSelectHome {
     this.aliveStreak = 0,
   });
 
-  /// Сколько проверок подряд свой сервер должен ответить, чтобы вернуться.
   static const returnAfter = 2;
 
   final String subscriptionId;
 
-  /// Куда вернуться.
   final String homeId;
 
-  /// Куда увёз последний аварийный переезд. Активный сервер не он и не свой —
-  /// значит, сервер сменил кто-то другой, и ждать больше нечего.
   final String pickedId;
 
-  /// Сколько проверок подряд свой сервер отвечает.
   final int aliveStreak;
 
   bool get shouldReturn => aliveStreak >= returnAfter;
 
-  /// Состояние после аварийного переезда с [fromId] на [toId].
   static AutoSelectHome afterFailover(
     AutoSelectHome? previous, {
     required String subscriptionId,
@@ -57,9 +39,6 @@ class AutoSelectHome {
     );
   }
 
-  /// Ждать ли ещё своего сервера при активном [activeId], когда «Авто» горит в
-  /// подписке [autoSubscriptionId] (null — нигде), а [homeExists] — остался ли
-  /// свой сервер в списке. null — сбросить.
   AutoSelectHome? stillWaiting({
     required String activeId,
     required String? autoSubscriptionId,
@@ -71,7 +50,6 @@ class AutoSelectHome {
     return this;
   }
 
-  /// Итог очередной проверки своего сервера: ответил он или нет.
   AutoSelectHome afterCheck({required bool homeAnswered}) => AutoSelectHome(
         subscriptionId: subscriptionId,
         homeId: homeId,
@@ -102,9 +80,7 @@ class AutoSelectHome {
   }
 }
 
-/// Где свой сервер живёт между запусками. На диске, а не в памяти: на Android
-/// интерфейс приложения система выгружает, пока туннель работает дальше, и
-/// после этого вернуться было бы некуда.
+// на диске: на Android интерфейс выгружают, а туннель работает дальше
 abstract final class AutoSelectHomeStore {
   static const _key = 'auto_select_home';
 

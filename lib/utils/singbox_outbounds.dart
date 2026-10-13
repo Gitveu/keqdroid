@@ -3,31 +3,18 @@ import 'dart:convert';
 import 'ssr_uri.dart';
 import 'vmess_json_link.dart';
 
-/// Узлы конфига sing-box — каждый своей ссылкой.
-///
-/// Такой конфиг панели отдают sing-box-клиентам. Целиком его исполнить нечем:
-/// sing-box у нас только держит TUN на десктопе. Но его аутбаунды — те же
-/// серверы, а ссылку понимают оба ядра и всё приложение: список, пинг, выбор
-/// ядра. Имена полей — из `option/*.go` sing-box.
 class SingboxOutbounds {
   SingboxOutbounds._();
 
-  /// Группы и выходы мимо прокси: серверами не бывают, в пропущенные не идут.
   static const _service = {'selector', 'urltest', 'direct', 'block', 'dns'};
 
-  /// Конфиг без единого сервера. С подписки это обычно заглушка панели.
   static const noServers = 'The sing-box config has no servers in it. From a '
       'subscription this is usually a provider stub: check subscription status '
       'and HWID binding in the provider panel.';
 
-  /// Конфиг ли это sing-box. От xray его отличает одно, но надёжно: протокол
-  /// аутбаунда sing-box зовёт `type`, xray — `protocol`. Отсутствием
-  /// `protocol` не проверить: у SSR-узла sing-box это поле тоже есть, там в нём
-  /// протокол обфускации SSR.
+  // у sing-box протокол в type, у xray в protocol, а protocol у SSR-узла sing-box значит обфускацию
   static bool looksLike(String raw) => _config(raw) != null;
 
-  /// Ссылки на узлы, которые умеем, и счёт остальных по типу. Не sing-box —
-  /// оба пусты.
   static ({List<String> links, Map<String, int> skipped}) translate(
     String raw,
   ) {
@@ -44,8 +31,7 @@ class SingboxOutbounds {
     for (final o in outbounds) {
       final type = _str(o['type']).toLowerCase();
       if (_service.contains(type)) continue;
-      // Узел за другим узлом — цепочка, одной ссылкой её не выразить: ссылка
-      // пошла бы к серверу напрямую, мимо первого звена.
+      // узел за другим узлом это цепочка, одна ссылка пошла бы к серверу напрямую
       final detour = _str(o['detour']);
       if (detour.isNotEmpty && typeByTag[detour] != 'direct') {
         skip('$type via detour');
@@ -59,7 +45,7 @@ class SingboxOutbounds {
         skip(node.kind);
       }
     }
-    // WireGuard и Tailscale с 1.11 лежат не среди аутбаундов, а здесь.
+    // WireGuard и Tailscale с 1.11 лежат в endpoints
     for (final e in _maps(config['endpoints'])) {
       final type = _str(e['type']).toLowerCase();
       skip(type.isEmpty ? 'unknown' : type);
@@ -67,8 +53,6 @@ class SingboxOutbounds {
     return (links: links, skipped: skipped);
   }
 
-  /// Почему из конфига не взято ни одного сервера. null — взят хоть один или
-  /// это вовсе не sing-box.
   static String? describeProblem(String raw) {
     if (_config(raw) == null) return null;
     final nodes = translate(raw);
@@ -81,14 +65,12 @@ class SingboxOutbounds {
         '($kinds)';
   }
 
-  /// Ссылка на узел, а если её нет — как назвать узел в пропущенных: типом,
-  /// иногда с уточнением, чтобы по логу было видно, что именно не взято.
   static ({String? link, String kind}) _node(
     String type,
     Map<String, dynamic> o,
   ) {
     final security = _security(o);
-    // REALITY наши ядра собирают только у VLESS и Trojan.
+    // REALITY наши ядра собирают только у VLESS и Trojan
     if (security['security'] == 'reality' &&
         type != 'vless' &&
         type != 'trojan') {
@@ -100,8 +82,7 @@ class SingboxOutbounds {
         final name = _str(_map(o['transport'])?['type']);
         return (link: null, kind: '$type over $name');
       }
-      // Trojan без TLS генераторы соберут с TLS: в ссылках `security=none` у
-      // trojan — опечатка, и они её чинят. Здесь это был бы чужой сервер.
+      // trojan без TLS генераторы соберут с TLS, здесь это был бы чужой сервер
       if (type == 'trojan' && security.isEmpty) {
         return (link: null, kind: 'trojan without tls');
       }
@@ -133,8 +114,6 @@ class SingboxOutbounds {
     final port = _int(o['server_port']);
     if (uuid.isEmpty || server.isEmpty || port <= 0) return null;
     final flow = _str(o['flow']);
-    // packetaddr у ссылки зовётся `packet` (handleVShareLink в
-    // common/convert/v.go mihomo).
     final packet = switch (_str(o['packet_encoding']).toLowerCase()) {
       'xudp' => 'xudp',
       'packetaddr' => 'packet',
@@ -197,16 +176,13 @@ class SingboxOutbounds {
     final userInfo =
         base64Url.encode(utf8.encode('$method:$password')).replaceAll('=', '');
     return _uri('ss', userInfo, server, port, _str(o['tag']), {
-      // В ссылке SIP002 плагин с настройками — одна строка через `;`.
       if (plugin.isNotEmpty) 'plugin': opts.isEmpty ? plugin : '$plugin;$opts',
       if (uot != null) 'uot': '1',
       if (uot != null) 'udp-over-tcp-version': '$uot',
     });
   }
 
-  /// Версия UDP-over-TCP; null — выключен. Номер пишем всегда: sing-box без
-  /// номера берёт вторую, а mihomo — первую (adapter/outbound/shadowsocks.go),
-  /// и с сервером они бы разошлись.
+  // номер пишем всегда: без номера sing-box берёт вторую версию, а mihomo первую
   static int? _uotVersion(Object? raw) {
     if (raw == true) return 2;
     final options = _map(raw);
@@ -225,13 +201,10 @@ class SingboxOutbounds {
     }
     final protocol = _str(o['protocol']);
     final obfs = _str(o['obfs']);
-    // Сам sing-box SSR не исполняет с 1.6 (include/registry.go), но старые
-    // конфиги такие узлы несут, а mihomo их собирает.
+    // sing-box SSR не исполняет с 1.6, но старые конфиги такие узлы несут, а mihomo их собирает
     return SsrLink(
       host: server,
       port: port,
-      // Пустое поле ссылке не годится — без всех шести частей она не
-      // разбирается, — поэтому простейшие варианты.
       protocol: protocol.isEmpty ? 'origin' : protocol,
       method: method,
       obfs: obfs.isEmpty ? 'plain' : obfs,
@@ -248,9 +221,7 @@ class SingboxOutbounds {
   ) {
     final password = _str(o['password']);
     final server = _str(o['server']);
-    // Диапазон sing-box пишет через двоеточие (`20000:20050`), ссылка — через
-    // дефис. При списке портов `server_port` ядро не читает вовсе
-    // (option/hysteria2.go), а ссылке порт в адресе нужен — первый из списка.
+    // диапазон у sing-box через двоеточие, у ссылки через дефис. со списком портов server_port ядро не читает
     final ports = [
       for (final range in _list(o['server_ports'])) range.replaceAll(':', '-'),
     ];
@@ -283,8 +254,7 @@ class SingboxOutbounds {
     final congestion = _str(o['congestion_control']);
     final relay = _str(o['udp_relay_mode']);
     final disableSni = _map(o['tls'])?['disable_sni'] == true;
-    // Части пары кодируем сами: генератор их раскодирует, и `%` в пароле
-    // иначе приехал бы чужим символом.
+    // кодируем сами: генератор раскодирует, и % в пароле приехал бы чужим символом
     final userInfo = '${Uri.encodeComponent(uuid)}:'
         '${Uri.encodeComponent(_str(o['password']))}';
     return _uri('tuic', userInfo, server, port, _str(o['tag']), {
@@ -317,9 +287,7 @@ class SingboxOutbounds {
     );
   }
 
-  /// Транспорт узла параметрами ссылки; пусто — голый tcp. null — такого
-  /// транспорта нет ни у одного нашего ядра: `quic` xray снёс, у mihomo его
-  /// не было.
+  // quic xray снёс, у mihomo его не было
   static Map<String, String>? _transport(Map<String, dynamic> o) {
     final t = _map(o['transport']);
     if (t == null) return const {};
@@ -333,10 +301,7 @@ class SingboxOutbounds {
           'type': 'ws',
           if (path.isNotEmpty) 'path': path,
           if (host.isNotEmpty) 'host': host,
-          // Наши ядра шлют ранние данные только в Sec-WebSocket-Protocol.
-          // Сервер, который ждёт их в пути или другом заголовке, первый пакет
-          // оттуда не достанет, а без ранних данных примет соединение и так
-          // (transport/v2raywebsocket/server.go).
+          // наши ядра шлют ранние данные только в Sec-WebSocket-Protocol
           if (ed > 0 && edHeader == 'sec-websocket-protocol') 'ed': '$ed',
         };
       case 'httpupgrade':
@@ -350,13 +315,9 @@ class SingboxOutbounds {
         final service = _str(t['service_name']);
         return {'type': 'grpc', if (service.isNotEmpty) 'serviceName': service};
       case 'http':
-        // Хостов sing-box даёт список и выбирает случайный, ссылка несёт
-        // один — первый.
         final hosts = _list(t['host']);
         final method = _str(t['method']);
-        // Под этим именем у sing-box два транспорта (transport/v2rayhttp):
-        // с TLS — HTTP/2, без него — HTTP/1.1 поверх tcp, то есть маскировка
-        // `headerType=http` ссылки.
+        // под этим именем у sing-box два транспорта: с TLS HTTP/2, без него HTTP/1.1 поверх tcp
         if (_map(o['tls'])?['enabled'] == true) {
           return {
             'type': 'http',
@@ -376,14 +337,7 @@ class SingboxOutbounds {
     }
   }
 
-  /// TLS и REALITY узла параметрами ссылки.
-  ///
-  /// Чего здесь нет и почему. `insecure` — политика: доверять любому
-  /// сертификату не соглашаемся (removed_tls_fields.dart). Пин
-  /// `certificate_public_key_sha256` — хэш открытого ключа, а оба наших ядра
-  /// сверяют хэш сертификата целиком (GenerateCertHash у xray): переложить
-  /// одно в другое нельзя. Пустой отпечаток uTLS sing-box читает как chrome,
-  /// но это его умолчание, а не выбор автора — остаётся наше.
+  // insecure не переносим. certificate_public_key_sha256 это хэш ключа, а ядра сверяют хэш всего сертификата
   static Map<String, String> _security(Map<String, dynamic> o) {
     final tls = _map(o['tls']);
     if (tls == null || tls['enabled'] != true) return const {};
@@ -407,10 +361,7 @@ class SingboxOutbounds {
     };
   }
 
-  /// ECH у sing-box — PEM-блок `ECH CONFIGS` (common/tls/ech.go), у ссылки —
-  /// тот же ECHConfigList голым base64: снимаем броню, байты те же. Включённый
-  /// ECH без списка значит «спроси у DNS», а резолвер ссылка называет явно —
-  /// у узла sing-box его нет, поэтому такой ECH не переносится.
+  // ECH у sing-box в PEM, у ссылки тот же ECHConfigList голым base64
   static String _ech(Object? raw) {
     final ech = _map(raw);
     if (ech == null || ech['enabled'] != true) return '';
@@ -421,8 +372,6 @@ class SingboxOutbounds {
     return body?.replaceAll(RegExp(r'\s'), '') ?? '';
   }
 
-  /// Длительность Go (`30s`, `1m30s`) в целых секундах — так интервал ждут
-  /// оба ядра. Пусто — не разобралась.
   static String _seconds(String raw) {
     final text = raw.trim();
     if (RegExp(r'^\d+$').hasMatch(text)) return text;
@@ -484,7 +433,6 @@ class SingboxOutbounds {
     return config;
   }
 
-  /// Значение заголовка из `headers` sing-box, без оглядки на регистр имени.
   static String _header(Object? headers, String name) {
     final map = _map(headers);
     if (map == null) return '';
@@ -516,7 +464,6 @@ class SingboxOutbounds {
             if (item is Map) item.cast<String, dynamic>(),
       ];
 
-  /// `Listable` sing-box: одна строка или список строк.
   static List<String> _list(Object? value) {
     if (value is List) {
       return [

@@ -15,34 +15,22 @@ import 'server_name_utils.dart';
 enum ServerItemType { manual, subscription }
 
 class ServerItem {
-  // sentinel чтобы в copyWith можно было явно передать null
   static const _sentinel = Object();
 
   final String id;
-  final String config;           // raw vless:// vmess:// etc.
+  final String config;
   final ServerItemType type;
   final String? subscriptionId;
   final String? subscriptionName;
   final DateTime addedAt;
-  /// Пользовательское имя: перекрывает имя из конфига, переживает обновление
-  /// подписки (переносится в copyWith при stable-match). null/пусто — имя
-  /// берётся из конфига как раньше.
   final String? customName;
-  /// Момент закрепления: закреплённые серверы всегда наверху группы (порядок —
-  /// по времени пина), независимо от режима сортировки. null — не закреплён.
   final DateTime? pinnedAt;
-  /// Конфиг подписочного сервера отредактирован вручную: при обновлении
-  /// подписки stable-match сохраняет пользовательский конфиг, а не затирает
-  /// его серверным. Для manual-серверов не используется.
   final bool configOverridden;
   final int? pingMs;
   final DateTime? lastTestedAt;
-  /// `'tcp'` | `'url'` — метод последнего пинга, нужен для цвета в UI
   final String? lastPingType;
-  /// Последние замеры задержки, старые в начале (см. [PingSample]).
   final List<PingSample> pingSamples;
 
-  // кэш чтобы не парсить uri каждый раз
   String? _cachedDerivedName;
   ServerFlag? _cachedFlag;
   bool _flagParsed = false;
@@ -73,7 +61,6 @@ class ServerItem {
     this.pingSamples = const [],
   }) : addedAt = addedAt ?? DateTime.now();
 
-  /// из raw-строки конфига
   factory ServerItem.fromRaw(
       String config, {
         String? subscriptionId,
@@ -173,18 +160,12 @@ class ServerItem {
 
   bool get isPinned => pinnedAt != null;
 
-  /// Имя для отображения: пользовательское [customName], если задано,
-  /// иначе — имя из конфига ([derivedName]).
   String get displayName {
     final custom = customName?.trim();
     if (custom != null && custom.isNotEmpty) return _sanitizeUtf16(custom);
     return derivedName;
   }
 
-  /// Читаемое название сервера из фрагмента URI (без учёта переименования).
-  ///
-  /// санитизируем после decodeComponent: некоторые провайдеры суют битые
-  /// surrogate-эмодзи, на которых flutter падает "string is not well-formed UTF-16".
   String get derivedName {
     if (_cachedDerivedName != null) return _cachedDerivedName!;
     try {
@@ -230,11 +211,9 @@ class ServerItem {
       final uri = Uri.parse(config);
       String raw;
       if (uri.fragment.isNotEmpty) {
-        // decodeComponent может кинуть на битом percent-encoding
         try {
           raw = Uri.decodeComponent(uri.fragment);
         } catch (_) {
-          // fallback: просто выкидываем percent-encoding
           raw = uri.fragment.replaceAll(RegExp(r'%[0-9A-Fa-f]{2}'), '');
         }
       } else {
@@ -248,7 +227,6 @@ class ServerItem {
   }
 
 
-  /// Автоимя цепочки без своего названия: «DE-1 → NL-2 → JP-3».
   static String _chainRouteLabel(ProxyChainConfig chain) {
     final parts = [
       for (final hop in chain.hops)
@@ -258,22 +236,13 @@ class ServerItem {
     return parts.join(' → ');
   }
 
-  /// Имя сервера без флаг-эмодзи и кода страны в начале.
   String get cleanName => ServerNameUtils.cleanDisplayName(displayName);
 
-  /// Флажок сервера. Сначала из отображаемого имени; если пользователь
-  /// переименовал сервер без страновых меток — фолбэк на имя из конфига,
-  /// чтобы флаг не пропадал после переименования.
-  ///
-  /// У цепочки это флаг выходного узла: именно его страну видят сайты, и
-  /// именно её ждёшь увидеть в кружке сервера.
   ServerFlag? get flag {
     if (!_flagParsed) {
       _flagParsed = true;
       if (protocol == 'chain') {
-        // Автоимя цепочки («DE → NL → JP») начинается с входного флага, так что
-        // по displayName здесь брать нельзя — в кружке ждут страну выхода.
-        // Явное переименование всё же главнее: его и просили показать.
+        // автоимя цепочки начинается с флага входа, а в кружке нужна страна выхода
         _cachedFlag = ServerNameUtils.extractFlag(customName ?? '') ??
             ServerNameUtils.extractFlag(chainConfig!.exit.name);
       } else {
@@ -284,8 +253,6 @@ class ServerItem {
     return _cachedFlag;
   }
 
-  /// Флаги узлов цепочки по порядку (вход → выход). Пусто, если сервер не
-  /// цепочка. Элементы могут быть null: у узла без страновой метки флага нет.
   List<ServerFlag?> get chainFlags {
     final chain = chainConfig;
     if (chain == null) return const [];
@@ -294,17 +261,12 @@ class ServerItem {
     ];
   }
 
-  /// ISO alpha-2 код региона — только если у флажка такой код есть (у 🏴‍☠️
-  /// и 🏁 его нет).
   String? get countryCode => switch (flag) {
         FlagArt(:final countryCode) => countryCode,
         _ => null,
       };
 
-  /// vmess://BASE64(JSON) — реальные host/port лежат внутри payload, а не в
-  /// authority URI. Декодируем из сырой строки конфига: Uri.parse лоуэркейсит
-  /// host, а base64 регистрозависим — через Uri address превращался бы в
-  /// обрезанный base64-блоб, а port — в 443 (дефолт https).
+  // из сырой строки: Uri.parse приводит host к нижнему регистру, а base64 к нему чувствителен
   Map<String, dynamic>? _vmessPayload() {
     if (_vmessPayloadParsed) return _cachedVmessPayload;
     _vmessPayloadParsed = true;
@@ -317,9 +279,7 @@ class ServerItem {
       final decoded = utf8.decode(base64.decode(base64.normalize(payload)));
       final json = jsonDecode(decoded);
       if (json is Map<String, dynamic>) _cachedVmessPayload = json;
-    } catch (_) {
-      // битый payload — address/port уйдут в пустые значения
-    }
+    } catch (_) {}
     return _cachedVmessPayload;
   }
 
@@ -332,10 +292,6 @@ class ServerItem {
   String _computeAddress() {
     try {
       if (protocol == 'chain') {
-        // Адрес цепочки — входной узел: только к нему подключается само
-        // устройство. Отсюда его резолвят перед коннектом и по нему строят
-        // обход туннеля (direct-правило xray, ip_cidr в sing-box) — остальные
-        // звенья набираются уже внутри цепочки и наружу не выходят.
         return _hopItem(chainConfig!.entry.config).address;
       }
       if (protocol == 'custom') {
@@ -350,8 +306,6 @@ class ServerItem {
       if (protocol == 'vmess') {
         return (_vmessPayload()?['add'] ?? '').toString().trim();
       }
-      // У SSR адрес внутри base64, а не там, где его ищет `Uri`: без разбора
-      // в списке был бы виден кусок base64, а пинг мерил бы несуществующий хост.
       if (protocol == 'ssr') return SsrLink.tryParse(config)?.host ?? '';
       if (protocol == 'mieru') return MieruLink.tryParse(config)?.host ?? '';
       return Uri.parse(config.replaceFirst(RegExp(r'^[a-z]+://'), 'https://')).host;
@@ -383,7 +337,6 @@ class ServerItem {
       if (protocol == 'vmess') {
         return int.tryParse((_vmessPayload()?['port'] ?? '').toString()) ?? 0;
       }
-      // Порт mieru лежит в запросе, а не в адресе; диапазоном — тогда 0.
       if (protocol == 'mieru') return MieruLink.tryParse(config)?.port ?? 0;
       if (protocol == 'ssr') return SsrLink.tryParse(config)?.port ?? 0;
       return Uri.parse(config.replaceFirst(RegExp(r'^[a-z]+://'), 'https://')).port;
@@ -392,9 +345,6 @@ class ServerItem {
     }
   }
 
-  /// Готовый xray-конфиг вместо ссылки (сервер «CUSTOM»): роутинг и dns в нём
-  /// авторские. null — конфиг не такой. Разбор кэшируется: [protocol] дёргают
-  /// на каждую перерисовку плитки.
   CustomXrayConfig? get customConfig {
     if (_customParsed) return _cachedCustom;
     _customParsed = true;
@@ -404,10 +354,6 @@ class ServerItem {
     return _cachedCustom;
   }
 
-  /// Готовый конфиг Clash/mihomo вместо ссылки (сервер «CLASH»): прокси,
-  /// группы и правила в нём авторские. null — конфиг не такой. Разбор
-  /// кэшируется наравне с xray-конфигом: [protocol] зовут на каждую
-  /// перерисовку плитки.
   CustomClashConfig? get clashConfig {
     if (_clashParsed) return _cachedClash;
     _clashParsed = true;
@@ -417,8 +363,6 @@ class ServerItem {
     return _cachedClash;
   }
 
-  /// Цепочка серверов вместо одиночного сервера. null — конфиг не такой.
-  /// Разбор кэшируется: [protocol] дёргают на каждую перерисовку тайла.
   ProxyChainConfig? get chainConfig {
     if (_chainParsed) return _cachedChain;
     _chainParsed = true;
@@ -428,16 +372,12 @@ class ServerItem {
     return _cachedChain;
   }
 
-  /// Узел цепочки как самостоятельный сервер — чтобы разбор адреса/имени/флага
-  /// шёл ровно теми же геттерами, что и у обычного сервера, без второй копии
-  /// логики. Объект одноразовый: свои кэши он заполняет сам.
   static ServerItem _hopItem(String hopConfig) => ServerItem(
         id: '',
         config: hopConfig,
         type: ServerItemType.manual,
       );
 
-  /// Узлы цепочки как серверы (вход → выход). Пусто, если сервер не цепочка.
   List<ServerItem> get chainHopItems {
     final chain = chainConfig;
     if (chain == null) return const [];
@@ -449,14 +389,10 @@ class ServerItem {
     ];
   }
 
-  /// Протокол ('vless', 'vmess', 'trojan', 'ss', 'ssr', 'hysteria', 'hy2',
-  /// 'tuic', 'anytls', 'mieru', 'awg', 'custom', 'clash', 'chain', 'unknown')
   String get protocol {
     final lower = config.toLowerCase();
     if (lower.startsWith('${ProxyChainConfig.scheme}://')) {
-      // Битую ссылку цепочкой не считаем: иначе chainConfig! ниже по коду
-      // разыменовывал бы null. Такой конфиг останется 'unknown' — его видно
-      // в списке и можно удалить.
+      // битая цепочка остаётся unknown, иначе chainConfig! ниже упадёт на null
       return chainConfig != null ? 'chain' : 'unknown';
     }
     if (lower.startsWith('vless://')) return 'vless';
@@ -471,17 +407,14 @@ class ServerItem {
     if (lower.startsWith('anytls://')) return 'anytls';
     if (lower.startsWith('mierus://')) return 'mieru';
     if (AwgProfile.isAwgConfig(config)) return 'awg';
-    // Clash — раньше xray: json-конфиг Clash тоже начинается с '{', и
-    // разбирать его как xray-конфиг бессмысленно (у него нет outbounds).
+    // clash проверять раньше xray: json-конфиг clash тоже начинается с {
     if (clashConfig != null) return 'clash';
     if (customConfig != null) return 'custom';
     return 'unknown';
   }
 
-  // выкидываем одиночные surrogate'ы (на них падает flutter text engine),
-  // валидные пары оставляем как есть
+  // одиночные суррогаты от провайдеров роняют движок текста Flutter
   static String _sanitizeUtf16(String input) {
-    // быстрый путь: суррогатов нет — отдаём как есть
     bool hasSurrogate = false;
     for (var i = 0; i < input.length; i++) {
       final c = input.codeUnitAt(i);
@@ -494,7 +427,6 @@ class ServerItem {
       final code = input.codeUnitAt(i);
 
       if (code >= 0xD800 && code <= 0xDBFF) {
-        // high surrogate — должен идти в паре с low
         if (i + 1 < input.length) {
           final next = input.codeUnitAt(i + 1);
           if (next >= 0xDC00 && next <= 0xDFFF) {
@@ -507,7 +439,6 @@ class ServerItem {
         continue;
       }
 
-      // одиночный low surrogate
       if (code >= 0xDC00 && code <= 0xDFFF) continue;
 
       buffer.writeCharCode(code);

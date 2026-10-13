@@ -36,14 +36,12 @@ class Win32Window {
   // |Show| is called. Returns true if the window was created successfully.
   bool Create(const std::wstring& title, const Point& origin, const Size& size);
 
-  // Origin that centers |size| on the primary monitor work area (DPI-aware).
   static Point ComputeCenteredOrigin(const Size& size);
 
   // Show the current window. Returns true if the window was successfully shown.
   bool Show();
 
-  // Show command used by Show() (SW_SHOWNORMAL by default). Lets the runner
-  // restore a maximized session without flashing a normal-size window first.
+  // чтобы открыть развёрнутую прошлую сессию без вспышки окна обычного размера
   void SetPreferredShowCommand(int show_command);
 
   // Release OS resources associated with window.
@@ -99,7 +97,6 @@ class Win32Window {
 
   bool quit_on_close_ = false;
 
-  // show command applied by Show() (see SetPreferredShowCommand).
   int preferred_show_command_ = SW_SHOWNORMAL;
 
   // window handle for top level window.

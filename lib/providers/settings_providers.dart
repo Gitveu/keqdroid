@@ -29,13 +29,7 @@ class SplitTunnelingNotifier extends Notifier<SplitTunnelingState> {
     );
   }
 
-  /// Снятие отметки без учёта регистра.
-  ///
-  /// `Telegram.exe` из списка процессов Windows и `telegram.exe`, сохранённый
-  /// старой версией, — одно приложение: правило по нему всё равно уходит в
-  /// обеих формах ([processNameMatchVariants]). Пока сравнение шло по сырой
-  /// строке, повторное нажатие по такой строке не снимало отметку, а клало в
-  /// список вторую запись, и на экране появлялся близнец.
+  // без учёта регистра: старые версии сохраняли telegram.exe, а список даёт Telegram.exe
   static Set<String> _togglePackage(Set<String> current, String pkg) {
     final key = pkg.toLowerCase();
     final next = {...current}..removeWhere((e) => e.toLowerCase() == key);
@@ -57,17 +51,12 @@ class SplitTunnelingNotifier extends Notifier<SplitTunnelingState> {
     state = state.copyWith(includePackages: set, excludePackages: const {});
   }
 
-  /// Расчёт для [toggleApp] отдельно от записи на диск: его же зовёт тест
-  /// экрана, где SharedPreferences нет.
   static Set<String> toggledEntries(Set<String> current, AppInfo app) {
     final next = {...current}..removeWhere((e) => splitEntryMatches(e, app));
     if (next.length == current.length) next.add(app.packageName);
     return next;
   }
 
-  /// Нажатие по строке списка. Отмеченная снимается целиком: уходят и запись
-  /// с её путём, и запись с её именем. Неотмеченная получает имя: программа,
-  /// обновившаяся в новую папку (Discord), так остаётся в сплите.
   Future<void> toggleApp(AppInfo app, {required bool include}) async {
     final next = toggledEntries(
       include ? state.includePackages : state.excludePackages,
@@ -85,10 +74,7 @@ class SplitTunnelingNotifier extends Notifier<SplitTunnelingState> {
     }
   }
 
-  /// добавляет пачку пакетов в excludePackages одним обновлением state
-  /// (вместо цикла toggleExclude, иначе ловим race condition).
-  /// Возвращает, сколько пакетов реально добавилось (без дублей); при пустом
-  /// результате не трогает storage вообще (иначе зря стирали includePackages).
+  // одним обновлением state: циклом toggleExclude записи гонялись между собой
   Future<int> addAllExcludes(List<String> packages) async {
     if (packages.isEmpty) return 0;
     final set = {...state.excludePackages, ...packages};
@@ -116,8 +102,6 @@ class SplitTunnelingNotifier extends Notifier<SplitTunnelingState> {
     state = const SplitTunnelingState();
   }
 
-  /// Ручное добавление на десктопе: путь (из «Обзор…» или вписанный)
-  /// сохраняется путём — «только этот файл», имя — именем.
   Future<void> addCustomProcess(String raw, {required bool asInclude}) async {
     final entry = isProcessPathEntry(raw)
         ? normalizeProcessPath(raw)
@@ -139,10 +123,6 @@ NotifierProvider<SplitTunnelingNotifier, SplitTunnelingState>(
 final installedAppsProvider =
     FutureProvider.autoDispose.family<List<AppInfo>, bool>(
       (ref, includeSystem) async {
-    // Список тяжёлый (base64-иконка у каждого приложения — мегабайты строк),
-    // поэтому не держим его в памяти вечно: кэш живёт, пока экран открыт,
-    // плюс 3 минуты после ухода последнего слушателя — быстрый повторный вход
-    // обходится без перезагрузки, а дальше список освобождается.
     final link = ref.keepAlive();
     Timer? release;
     ref.onCancel(() {
@@ -164,16 +144,6 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     return ref.read(storageProvider).getSettings();
   }
 
-  /// Состояние обновляется до записи на диск, а не после неё.
-  ///
-  /// `saveSettings` уходит в SharedPreferences через платформенный канал, и
-  /// пока летел этот круговой рейс, интерфейс стоял: между нажатием на
-  /// «Тёмная» и собственно сменой темы была пауза, которая читалась залипанием
-  /// переключателя. Настройка — не транзакция, подтверждать её записью незачем.
-  ///
-  /// Порядок записей от перестановки не страдает: StorageService выстраивает
-  /// их в одну очередь в порядке вызова (см. `_serial`), а состояние здесь
-  /// меняется в том же порядке.
   Future<void> save(AppSettings settings) async {
     state = AsyncData(settings);
     await ref.read(storageProvider).saveSettings(settings);
@@ -187,17 +157,6 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
 final settingsNotifierProvider =
 AsyncNotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
 
-/// Ядро, которое исполнит активный сервер прямо сейчас.
-///
-/// Настройки бывают не у обоих ядер, и раньше они стояли на экране всегда: под
-/// переключателем мелким шрифтом было сказано, при каком ядре он работает.
-/// Читают это уже после того, как включили и не увидели эффекта, — поэтому
-/// такие настройки теперь просто не показываются, когда поедет не их ядро.
-///
-/// Считается по активному серверу, а не по одной настройке `vpnCore`: формат
-/// сервера решает за пользователя (готовый конфиг, цепочка, профиль AmneziaWG),
-/// и выбор значим ровно для обычной ссылки. Сервера нет — берём то, что поедет
-/// при следующем: ссылке отдаётся выбранное ядро, а `auto` — это xray.
 final activeVpnBackendProvider = Provider<VpnBackend>((ref) {
   final preference = ref.watch(
     settingsNotifierProvider.select(

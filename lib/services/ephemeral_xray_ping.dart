@@ -14,22 +14,10 @@ import 'windows_desktop_service.dart';
 
 final _ansiEscape = RegExp(r'\x1B\[[0-9;]*[A-Za-z]');
 
-/// Снимает ANSI-раскраску со строки лога ядра.
-///
-/// Ядро красит уровень сообщения даже в трубу, и без чистки в текст ошибки
-/// приезжало `\x1B[31mFATAL\x1B[0m` вместо слова FATAL.
 @visibleForTesting
 String stripAnsi(String value) => value.replaceAll(_ansiEscape, '');
 
-/// Хвост вывода временного ядра — и страховка, и единственная улика.
-///
-/// Трубы дочернего процесса обязаны вычитываться. Их не читал никто: стоило
-/// ядру наговорить больше буфера трубы, и оно вставало на записи навсегда —
-/// читать было некому. Снаружи это выглядело ровно как «порт не поднялся»,
-/// потому что порт после этого и правда не открывался.
-///
-/// Заодно это единственное место, где ядро объясняет, почему не поднялось.
-/// Держим последние строки: раньше они уходили в никуда.
+// трубы обязаны вычитываться: ядро, наговорившее больше буфера, встаёт на записи навсегда
 class _CoreLog {
   _CoreLog(Process process) {
     for (final stream in [process.stdout, process.stderr]) {
@@ -50,18 +38,13 @@ class _CoreLog {
     if (_lines.length > _keep) _lines.removeAt(0);
   }
 
-  /// Готовая приписка к сообщению об ошибке; пусто, если ядро молчало.
   String get tail => _lines.isEmpty ? '' : ': ${_lines.join(' | ')}';
 }
 
-/// короткоживущий xray для url-пинга, как на android
 class EphemeralXrayPing {
   EphemeralXrayPing._();
 
-  // Desktop core resolution is platform-specific; the rest (config, socks probe)
-  // is platform-neutral so url/speed ping work on Windows and Linux alike.
   static Future<String?> _resolveXray() {
-    // Desktop runs the unified keqrnel core (standalone xray is gone).
     if (Platform.isWindows) return WindowsCorePaths.keqrnelExecutable();
     if (Platform.isLinux) return LinuxCorePaths.keqrnelExecutable();
     return Future<String?>.value(null);
@@ -73,17 +56,10 @@ class EphemeralXrayPing {
     return Future<String?>.value(null);
   }
 
-  /// Бинарь ядра, которым меряем.
   static Future<String?> _resolveCore(VpnBackend core) =>
       core == VpnBackend.mihomo ? _resolveMihomo() : _resolveXray();
 
-  /// Аргументы запуска. У ядер они разные, и у mihomo домашний каталог —
-  /// каталог сессии замера, а не общий с туннелем.
-  ///
-  /// Общий стоил бы блокировки: mihomo держит `cache.db` через bbolt с
-  /// секундным таймаутом на захват файла (`initCache` в ядре), и замер во
-  /// время живого подключения ждал бы эту секунду впустую — прямо в измеряемое
-  /// время. Geo-базы замеру не нужны, его конфиг правил с ними не содержит.
+  // свой каталог: mihomo держит cache.db через bbolt с секундным таймаутом на захват
   static List<String> _coreArgs(
     VpnBackend core,
     String configPath,
@@ -93,14 +69,6 @@ class EphemeralXrayPing {
           ? ['-d', sessionDirPath, '-f', configPath]
           : ['run', '-c', configPath];
 
-  /// The ephemeral test runs through keqrnel, so the xray config is wrapped into
-  /// keqrnel's embedded-xray outbound (its own socks inbound binds the test port
-  /// exactly like standalone xray).
-  ///
-  /// [port] переписывает порт инбаунда уже в готовом конфиге: на повторной
-  /// попытке номер другой, а пересобирать ради этого весь xray-конфиг (он
-  /// приезжает сюда строкой от генератора) значило бы тащить сюда и генератор,
-  /// и настройки.
   static String _coreConfig(String configJson, int port, VpnBackend core) {
     if (core == VpnBackend.mihomo) return _mihomoConfig(configJson, port);
     if (!Platform.isWindows && !Platform.isLinux) return configJson;
@@ -115,13 +83,6 @@ class EphemeralXrayPing {
     return jsonEncode(box);
   }
 
-  /// mihomo оборачивать не во что — он сам себе ядро. Меняем только номер
-  /// порта инбаунда, по той же причине, что и у xray: на повторной попытке он
-  /// другой, а пересобирать конфиг заново значило бы тащить сюда генератор.
-  ///
-  /// Какой из двух ключей выставлен, решает генератор (`port` — HTTP, десктоп;
-  /// `socks-port` — Android), поэтому правим тот, что уже есть, и не добавляем
-  /// второй: лишний инбаунд занял бы ещё один порт.
   static String _mihomoConfig(String configJson, int port) {
     final config = jsonDecode(configJson) as Map<String, dynamic>;
     for (final key in const ['port', 'socks-port', 'mixed-port']) {
@@ -130,8 +91,6 @@ class EphemeralXrayPing {
     return jsonEncode(config);
   }
 
-  /// Свободный порт на петле. Тот же способ, что у PingService: занять сокет с
-  /// нулевым портом и сразу отпустить.
   static Future<int> _freeLoopbackPort() async {
     final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final port = socket.port;
@@ -147,7 +106,6 @@ class EphemeralXrayPing {
   static String get _binariesHint =>
       Platform.isLinux ? LinuxCorePaths.binariesHint : WindowsCorePaths.binariesHint;
 
-  /// Windows registers cores for taskkill cleanup; no-op elsewhere.
   static Future<void> _attachCoreProcess(int pid) async {
     if (Platform.isWindows) {
       await WindowsDesktopService.attachCoreProcess(pid);
@@ -156,15 +114,6 @@ class EphemeralXrayPing {
 
   static Future<void>? _serialGate;
 
-  /// Пропускает по одному замеру за раз.
-  ///
-  /// Нужен только спидтесту: он меряет полосу канала, и параллельные качалки
-  /// делили бы её между собой, выдавая N заниженных цифр вместо одной честной.
-  /// URL-пинг через эту калитку не идёт — каждый его замер живёт в своём
-  /// временном каталоге ([_sessionDir] делает `createTemp`) и на своём порту,
-  /// общего состояния между замерами нет. Сколько их идёт разом, решает
-  /// PingService.urlPingConcurrency, и число там разное: на десктопе процессов
-  /// не жалко, на телефоне их держать негде.
   static Future<T> _runSerial<T>(Future<T> Function() body) async {
     while (_serialGate != null) {
       await _serialGate;
@@ -218,9 +167,7 @@ class EphemeralXrayPing {
     bool keepAlive = true,
   }) async {
     if (items.isEmpty) return [];
-    // Внутри батча — по очереди: все элементы приходят с одним socksPort, и
-    // параллельно они дрались бы за него. Параллелит вызовы PingService, он же
-    // и выдаёт каждому замеру свой порт.
+    // по очереди: у всех элементов батча один socksPort
     final out = <({
       String id,
       bool success,
@@ -248,8 +195,6 @@ class EphemeralXrayPing {
     return out;
   }
 
-  /// Boots an ephemeral Xray per server and downloads [downloadUrl] through its
-  /// SOCKS, returning throughput in kbps.
   static Future<
       List<({String id, bool success, int? kbps, String error})>> speedTestBatch({
     required List<({String id, String xrayConfigJson})> items,
@@ -280,24 +225,10 @@ class EphemeralXrayPing {
     });
   }
 
-  /// Сколько ядру дают на то, чтобы начать обслуживать соединения.
-  ///
-  /// Открытый порт готовности не означает. mihomo поднимает листенеры раньше,
-  /// чем дочитывает конфиг, и до конца загрузки молча закрывает всё, что
-  /// успело подключиться (`tunnel.isHandle`: пока статус не Running,
-  /// соединение закрывается без единой строки в логе). Снаружи это
-  /// неотличимо от мёртвого сервера — проба видит закрытое соединение.
-  ///
-  /// Замерено на Pixel 6a: при живом туннеле ядро замера доходит до Running
-  /// за 1.3-1.8 с, без туннеля — за полсекунды. Поэтому «при включённом VPN
-  /// пинг не работает»: пробы успевали раньше ядра и падали все разом.
+  // открытый порт у mihomo ещё не готовность: до Running он молча закрывает соединения.
+  // на Pixel 6a при живом туннеле это 1.3-1.8 с
   static const coreWakeupGrace = Duration(seconds: 3);
 
-  /// Повторять ли пробу, которая только что отказала.
-  ///
-  /// Только у mihomo: у xray листенеры поднимаются последними, там открытый
-  /// порт и есть готовность, и лишний повтор стоил бы секунд на каждом
-  /// мёртвом сервере.
   @visibleForTesting
   static bool retryProbeWhileCoreWakesUp({
     required VpnBackend core,
@@ -346,7 +277,6 @@ class EphemeralXrayPing {
       ),
     );
     Process? process;
-    // Порт может смениться на второй попытке — см. ниже.
     var port = socksPort;
 
     try {
@@ -369,16 +299,7 @@ class EphemeralXrayPing {
         );
         if (startup.ready) break;
 
-        // Ядро выпало сразу — самая частая причина этого на десктопе в
-        // TUN-режиме: порт увели у нас из-под рук. Свободный номер мы
-        // выбираем, заняв и тут же отпустив сокет, а между этим и bind'ом
-        // ядра проходит время старта процесса. В TUN через машину идёт весь
-        // трафик, динамических портов расходуется много, и в это окно порт
-        // достаётся чужому исходящему соединению — тогда ядро падает на
-        // «address already in use», а пользователь видит мёртвый сервер при
-        // живом. Одна повторная попытка со свежим портом это закрывает;
-        // настоящую поломку конфига она не чинит, но и стоит меньше секунды —
-        // упавшее ядро замечается по коду выхода, а не по таймауту.
+        // в TUN свободный порт уводит чужое исходящее соединение, пока ядро стартует, отсюда address already in use
         await _killProcess(process);
         process = null;
         if (startup.exitCode == null || attempt == 1) {
@@ -392,8 +313,6 @@ class EphemeralXrayPing {
         port = await _freeLoopbackPort();
       }
 
-      // Открытый порт — ещё не готовность (см. [coreWakeupGrace]), поэтому
-      // ранний отказ на свежем ядре повторяем, а не записываем серверу.
       final coreLife = Stopwatch()..start();
       while (true) {
         final probe = await _httpProbeViaSocks(
@@ -496,8 +415,6 @@ class EphemeralXrayPing {
     }
   }
 
-  /// Downloads the payload through the SOCKS proxy and computes kbps from the
-  /// bytes received over the body-transfer time.
   static Future<({bool success, int? kbps, String error})> _downloadProbeViaSocks({
     required String downloadUrl,
     required int socksPort,
@@ -505,14 +422,9 @@ class EphemeralXrayPing {
   }) async {
     final client = HttpClient();
     try {
-      // HTTP proxy ('PROXY host:port'), not SOCKS: dart:io HttpClient.findProxy
-      // supports only PROXY (HTTP CONNECT) and DIRECT — never SOCKS/SOCKS5. The
-      // ephemeral ping config exposes an HTTP inbound on this port for exactly this
-      // reason (see ConfigGeneratorV2 ping mode). The port arg is still named
-      // socksPort for historical reasons.
+      // dart:io HttpClient умеет только PROXY и DIRECT, поэтому у ядра замера HTTP-инбаунд
       client.findProxy = (_) => 'PROXY 127.0.0.1:$socksPort';
-      // Сертификат проверяем: с badCertificateCallback=true MITM мог
-      // «нарисовать» успешный замер мёртвому/подменённому серверу.
+      // сертификат проверяем: иначе MITM нарисует успешный замер мёртвому серверу
       client.connectionTimeout = Duration(milliseconds: timeoutMs.clamp(1000, 8000));
 
       final request = await client.getUrl(Uri.parse(_ensureHttps(downloadUrl)));
@@ -526,7 +438,6 @@ class EphemeralXrayPing {
         return (success: false, kbps: null, error: 'HTTP ${response.statusCode}');
       }
 
-      // Time only the body transfer (TLS/connect excluded) for cleaner numbers.
       final sw = Stopwatch()..start();
       var bytes = 0;
       await for (final chunk in response.timeout(
@@ -573,19 +484,8 @@ class EphemeralXrayPing {
     Socket? raw;
     _HttpResponseReader? reader;
     try {
-      // Соединение ведём руками, а не через HttpClient, и это не вкусовщина.
-      //
-      // `HttpClient` не переиспользует туннель CONNECT: замерено — три запроса
-      // подряд открывают три туннеля, тогда как без прокси тот же клиент
-      // обходится одним. То есть «второй запрос по тёплому соединению»,
-      // которым здесь меряется чистое время ответа, на десктопе не наступал
-      // никогда: каждая попытка платила заново TCP, CONNECT и TLS-рукопожатие.
-      // Четыре-пять RTT вместо одного — сервер с честными 50 мс показывал 200,
-      // и пороги цвета красили здоровое в красное. На Android этой беды нет:
-      // там `HttpURLConnection` держит пул как положено.
-      //
-      // Своими руками мы получаем ту же семантику, что у Android:
-      // рукопожатие один раз, дальше GET'ы по одному и тому же TLS-сокету.
+      // HttpClient не переиспользует туннель CONNECT: каждый запрос платил заново TCP, CONNECT и TLS,
+      // и сервер с честными 50 мс показывал 200
       raw = await Socket.connect(
         InternetAddress.loopbackIPv4,
         socksPort,
@@ -594,8 +494,6 @@ class EphemeralXrayPing {
       raw.setOption(SocketOption.tcpNoDelay, true);
       reader = _HttpResponseReader(raw);
 
-      // Эфемерное ядро поднимает на этом порту HTTP-инбаунд (см. режим пинга в
-      // ConfigGeneratorV2), поэтому туннель просим методом CONNECT.
       raw.write('CONNECT $host:$port HTTP/1.1\r\nHost: $host:$port\r\n\r\n');
       await raw.flush();
       final tunnel = await reader.readResponse(
@@ -611,24 +509,17 @@ class EphemeralXrayPing {
         );
       }
 
-      // Сертификат проверяем: без проверки MITM «нарисовал» бы успешный пинг
-      // мёртвому или подменённому серверу.
       final tls = await SecureSocket.secure(raw, host: host)
           .timeout(connectTimeout);
       raw = tls;
       reader = _HttpResponseReader(tls);
 
-      // Первая попытка оплачивает рукопожатие и прогрев цепочки — она меряет
-      // стоимость процедуры, а не сервер. Вторая идёт по уже поднятому TLS и
-      // показывает чистое время ответа; ради неё всё это и затевалось.
+      // первая попытка платит за рукопожатие, вторая меряет чистое время ответа
       ({bool success, int? latencyMs, String error, int? httpStatus})? best;
       final attempts = keepAlive ? 2 : 1;
       for (var attempt = 0; attempt < attempts; attempt++) {
         final sw = Stopwatch()..start();
-        // Всегда GET. Раньше на `generate_204` и `connecttest.txt` уходил HEAD —
-        // то есть ровно на два пресета из трёх (gstatic-дефолт и Microsoft), и
-        // именно они у пользователей не отвечали, пока Cloudflare с GET работал.
-        // Экономии от HEAD тут нет: 204 без тела, connecttest.txt — 22 байта.
+        // всегда GET: на HEAD не отвечали как раз gstatic и Microsoft
         tls.write(
           'GET $path HTTP/1.1\r\n'
           'Host: $host\r\n'
@@ -637,8 +528,6 @@ class EphemeralXrayPing {
           'Connection: keep-alive\r\n\r\n',
         );
         await tls.flush();
-        // Срок у каждой попытки свой: медленная первая не должна съедать время
-        // второй, ради которой всё и делается.
         final res = await reader.readResponse(DateTime.now().add(readTimeout));
         sw.stop();
 
@@ -653,8 +542,6 @@ class EphemeralXrayPing {
         if (best == null || sw.elapsedMilliseconds < best.latencyMs!) {
           best = result;
         }
-        // Сервер попрощался — второй замер по этому сокету уже не сделать, а
-        // открывать новый бессмысленно: он померил бы то же, что и первый.
         if (res.closing) break;
       }
       return best!;
@@ -686,18 +573,9 @@ class EphemeralXrayPing {
     return trimmed;
   }
 
-  /// Сколько ждём, пока временное ядро откроет свой порт.
-  ///
-  /// Было 5 секунд, и на десктопе в TUN-режиме этого не хватало: батч поднимает
-  /// до шестнадцати ядер разом (PingService.urlPingConcurrency), они делят диск и
-  /// антивирусную проверку, а срок у всех шести общий — стартуют-то они в одну
-  /// секунду. Успевали первые, остальные краснели «порт не поднялся» на живых
-  /// серверах. Упавшее ядро ждать не заставляет: выход процесса замечается
-  /// сразу и без таймаута, так что запас платят только те, кто реально
-  /// поднимается медленно.
+  // до шестнадцати ядер стартуют разом и делят диск с антивирусом, 5 с не хватало
   static const int _startupBudgetMs = 12000;
 
-  /// Ждёт порт временного ядра. `exitCode` не null — ядро вышло само.
   static Future<({bool ready, int? exitCode})> _waitForPort(
     String host,
     int port,
@@ -732,11 +610,6 @@ class EphemeralXrayPing {
     return (ready: false, exitCode: null);
   }
 
-  /// Почему ядро не открыло порт — словами, а не одной строкой на все случаи.
-  ///
-  /// Прежнее «port not ready» одинаково значило «упало на конфиге» и «не успело
-  /// подняться», а последние слова самого ядра уходили в никуда. Разбирать по
-  /// такому сообщению было нечего.
   static String _startupError(int? exitCode, int port, _CoreLog log) =>
       exitCode != null
           ? 'Core exited with code $exitCode before opening port $port${log.tail}'
@@ -758,13 +631,7 @@ class EphemeralXrayPing {
   }
 }
 
-/// Читает ответы HTTP/1.1 из одного сокета подряд.
-///
-/// Своё чтение нужно потому, что замер ведётся по одному соединению: тело
-/// каждого ответа обязано быть дочитано ровно до конца, иначе следующий GET
-/// прочитает хвост предыдущего вместо своего статуса. `HttpClient` это делал бы
-/// сам, но он не переиспользует туннель CONNECT — см. комментарий в
-/// `_httpProbeViaSocks`, ради чего всё и написано руками.
+// тело каждого ответа дочитываем до конца, иначе следующий GET прочитает хвост предыдущего
 class _HttpResponseReader {
   _HttpResponseReader(Stream<List<int>> socket) {
     _sub = socket.listen(
@@ -796,9 +663,6 @@ class _HttpResponseReader {
     if (waiter != null && !waiter.isCompleted) waiter.complete();
   }
 
-  /// Ждёт следующую порцию байт. Срок общий на весь ответ, а не на порцию:
-  /// иначе медленный сервер, отдающий по чуть-чуть, никогда не упрётся в
-  /// таймаут.
   Future<void> _more(DateTime deadline) {
     if (_error != null) throw _error!;
     if (_done) throw const SocketException('connection closed by peer');
@@ -807,11 +671,7 @@ class _HttpResponseReader {
     return (_waiter ??= Completer<void>()).future.timeout(left);
   }
 
-  /// Читает один ответ целиком и возвращает его статус.
-  ///
-  /// [headOnly] — для ответа на CONNECT: у него тела нет по определению, а
-  /// дальше по этому же сокету пойдёт уже TLS, и лишний байт из него читать
-  /// нельзя.
+  // после CONNECT по сокету пойдёт TLS, лишний байт читать нельзя
   Future<({int status, bool closing})> readResponse(
     DateTime deadline, {
     bool headOnly = false,
@@ -836,11 +696,9 @@ class _HttpResponseReader {
     final closing =
         (headers['connection'] ?? '').toLowerCase().contains('close');
 
-    // 1xx — промежуточный ответ, настоящий придёт следом.
     if (status >= 100 && status < 200) {
       return readResponse(deadline, headOnly: headOnly);
     }
-    // 204 и 304 по спецификации без тела, длину при них слать не обязаны.
     if (headOnly || status == 204 || status == 304) {
       return (status: status, closing: closing);
     }
@@ -854,14 +712,11 @@ class _HttpResponseReader {
       if (length != null) {
         await _drainExactly(length, deadline);
       } else if (closing) {
-        // Ни длины, ни кусков, но соединение закрывается — тело кончается
-        // вместе с ним. Второй попытки по этому сокету всё равно не будет.
         while (!_done) {
           await _more(deadline);
         }
         _buffer.clear();
       }
-      // Ни длины, ни chunked, ни close — тела нет.
     }
     return (status: status, closing: closing);
   }
@@ -884,7 +739,6 @@ class _HttpResponseReader {
       final size =
           int.tryParse(sizeLine.split(';').first.trim(), radix: 16) ?? 0;
       if (size == 0) {
-        // Нулевой кусок, за ним возможные трейлеры и пустая строка.
         while (true) {
           var tail = -1;
           while ((tail = _indexOf(13, 10)) < 0) {
@@ -894,12 +748,10 @@ class _HttpResponseReader {
           if (tail == 0) return;
         }
       }
-      // Кусок и завершающий его CRLF.
       await _drainExactly(size + 2, deadline);
     }
   }
 
-  /// Смещение первой встречи последовательности байт, иначе -1.
   int _indexOf(int a, int b, [int? c, int? d]) {
     final len = c == null ? 2 : 4;
     for (var i = 0; i + len - 1 < _buffer.length; i++) {
@@ -919,8 +771,6 @@ class _HttpResponseReader {
   Future<void> cancel() async {
     try {
       await _sub.cancel();
-    } catch (_) {
-      // Подписку мог уже забрать TLS-слой при апгрейде сокета.
-    }
+    } catch (_) {}
   }
 }

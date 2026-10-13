@@ -7,83 +7,49 @@ import 'custom_clash_config.dart';
 import 'custom_xray_config.dart';
 import 'proxy_chain.dart';
 
-/// В каком виде записан сервер. От формата зависит, какое ядро вообще способно
-/// его исполнить, — а не только то, как его показать в списке.
 enum ServerFormat {
-  /// Обычная ссылка (`vless://`, `vmess://`, `trojan://`, `ss://`, `hy2://`…).
-  /// Обычно её умеют оба ядра, но не всякую: что именно ссылка несёт, решает
-  /// [backendsForLink].
   link,
 
-  /// Готовый конфиг xray из подписки: аутбаунды, роутинг и dns авторские и
-  /// описаны в терминах xray. Переводить их в другое ядро нечем.
   xrayJson,
 
-  /// Готовый конфиг Clash/mihomo: `proxies`, `proxy-groups`, `rules`.
   clashYaml,
 
-  /// Цепочка серверов: узлы связаны `dialerProxy` xray.
   chain,
 
-  /// Профиль AmneziaWG (`[Interface]`/`[Peer]`).
   amneziaWg,
 
-  /// Ни на что не похоже — сервер в списке видно, подключиться нельзя.
   unknown,
 }
 
-/// Почему выбранное пользователем ядро не исполняет конкретный сервер.
-///
-/// Выбор ядра — настройка, а исполняет сервер всегда то ядро, которое понимает
-/// его формат. Раньше несовпадение молча откатывалось на xray: в настройках
-/// стоял mihomo, в сессии шёл libxray, и понять почему было неоткуда (жалоба
-/// «включил михомо — пишет, что активное ядро xray»). Причина считается здесь
-/// один раз и используется и на пути подключения, и в панели «О приложении».
+// молчаливого отката на xray больше нет: раньше в настройках стоял mihomo, а в сессии шёл libxray, и почему, узнать было неоткуда
 enum VpnCoreSkip {
-  /// Готовый xray-конфиг: только xray.
   customConfig,
 
-  /// Цепочка: только xray.
   chain,
 
-  /// AmneziaWG: только mihomo.
   amneziaWg,
 
-  /// Готовый clash-конфиг: только mihomo.
   clashConfig,
 
-  /// Ссылку берёт только xray: транспорт, которого у mihomo нет в этом
-  /// протоколе.
   linkXrayOnly,
 
-  /// Ссылку берёт только mihomo: xray такого не умеет вовсе.
   linkMihomoOnly,
 
-  /// Ядра нет на этой платформе. Сейчас недостижимо — mihomo поставляется всюду
-  /// (см. [mihomoShipsHere]), — но причина остаётся: молчаливый откат на другое
-  /// ядро запрещён, и новая платформа без него обязана сказать об этом вслух.
+  // сейчас недостижимо, mihomo есть везде. оставлено для новой платформы: откатываться молча нельзя
   platform,
 }
 
-/// Поставляется ли mihomo на этой платформе.
-///
-/// Сейчас — на всех трёх, что умеет приложение: `libmihomo.so` в APK,
-/// `mihomo.exe`/`mihomo` рядом с десктопным бинарём. Функция осталась ради
-/// одного места правды: раньше «только Android» было записано в трёх файлах
-/// подряд, и снятие ограничения означало найти их все.
+// одно место вместо трёх: раньше только Android было записано в трёх файлах подряд
 bool get mihomoShipsHere =>
     Platform.isAndroid || Platform.isWindows || Platform.isLinux;
 
-/// Формат сервера по его конфигу. Порядок проверок — от дешёвых и однозначных
-/// к разбору.
 ServerFormat detectServerFormat(String config) {
   final trimmed = config.trim();
   if (trimmed.isEmpty) return ServerFormat.unknown;
   if (ProxyChainConfig.looksLikeChain(trimmed)) return ServerFormat.chain;
   if (AwgProfile.isAwgConfig(trimmed)) return ServerFormat.amneziaWg;
   if (_linkScheme.hasMatch(trimmed)) return ServerFormat.link;
-  // Clash — раньше xray: json-конфиг Clash тоже начинается с `{`, но у него
-  // `proxies`, а не `outbounds`, и разбор xray-парсером его не возьмёт.
+  // clash раньше xray: json clash тоже начинается с {
   if (CustomClashConfig.looksLikeClash(trimmed) &&
       CustomClashConfig.tryParse(trimmed) != null) {
     return ServerFormat.clashYaml;
@@ -100,10 +66,6 @@ final _linkScheme = RegExp(
   caseSensitive: false,
 );
 
-/// Ядра, способные исполнить этот формат, независимо от платформы.
-///
-/// Про ссылку тут сказано только «обычно оба»; какую именно ссылку кто берёт —
-/// [backendsForLink].
 Set<VpnBackend> backendsForFormat(ServerFormat format) => switch (format) {
       ServerFormat.link => const {VpnBackend.xray, VpnBackend.mihomo},
       ServerFormat.xrayJson || ServerFormat.chain => const {VpnBackend.xray},
@@ -114,22 +76,10 @@ Set<VpnBackend> backendsForFormat(ServerFormat format) => switch (format) {
 
 const _bothCores = {VpnBackend.xray, VpnBackend.mihomo};
 
-/// Схемы, которые исполняет только mihomo: у xray таких аутбаундов нет.
 const _mihomoOnlySchemes = {'tuic', 'anytls', 'ssr', 'mierus'};
 
-/// Какие ядра берут именно эту ссылку.
-///
-/// «Ссылку умеют оба» было неправдой и до этой проверки. Оба ядра молча
-/// пропускают незнакомый ключ, поэтому конфиг собирается, ядро поднимается,
-/// подключение якобы есть — а трафик идёт не тем транспортом, каким просил
-/// сервер, и тот не отвечает. Так mihomo с `network: xhttp` у VMess уходит в
-/// свою ветку `default` и говорит с сервером голым TCP поверх TLS
-/// (`adapter/outbound/vmess.go`), а xray на транспорте h2 роняет весь конфиг:
-/// он его снёс, и `TransportProtocol.Build` отвечает отказом.
-///
-/// Разбирается только то, от чего зависит ответ: схема, транспорт, плагин
-/// shadowsocks и маски finalmask. Ссылка, которую не удалось прочесть, — «оба»: решать про неё
-/// не нам, дальше её всё равно развернёт генератор со своим сообщением.
+// оба ядра молча пропускают незнакомый ключ: конфиг собирается, ядро поднимается, а трафик идёт не тем транспортом.
+// непрочитанную ссылку считаем за оба, ошибку скажет генератор
 Set<VpnBackend> backendsForLink(String link) {
   final trimmed = link.trim();
   final scheme = RegExp(r'^([a-zA-Z][a-zA-Z0-9+.-]*)://')
@@ -138,8 +88,6 @@ Set<VpnBackend> backendsForLink(String link) {
       ?.toLowerCase();
   if (scheme == null) return _bothCores;
 
-  // Протоколы, которых у xray нет вовсе: своего аутбаунда под них в ядре не
-  // заведено, и никакой транспорт этого не меняет.
   if (_mihomoOnlySchemes.contains(scheme)) return const {VpnBackend.mihomo};
 
   if (scheme == 'vmess') return _vmessBackends(trimmed);
@@ -149,16 +97,11 @@ Set<VpnBackend> backendsForLink(String link) {
   String param(String key) =>
       (uri.queryParameters[key] ?? '').trim().toLowerCase();
 
-  // Плагины shadowsocks (`obfs-local`, `v2ray-plugin`) есть только у mihomo:
-  // у xray в shadowsocks нет даже поля под них (`infra/conf/shadowsocks.go` —
-  // только method и password), и сервер с плагином ждёт обёртки, которой не
-  // будет.
+  // у xray в shadowsocks под плагин нет даже поля (infra/conf/shadowsocks.go)
   if (scheme == 'ss' && param('plugin').isNotEmpty) {
     return const {VpnBackend.mihomo};
   }
 
-  // UDP внутри TCP — тоже только mihomo (`udp-over-tcp` у `ShadowSocksOption`);
-  // у xray в shadowsocks такого поля нет.
   if (scheme == 'ss' &&
       (param('uot') == '1' ||
           param('uot') == 'true' ||
@@ -167,8 +110,7 @@ Set<VpnBackend> backendsForLink(String link) {
     return const {VpnBackend.mihomo};
   }
 
-  // Маски finalmask (`fm`, так их отдаёт 3X-UI) есть только у xray: у mihomo
-  // их нет вовсе, и без них сервер получает пакеты не той формы.
+  // finalmask (fm, так отдаёт 3X-UI) у mihomo нет, сервер получил бы пакеты не той формы
   if ((scheme == 'vless' || scheme == 'trojan') && param('fm').isNotEmpty) {
     return const {VpnBackend.xray};
   }
@@ -176,7 +118,6 @@ Set<VpnBackend> backendsForLink(String link) {
   return _transportBackends(scheme, param('type'), param('headerType'));
 }
 
-/// vmess прячет транспорт в base64-json, а не в запросе.
 Set<VpnBackend> _vmessBackends(String link) {
   try {
     var payload = link.substring('vmess://'.length).trim();
@@ -191,7 +132,7 @@ Set<VpnBackend> _vmessBackends(String link) {
     return _transportBackends(
       'vmess',
       decoded['net']?.toString().trim().toLowerCase() ?? '',
-      // `type` в json vmess — это заголовок маскировки, а не транспорт.
+      // type в json vmess это заголовок маскировки, не транспорт
       decoded['type']?.toString().trim().toLowerCase() ?? '',
     );
   } catch (_) {
@@ -199,56 +140,36 @@ Set<VpnBackend> _vmessBackends(String link) {
   }
 }
 
-/// Кто берёт этот транспорт у этого протокола.
-///
-/// Сверено по `adapter/outbound/*.go` mihomo 1.19.30 и `infra/conf` xray
-/// 26.7.28: у ядра либо есть поле под настройки транспорта, либо нет, и
-/// «нет» означает молчаливый откат на голый TCP.
+// сверено по adapter/outbound/*.go mihomo 1.19.30 и infra/conf xray 26.7.28. нет поля под транспорт значит молчаливый голый TCP
 Set<VpnBackend> _transportBackends(
   String scheme,
   String type,
   String headerType,
 ) {
-  // Маскировка под HTTP поверх tcp: `http-opts` есть у VLESS и VMess, у
-  // `TrojanOption` их нет вовсе.
+  // http-opts у TrojanOption нет
   if (scheme == 'trojan' &&
       headerType == 'http' &&
       (type.isEmpty || type == 'tcp' || type == 'raw')) {
     return const {VpnBackend.xray};
   }
   return switch ((scheme, type)) {
-      // xray 26 снёс транспорт HTTP/2 целиком: `TransportProtocol.Build`
-      // отвечает отказом и роняет весь конфиг, снаружи это «SOCKS port not
-      // ready». У mihomo он остался — `h2-opts` есть и у VLESS, и у VMess.
-      // Trojan сюда не попадает: у `TrojanOption` полей h2 нет, и такую ссылку
-      // не берёт вообще никто — решать это отдельно, молча слать её к mihomo
-      // было бы хуже, чем оставить как есть.
+      // h2 xray 26 снёс, конфиг падает целиком (снаружи SOCKS port not ready).
+      // trojan с h2 не берёт никто, его не трогаем
       ('vless' || 'vmess', 'http' || 'h2') => const {VpnBackend.mihomo},
-      // mKCP: у `VlessOption` и `TrojanOption` нет `mkcp-opts` вовсе, у
-      // `VmessOption` есть, но наш генератор его не собирает.
+      // mkcp-opts у VlessOption и TrojanOption нет, у VmessOption есть, но генератор его не собирает
       (_, 'kcp' || 'mkcp') => const {VpnBackend.xray},
-      // xhttp у mihomo заведён только для VLESS.
+      // xhttp у mihomo только у VLESS
       ('vmess' || 'trojan', 'xhttp' || 'splithttp') => const {VpnBackend.xray},
       _ => _bothCores,
     };
 }
 
-/// Итог выбора: чем сервер поедет и почему это не то, что просил пользователь.
 typedef VpnBackendChoice = ({
   VpnBackend backend,
   ServerFormat format,
   VpnCoreSkip? skip,
 });
 
-/// Какое ядро исполнит сервер.
-///
-/// [preference] — `AppSettings.vpnCore`: `auto`, `xray` или `mihomo`. Выбор
-/// значим ровно для одного формата — обычной ссылки; всё остальное умеет
-/// ровно одно ядро, и просить у него другое бессмысленно. [skip] непустой,
-/// когда пользователь просил ядро, которое этот сервер не берёт: причину видно
-/// в логе и в панели, молчаливого отката больше нет.
-///
-/// [mihomoAvailable] — поставляется ли mihomo на этой платформе.
 VpnBackendChoice resolveVpnBackend({
   required String config,
   required String preference,
@@ -259,8 +180,6 @@ VpnBackendChoice resolveVpnBackend({
       ? backendsForLink(config)
       : backendsForFormat(format);
 
-  // Формат, который умеет ровно одно ядро: выбор пользователя тут ничего не
-  // решает — либо это ядро, либо сервер не поедет вовсе.
   if (capable.length == 1) {
     final only = capable.single;
     if (only == VpnBackend.mihomo && !mihomoAvailable) {
@@ -274,8 +193,7 @@ VpnBackendChoice resolveVpnBackend({
     return (backend: only, format: format, skip: skip);
   }
 
-  // Ссылку берут оба. `auto` — xray: он исполняет любой формат, и на нём
-  // отлажен путь по умолчанию.
+  // auto это xray: он исполняет любой формат, на нём отлажен путь по умолчанию
   final wantsMihomo = preference == 'mihomo';
   if (wantsMihomo && !mihomoAvailable) {
     return (
@@ -302,7 +220,7 @@ VpnCoreSkip _skipFor(ServerFormat format, VpnBackend only) => switch (format) {
       _ => VpnCoreSkip.customConfig,
     };
 
-/// Строка для лога (не для UI — тот берёт локализованный текст).
+// для лога, в UI локализованный текст
 String vpnCoreSkipLogReason(VpnCoreSkip skip) => switch (skip) {
       VpnCoreSkip.customConfig => 'the server is a ready-made Xray JSON config',
       VpnCoreSkip.chain => 'the server is a proxy chain',

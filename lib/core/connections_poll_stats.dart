@@ -1,18 +1,3 @@
-/// Что стоят приложению опросы `GET /connections` у ядра — для слепков памяти
-/// в журнале (см. MemoryWatch).
-///
-/// Главный подозреваемый в утечке после сна на Windows (20 ГБ у самого
-/// keqdroid.exe, ядра ни при чём): счётчики трафика спрашивают ядро раз в
-/// секунду и не ждут прошлого ответа, а ответ — это весь список соединений,
-/// который приложение разбирает целиком. Если ядро после пробуждения перестаёт
-/// закрывать соединения, ответ растёт, а зависшие запросы копятся. Эти числа
-/// в журнале подтвердят или снимут подозрение.
-/// Срок на тело ответа `/connections` — общий для всех трёх опросов.
-///
-/// Таймауты на соединение и заголовки его не покрывают, и ответ, оборванный
-/// ядром на середине, висел бы вечно: на стенде такие запросы копились по
-/// одному в секунду без предела. Десять секунд — с запасом: ответ ядра со
-/// ста тысячами соединений (57 МБ) читался там за две.
 const connectionsBodyTimeout = Duration(seconds: 10);
 
 class ConnectionsPollStats {
@@ -28,10 +13,8 @@ class ConnectionsPollStats {
   int _maxBodyChars = 0;
   int _maxConnections = 0;
 
-  /// Дольше этого ответ уже странен: ядро на петле отвечает за миллисекунды.
   static const slowAfter = Duration(seconds: 1);
 
-  /// Запрос пошёл. Возвращает отметку для [end].
   Stopwatch begin() {
     _inFlight++;
     _requests++;
@@ -39,8 +22,6 @@ class ConnectionsPollStats {
     return Stopwatch()..start();
   }
 
-  /// Запрос закончился — ответом [bodyChars] символов с [connections]
-  /// соединениями или неудачей ([ok] = false).
   void end(Stopwatch started, {bool ok = true, int bodyChars = 0, int? connections}) {
     _inFlight--;
     if (!ok) _failures++;
@@ -53,8 +34,6 @@ class ConnectionsPollStats {
 
   int get inFlight => _inFlight;
 
-  /// Сводка с прошлого вызова; максимумы после неё начинаются заново, а
-  /// «сейчас в полёте» — нет: это состояние, а не счёт за период.
   String takeSummary() {
     final summary = '$_requests requests, in flight $_inFlight '
         '(max $_maxInFlight), failed $_failures, slow $_slow, '

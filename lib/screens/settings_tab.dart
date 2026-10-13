@@ -132,8 +132,6 @@ class SettingsTab extends ConsumerWidget {
                     children: [
                       Text(
                         l10n.settingsTitle,
-                        // Заголовок экрана — headline, а не title: у M3E крупный
-                        // заголовок и есть якорь иерархии страницы.
                         style: Theme.of(context).textTheme
                             .emphasized(
                               Theme.of(context).textTheme.headlineMedium,
@@ -141,10 +139,6 @@ class SettingsTab extends ConsumerWidget {
                             ?.copyWith(color: AppTheme.text(context)),
                       ),
                       const SizedBox(height: 20),
-                      // Containment: пункты собраны в группы по смыслу — «как
-                      // выглядит», «как ходит трафик», «данные». Прежние шесть
-                      // одинаковых карточек с равными зазорами не говорили о
-                      // связях между пунктами вообще.
                       ExpressiveGroup(
                         children: [
                           _ThemeCustomizationCard(settingsAsync: settingsAsync),
@@ -284,10 +278,6 @@ class _LanguageSettingsCard extends ConsumerWidget {
           minChildSize: 0.32,
           maxChildSize: 0.72,
           builder: (_, scrollCtrl) {
-            // Прозрачный фон здесь намеренный: DraggableScrollableSheet тянется
-            // за палец и рисует свой контейнер сам. Но цвет и форма обязаны
-            // совпадать с теми, что тема даёт остальным шторкам, иначе
-            // единственная «тянущаяся» шторка выглядит чужой.
             return Container(
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -326,15 +316,6 @@ class _LanguageSettingsCard extends ConsumerWidget {
                         final scheme = Theme.of(context).colorScheme;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 8),
-                          // Пункты — на уровень выше шторки, а не на фоне
-                          // страницы. Здесь стоял AppTheme.bg, то есть surface,
-                          // а в AMOLED-режиме это чистый чёрный: карточки
-                          // оказывались темнее собственного родителя (перевёрнутая
-                          // тональная иерархия M3) и попадали в ту полосу яркости,
-                          // где OLED-панель сильнее всего смазывает движение и
-                          // уводит почти-чёрный в фиолетовый. Заодно уходит
-                          // полупрозрачная заливка выбранного: альфа поверх
-                          // чёрного этот же эффект усиливает.
                           child: Material(
                             color: selected
                                 ? scheme.secondaryContainer
@@ -364,8 +345,6 @@ class _LanguageSettingsCard extends ConsumerWidget {
                                     Expanded(
                                       child: Text(
                                         label,
-                                        // Вес — из шкалы, а не руками: у
-                                        // выбранного усиленный вариант роли.
                                         style:
                                             (selected
                                                     ? textTheme.emphasized(
@@ -430,12 +409,6 @@ class _SplitTunnelingSettingsCard extends ConsumerWidget {
   }
 }
 
-/// Пункт настроек — сегмент [ExpressiveGroup].
-///
-/// Форму берёт от группы (крупные внешние углы, почти квадратные стыки), цвет
-/// иконки — от [accent]: у M3E раскрашенная иконка-контейнер и есть то, что
-/// позволяет находить нужный пункт «в четыре раза быстрее», а не читать список
-/// сверху вниз.
 class _SettingsCard extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -489,9 +462,6 @@ class _SettingsCard extends StatelessWidget {
   }
 }
 
-/// Общий диалог подтверждения для деструктивных действий (сброс настроек).
-/// Возвращает true, если пользователь подтвердил. Виден всем part-файлам
-/// настроек (advanced/local ports/xray core).
 Future<bool> _confirmReset(
   BuildContext context, {
   required String message,
@@ -602,9 +572,7 @@ class _UpdateVersionInfoState extends ConsumerState<_UpdateVersionInfo> {
       final info = await UpdateService.checkForUpdate(
         force: true,
         viaLocalProxy: vpn?.status == VpnStatus.connected,
-        // Порт активной сессии, а не из настроек: когда настроенный был занят,
-        // ядро слушает подменённый (см. LocalPortPlan). Автопроверка в
-        // updateInfoProvider давно берёт его отсюда, ручная — брала из настроек.
+        // порт сессии: если настроенный был занят, ядро слушает другой
         httpPort: ActiveLocalPorts().httpPortOr(settings.httpPort),
       );
       if (!mounted) return;
@@ -703,9 +671,6 @@ class _UpdateVersionInfoState extends ConsumerState<_UpdateVersionInfo> {
         : l10n.settingsUpToDate;
     final textTheme = Theme.of(context).textTheme;
 
-    // Блок живёт в карточке, как и всё остальное на этом экране. Раньше он
-    // стоял голой строкой на фоне страницы, под линией разделителя, — и потому
-    // читался обрывком чужого экрана.
     return ExpressiveCard(
       child: Column(
         children: [
@@ -723,14 +688,6 @@ class _UpdateVersionInfoState extends ConsumerState<_UpdateVersionInfo> {
                           ?.copyWith(color: textColor),
                     ),
                     const SizedBox(height: ExpressiveSpacing.hairline),
-                    // Версия и состояние проверки — одной строкой поддержки, как
-                    // у пункта списка M3.
-                    //
-                    // Прежде состояние сидело в «чипе»: заливка на 15% альфы и
-                    // рамка на 30% от того же цвета. Чипом это не было — у чипа в
-                    // M3 роль действия, фильтра или ввода, а по этому нажать
-                    // нельзя вовсе. Тонированная плашка ради статуса — приём из
-                    // M2; цвет и иконки говорят то же самое и без неё.
                     Wrap(
                       crossAxisAlignment: WrapCrossAlignment.center,
                       spacing: ExpressiveSpacing.small,
@@ -770,8 +727,6 @@ class _UpdateVersionInfoState extends ConsumerState<_UpdateVersionInfo> {
                 ),
               ),
               const SizedBox(width: ExpressiveSpacing.small),
-              // Настоящая filled tonal icon button вместо самодельной: своя
-              // заливка, свой размер и своя форма у неё уже есть.
               IconButton.filledTonal(
                 onPressed: checking ? null : _forceCheck,
                 icon: checking
@@ -786,9 +741,6 @@ class _UpdateVersionInfoState extends ConsumerState<_UpdateVersionInfo> {
           ),
           if (updateInfo != null) ...[
             const SizedBox(height: ExpressiveSpacing.large),
-            // Плашка «есть обновление» — на роли схемы, а не на альфе от акцента.
-            // Заливка 10% с рамкой 30% того же цвета — тонировка из M2; у M3 это
-            // контейнерная роль, и контраст в ней уже выверен под обе яркости.
             Container(
               padding: const EdgeInsets.all(ExpressiveSpacing.large),
               decoration: BoxDecoration(
@@ -818,7 +770,6 @@ class _UpdateVersionInfoState extends ConsumerState<_UpdateVersionInfo> {
                     ),
                   ),
                   const SizedBox(width: ExpressiveSpacing.medium),
-                  // Форма и отступы кнопки — из темы: пилюля M3E, а не свои 12dp.
                   FilledButton.icon(
                     onPressed: () => showUpdateDialog(context, updateInfo),
                     icon: const Icon(Icons.download_rounded),

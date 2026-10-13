@@ -9,194 +9,75 @@ import 'xray_core_settings.dart';
 class AppSettings {
   final int localPort;
   final int httpPort;
-  /// Mixed routing lists: each may hold domains, IP/CIDR ranges and prefixed
-  /// rules (geosite:/geoip:/full:/regexp:). Split by the config generators.
   final String directRules;
   final String proxyRules;
   final String blockedRules;
-  /// Финальное действие (catch-all) для трафика, не попавшего ни в одно правило:
-  /// `proxy` — глобальный прокси (дефолт), `direct` — обход (bypass, как выключение
-  /// глобал-прокси в Happ), `block` — блокировать. Прошивается в catch-all обоих
-  /// генераторов конфига (xray и sing-box TUN).
   final String finalOutbound;
   final bool autoConnectLastServer;
   final String pingType;
-  /// [PingTestConfig.targetGstatic] | cloudflare | microsoft | custom
   final String pingTestTarget;
   final String pingTestUrlCustom;
 
-  /// Прокси-пинг делает два запроса по одному соединению и берёт лучший: первый
-  /// оплачивает DNS и TLS-рукопожатие, второй меряет чистое время ответа.
-  /// Выключенный — один запрос, то есть задержка вместе со стоимостью
-  /// установки соединения. Числа получаются в разы больше, зато привычнее.
   final bool pingKeepAlive;
   final bool darkTheme;
   final bool followSystemTheme;
   final String themePresetId;
 
-  /// Цвет темы «свой цвет» — шесть hex-цифр без решётки (`7B2CBF`).
-  ///
-  /// Хранится рядом с [themePresetId], а не внутри него: набранный оттенок
-  /// переживает уход на готовый пресет и возвращение обратно. Пусто — цвет ещё
-  /// не выбирали.
   final String customThemeSeed;
 
-  /// Как из [customThemeSeed] строится палитра: имя из [kCustomThemeVariants].
-  ///
-  /// Отдельной настройкой, а не частью цвета: вариант переживает подбор
-  /// оттенка, а оттенок — смену варианта.
   final String customThemeVariant;
 
-  /// Форма кружков под иконками: id из [IconShape] (`circle` по умолчанию).
   final String iconShapeId;
 
-  /// Шрифт интерфейса: id из [kAppFonts] (`system` по умолчанию).
   final String fontId;
   final bool debugMode;
   final bool lanSharing;
   final int lanSocksPort;
   final int lanHttpPort;
-  /// Креды LAN-инбаундов (socks-lan/http-lan). Обе строки непустые — инбаунды
-  /// требуют пароль; иначе noauth (открытый прокси в локальной сети).
   final String lanUsername;
   final String lanPassword;
-  final bool shareDeviceHwid; // слать ли hwid при запросе подписок
+  final bool shareDeviceHwid;
   final XrayCoreSettings xrayCore;
-  /// Desktop TUN: стек (system/gvisor/mixed), MTU и прочие опции sing-box-инбаунда.
   final TunSettings tun;
-  /// `proxy` (только локальный прокси) или `tun` (полноценный туннель).
-  /// См. [ConnectionMode].
-  ///
-  /// Дефолт `proxy` — десктопный: там TUN требует прав администратора, и первое
-  /// подключение не должно упираться в UAC.
   final String connectionMode;
 
-  /// Режим выбран человеком, а не достался от дефолта.
-  ///
-  /// Нужен из-за истории поля. На Android режим до 0.13.0 не читался вовсе —
-  /// [TunnelSessionBuilder.resolveMode] возвращал `tun` не глядя, — поэтому у
-  /// каждой установки в настройках лежит десктопный дефолт `proxy`, который
-  /// никто не выбирал. Начни мы просто уважать сохранённое значение, и всё
-  /// обновившееся стадо разом переехало бы в режим «только прокси»: туннель не
-  /// поднимается, трафик мимо VPN, и с виду приложение сломалось.
-  ///
-  /// Поэтому на Android «не выбирали» читается как VPN, а флаг ставится ровно
-  /// тогда, когда режим переключили руками.
+  // на Android до 0.13.0 режим не читался и у всех лежит десктопный proxy,
+  // поэтому без флага там считаем VPN
   final bool connectionModeChosen;
 
-  /// Требовать логин с паролем у локального прокси в режиме «Прокси».
-  ///
-  /// Выключается ради потребителей, которым креды вписать некуда: системное
-  /// поле прокси у Wi-Fi знает только адрес и порт.
   final bool proxyModeAuth;
 
-  /// Креды локального прокси. Хранятся, а не генерируются на каждый старт, как
-  /// сессионные: их вписывают в чужое приложение руками, и меняться под ним они
-  /// не должны. Пустые — ещё не создавались.
   final String proxyModeUser;
   final String proxyModePass;
-  /// Desktop proxy: включать системный прокси Windows.
   final bool systemProxyEnabled;
-  /// `system` — язык ОС, иначе `en` / `ru`.
   final String appLanguageCode;
-  /// Windows: сворачивать в трей при закрытии окна.
   final bool minimizeToTray;
-  /// Windows: запуск вместе с системой.
   final bool launchAtStartup;
 
-  /// Windows: автозапуск сразу с правами администратора.
-  ///
-  /// Обычный автозапуск поднимает приложение неповышенным, и TUN каждый раз
-  /// требует перезапуска с UAC. Здесь вместо ключа Run заводится задача
-  /// планировщика, которую Windows запускает уже с правами. Флаг — намерение
-  /// пользователя; есть ли задача на самом деле, знает только система, и экран
-  /// настроек сверяется с ней при открытии.
   final bool launchAtStartupElevated;
-  /// Значок сервера без флага — в цветах темы, а не в цвете протокола.
-  ///
-  /// Просили пользователи: на своей палитре синий кружок vless выпадает из
-  /// темы. Выключенная настройка возвращает цвета протоколов — по ним сервер
-  /// узнаётся, когда их много.
   final bool serverIconThemeColors;
 
-  /// Ядро: `keqrnel` (единое ядро со встроенным xray, дефолт) или `chain`
-  /// (связка xray → sing-box; только если явно сохранён в настройках).
   final String coreEngine;
 
-  /// Ядро, исполняющее сервер: `xray` (дефолт) или `mihomo`.
   final String vpnCore;
 
-  /// Отдавать системе подменные адреса вместо настоящих (fake-ip) — одна
-  /// настройка на оба ядра.
-  ///
-  /// Значимо только там, где есть перехват DNS устройства: TUN-режим на
-  /// десктопе и Android. В прокси-режиме приложения отдают прокси сам домен, и
-  /// подменять нечего.
-  ///
-  /// Выигрыш — первое соединение не ждёт DNS: без подмены домен сначала
-  /// резолвится через туннель, и на далёком сервере это секунды. Выключено по
-  /// умолчанию потому, что назначение перестаёт быть настоящим адресом: IP-правила
-  /// пользователя приходится доразрешать, а сразу после отключения приложения ещё
-  /// какое-то время держат подменные адреса.
   final bool fakeIp;
-  /// Desktop: хоткеи (HotkeyAction.id → токен сочетания, напр. `ctrl+shift+keyT`).
-  /// Пустая карта = все хоткеи выключены (дефолт).
   final Map<String, String> hotkeys;
-  /// Список серверов в две колонки.
   final bool serversTwoColumns;
-  /// Чёрный AMOLED-фон в тёмной теме: на OLED-экране выключенный пиксель не
-  /// светится вовсе. На светлую тему не влияет.
   final bool amoledBlack;
-  /// Тактильная отдача на нажатия. На десктопе значения не имеет.
   final bool hapticFeedback;
-  /// Общие чипы скорости и объёма трафика под кнопкой подключения.
-  ///
-  /// Взаимоисключающи с [showTrafficSplit]: включать их обоими
-  /// переключателями сразу нечего, это два вида одного показателя. Правило
-  /// держат [withTrafficStats] и [withTrafficSplit].
   final bool showTrafficStats;
-  /// Чип времени подключения под кнопкой подключения.
   final bool showConnectionTime;
-  /// Показывать трафик раздельно: «в туннель» и «мимо туннеля».
-  ///
-  /// Заменяет собой общие чипы, а не дополняет их (см. [showTrafficStats]).
-  ///
-  /// Выключено по умолчанию: разбивку умеет считать только ядро mihomo (см.
-  /// `TrafficSplitSource`), и включённая по умолчанию настройка, которая у
-  /// половины пользователей ничего не меняет, читается как поломка.
   final bool showTrafficSplit;
 
-  /// Красить индикатор под кнопкой по задержке активного сервера.
-  ///
-  /// Выключенный оставляет индикатору акцент темы. Канал полезный, но не всем:
-  /// цвет там меняется от смены сервера и от переизмерения пинга, а зелёный,
-  /// оранжевый и красный на главном экране читаются как тревога, даже когда
-  /// речь всего лишь о трёхстах миллисекундах.
   final bool waveLatencyColor;
-  /// Показывать скорость (↓/↑) в системном уведомлении VPN.
   final bool showSpeedInNotification;
-  /// Показывать время подключения (аптайм) в системном уведомлении VPN.
   final bool showUptimeInNotification;
-  /// Слать локальное уведомление после фонового обновления подписок.
   final bool notifySubscriptionUpdates;
-  /// Linux: пользователь уже ответил на предложение сделать TUN беспарольным
-  /// (установка polkit-правила) — окно больше не показываем.
   final bool linuxTunRememberDismissed;
 
-  /// Множитель размера интерфейса поверх системного.
-  ///
-  /// Именно поверх, а не вместо: системный масштаб — это настройка доступности,
-  /// и заменять его своим значением значит отобрать крупный шрифт у того, кто
-  /// выставил его в системе и до этой настройки не дошёл. Здесь 1.0 = «как
-  /// система», а всё остальное — поправка к ней.
-  ///
-  /// Масштабируется текст. Иконки и отступы заданы числами в полутора сотнях
-  /// мест и на этот множитель не смотрят; строки списка при этом подстроятся —
-  /// их высота считается через `MediaQuery.textScalerOf` (см. `servers_tab`).
   final double uiScale;
 
-  /// Границы множителя. Снизу — читаемость, сверху — вёрстка: дальше строки
-  /// списка и чипы под кнопкой начинают переноситься и обрезаться.
   static const minUiScale = 0.8;
   static const maxUiScale = 1.4;
 
@@ -388,17 +269,13 @@ class AppSettings {
       serverIconThemeColors: json['serverIconThemeColors'] as bool? ?? true,
       coreEngine: normalizeCoreEngine(json['coreEngine'] as String?),
       vpnCore: normalizeVpnCore(json['vpnCore'] as String?),
-      // До 26.09.2026 настройка была только у mihomo и хранилась под старым
-      // именем — его и дочитываем, чтобы включённое не выключилось само.
+      // mihomoFakeIp: старое имя ключа, до 26.09.2026
       fakeIp: json['fakeIp'] as bool? ?? json['mihomoFakeIp'] as bool? ?? false,
       hotkeys: _readHotkeys(json['hotkeys']),
       serversTwoColumns: json['serversTwoColumns'] as bool? ?? false,
       amoledBlack: json['amoledBlack'] as bool? ?? false,
       hapticFeedback: json['hapticFeedback'] as bool? ?? true,
-      // Разом включёнными они быть не могут (см. [withTrafficStats]), но у
-      // тех, кто включил разбивку до этого правила, на диске лежат обе: она
-      // молча перекрывала общие чипы. Разбивка и выигрывает — экран после
-      // обновления остаётся ровно таким, каким был.
+      // у старых настроек бывают включены обе, тогда побеждает разбивка
       showTrafficStats: (json['showTrafficStats'] as bool? ?? true) &&
           !(json['showTrafficSplit'] as bool? ?? false),
       showConnectionTime: json['showConnectionTime'] as bool? ?? true,
@@ -411,9 +288,7 @@ class AppSettings {
           json['notifySubscriptionUpdates'] as bool? ?? true,
       linuxTunRememberDismissed:
           json['linuxTunRememberDismissed'] as bool? ?? false,
-      // Через clamp и проверку типа, а не приведением: значение приезжает и из
-      // бэкапа, который правят руками, — там и строка возможна, и границы у
-      // соседней версии могли быть шире.
+      // из отредактированного руками бэкапа может приехать и строка
       uiScale: clampUiScale(
         json['uiScale'] is num ? (json['uiScale'] as num).toDouble() : 1.0,
       ),
@@ -429,7 +304,6 @@ class AppSettings {
     return out;
   }
 
-  /// Допустимые значения [finalOutbound].
   static const finalOutboundProxy = 'proxy';
   static const finalOutboundDirect = 'direct';
   static const finalOutboundBlock = 'block';
@@ -444,14 +318,6 @@ class AppSettings {
     return finalOutbounds.contains(v) ? v! : finalOutboundProxy;
   }
 
-  /// Допустимые значения [vpnCore] — какое ядро исполняет сервер.
-  ///
-  /// Это не [coreEngine]: тот про связку внутри xray-пути (`chain` против
-  /// `keqrnel`) и на Android всегда `chain`. Здесь выбирается само ядро.
-  /// AmneziaWG-серверы выбор игнорируют: их формат исполняет только mihomo.
-  /// «Само»: ядро выбирает формат сервера. Ссылку берёт xray, готовый конфиг —
-  /// то ядро, на языке которого он написан. Умолчание: пользователю не нужно
-  /// знать, чем отличается json от yaml, чтобы подписка заработала.
   static const vpnCoreAuto = 'auto';
   static const vpnCoreXray = 'xray';
   static const vpnCoreMihomo = 'mihomo';
@@ -462,21 +328,18 @@ class AppSettings {
     return vpnCores.contains(v) ? v! : vpnCoreAuto;
   }
 
-  /// Допустимые значения [coreEngine].
   static const coreEngineChain = 'chain';
   static const coreEngineKeqrnel = 'keqrnel';
   static const coreEngines = [coreEngineChain, coreEngineKeqrnel];
 
   static String normalizeCoreEngine(String? raw) {
     final v = raw?.trim().toLowerCase();
-    // keqrnel is the default; only an explicitly saved "chain" keeps the old path.
     return v == coreEngineChain ? coreEngineChain : coreEngineKeqrnel;
   }
 
   static String _normalizeLanguageCode(String? raw) {
     final v = raw?.trim().toLowerCase();
-    // Язык, забытый здесь, живёт до перезапуска: выбрать его можно, а при
-    // чтении настроек он молча становится системным. Так было с фарси.
+    // новый язык добавлять и сюда, иначе после перезапуска он станет системным
     if (v == 'en' || v == 'ru' || v == 'de' || v == 'zh' || v == 'fa') {
       return v!;
     }
@@ -485,9 +348,6 @@ class AppSettings {
 
   static bool _validPort(int p) => p > 0 && p <= 65535;
 
-  /// Reads a mixed routing list, migrating from the old split domain/ip keys.
-  /// Prefers [newKey]; otherwise merges any present [legacyKeys] (deduped),
-  /// falling back to [fallback] when nothing was stored.
   static String _migrateRules(
     Map<String, dynamic> json, {
     required String newKey,
@@ -522,8 +382,6 @@ class AppSettings {
     if (v == 'speed' || v == 'download' || v == 'throughput') return 'speed';
     if (v == 'icmp' || v == 'ping') return 'icmp';
     if (v == 'tcp') return 'tcp';
-    // Дефолт — прокси-пинг: он единственный меряет путь до сервера так, как им
-    // потом пойдёт трафик. Raw tcp вдобавок неизмерим при поднятом TUN.
     return 'url';
   }
 
@@ -646,20 +504,11 @@ class AppSettings {
         uiScale: clampUiScale(uiScale ?? this.uiScale),
       );
 
-  /// Включить или выключить общие чипы трафика, погасив разбивку.
-  ///
-  /// Раздельные чипы рисуются вместо общих, а не рядом с ними, поэтому вместе
-  /// они не включаются. Раньше включённая разбивка просто перекрывала общие:
-  /// переключатель «показывать трафик» щёлкал, а на экране не менялось ничего,
-  /// и догадаться, что мешает соседняя настройка, можно было только выключив
-  /// её наугад.
   AppSettings withTrafficStats(bool on) => copyWith(
         showTrafficStats: on,
         showTrafficSplit: on ? false : showTrafficSplit,
       );
 
-  /// Включить или выключить разбивку, погасив общие чипы — см.
-  /// [withTrafficStats].
   AppSettings withTrafficSplit(bool on) => copyWith(
         showTrafficSplit: on,
         showTrafficStats: on ? false : showTrafficStats,
@@ -789,7 +638,6 @@ class AppSettings {
     notifySubscriptionUpdates,
     linuxTunRememberDismissed,
     uiScale,
-    // порядок ключей в Map не влияет: хэшируем отсортированные записи
     Object.hashAll(
       (hotkeys.entries.toList()
             ..sort((a, b) => a.key.compareTo(b.key)))

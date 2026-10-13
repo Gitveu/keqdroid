@@ -8,7 +8,6 @@ import '../utils/local_vpn_proxy.dart';
 import 'storage_service.dart';
 import 'subscription_service.dart';
 
-/// периодический апдейт подписок на desktop (workmanager только на android)
 class DesktopBackgroundService {
   static Timer? _periodicTimer;
   static bool _running = false;
@@ -22,7 +21,6 @@ class DesktopBackgroundService {
       (_) => unawaited(runDueUpdates()),
     );
 
-    // first check soon after startup, like workmanager initialDelay
     Future<void>.delayed(
       const Duration(minutes: 2),
       () => unawaited(runDueUpdates()),
@@ -34,21 +32,18 @@ class DesktopBackgroundService {
     _periodicTimer = null;
   }
 
-  /// call on app resume to refresh subscriptions that are due
   static Future<void> onAppResumed() async {
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
     await runDueUpdates();
   }
 
-  /// manual trigger (e.g. from settings or subscriptions screen)
   static Future<void> runDueUpdates() async {
     if (_running) return;
     _running = true;
     try {
       WidgetsFlutterBinding.ensureInitialized();
       final storage = await StorageService.init();
-      // Статический путь без riverpod: состояние VPN недоступно, поэтому порт
-      // живой сессии берём с диска — его пишет connect/disconnect.
+      // состояния VPN тут нет, порт сессии берём с диска
       final proxyPort = await resolveLocalProxyForBackground(
         storage.getActiveLocalHttpPort(),
       );
@@ -58,8 +53,6 @@ class DesktopBackgroundService {
       );
       if (due.isEmpty) return;
 
-      // батчами по 3 (как updateAll): залп по всем due-подпискам разом
-      // упирается в сеть и rate-limit панелей
       final results = <UpdateResult>[];
       for (var i = 0; i < due.length; i += 3) {
         final batch = due.skip(i).take(3).toList();

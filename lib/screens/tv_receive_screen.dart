@@ -15,10 +15,6 @@ import '../services/tv_handoff.dart';
 import '../utils/error_messages.dart';
 import '../utils/subscription_url.dart';
 
-/// Телевизор: приём подписки с телефона. Крупный QR и строка состояния.
-///
-/// Сервер приёма живёт ровно столько, сколько открыт экран: закрыли — порт
-/// закрыт, и ключ из QR больше ничего не открывает.
 class TvReceiveScreen extends ConsumerStatefulWidget {
   const TvReceiveScreen({super.key});
 
@@ -36,7 +32,6 @@ class _TvReceiveScreenState extends ConsumerState<TvReceiveScreen> {
   TvReceiveServer? _server;
   _Phase _phase = _Phase.starting;
 
-  /// Имя принятой подписки или текст ошибки — по [_phase].
   String _detail = '';
 
   @override
@@ -80,12 +75,7 @@ class _TvReceiveScreenState extends ConsumerState<TvReceiveScreen> {
   }
 
   Future<String?> _onOffer(TvSubscriptionOffer offer) async {
-    // Сервер закрывается вместе с экраном, так что сюда попадает только
-    // запрос, пришедший в последний миг. Человек этого текста почти не увидит.
     if (!mounted) return 'The receive screen was closed';
-    // Повторная отправка — обычное дело (не увидели ответа, нажали ещё раз).
-    // Подписка на телевизоре уже есть, то есть цель достигнута: это успех, а
-    // не ошибка «уже добавлена».
     final key = normalizeSubscriptionUrl(offer.url);
     final known = ref
         .read(subscriptionsProvider)
@@ -109,8 +99,6 @@ class _TvReceiveScreenState extends ConsumerState<TvReceiveScreen> {
       await subscriptions.add(sub);
     } catch (e) {
       if (!mounted) return explainError(e).short;
-      // Без строки «Действие: …»: на экране телевизора и в диалоге телефона
-      // три строки красного читались стеной, а суть — в первых двух.
       final why = explainErrorLocalized(e, AppLocalizations.of(context)!);
       final text = '${why.title}: ${why.message}';
       setState(() {
@@ -120,7 +108,6 @@ class _TvReceiveScreenState extends ConsumerState<TvReceiveScreen> {
       return text;
     }
     if (!mounted) return null;
-    // Имя могло смениться при загрузке: авто-имя заменяет название от панели.
     final added = ref
         .read(subscriptionsProvider)
         .value
@@ -171,8 +158,6 @@ class _TvReceiveScreenState extends ConsumerState<TvReceiveScreen> {
               data: _server?.pairing.toLink(),
               offline: _phase == _Phase.noNetwork,
             );
-            // Телевизор — всегда альбомный; узкая раскладка только чтобы
-            // экран не ломался, если его всё же откроют на узком окне.
             final wide = constraints.maxWidth >= 700;
             return Center(
               child: SingleChildScrollView(
@@ -243,12 +228,10 @@ class _TvReceiveScreenState extends ConsumerState<TvReceiveScreen> {
   }
 }
 
-/// QR на белом: камеры телефонов хуже читают код на цветной подложке, а
-/// тема бывает и тёмной.
+// на белом: камеры хуже читают код на цветной подложке
 class _QrCard extends StatelessWidget {
   const _QrCard({required this.data, required this.offline});
 
-  /// null — сервер ещё не поднят.
   final String? data;
   final bool offline;
 

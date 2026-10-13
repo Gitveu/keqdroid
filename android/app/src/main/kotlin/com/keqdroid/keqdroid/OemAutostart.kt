@@ -7,16 +7,8 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 
-/**
- * Экран «Автозапуска» прошивки — разрешения, которого нет в Android, а потому
- * нет и в его списке разрешений.
- *
- * На прошивках с ним выключенный автозапуск запрещает поднимать сервис из
- * шторки и после убийства процесса, хотя всё, что спрашивает Android, выдано.
- * Состояние его снаружи не прочитать, а экран каждая прошивка прячет под своим
- * именем. Экраны — из библиотеки AutoStarter (ею пользуется Happ); realme она
- * не знает, хотя прошивка у него та же ColorOS, что у OPPO.
- */
+// разрешения Автозапуск в Android нет: состояние снаружи не прочитать, экран каждая прошивка прячет по-своему.
+// экраны из библиотеки AutoStarter, realme она не знает, хотя у него та же ColorOS
 object OemAutostart {
 
     private class Vendor(val brands: Set<String>, val screens: List<ComponentName>)
@@ -31,10 +23,7 @@ object OemAutostart {
                 ),
             ),
         ),
-        // На свежих ColorOS и realme UI автозапуск переехал в управление
-        // батареей приложения (dontkillmyapp), а старые экраны менеджера
-        // запуска чужим часто закрыты. Тогда открываем карточку приложения —
-        // ближайшее к переключателю место, куда пускают.
+        // на свежих ColorOS автозапуск переехал в батарею приложения (dontkillmyapp), старые экраны чужим закрыты
         Vendor(
             setOf("oppo", "realme", "oneplus"),
             listOf(
@@ -106,8 +95,7 @@ object OemAutostart {
         return vendors.firstOrNull { v -> v.brands.any { it in names } }
     }
 
-    /// Экраны прошивки, которые на этом телефоне реально откроются.
-    /// Неэкспортированный резолвится, но вместо окна даёт SecurityException.
+    // неэкспортированный экран резолвится, но открывается SecurityException
     private fun screens(context: Context): List<Intent> =
         vendor()?.screens.orEmpty().mapNotNull { screen ->
             val intent = Intent().setComponent(screen).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -115,12 +103,7 @@ object OemAutostart {
             intent.takeIf { info?.activityInfo?.exported == true }
         }
 
-    /**
-     * Куда поведёт строка: [KIND_NONE] — автозапуска у прошивки нет, строка
-     * не нужна; [KIND_SCREEN] — прямо в его экран; [KIND_APP_DETAILS] — в
-     * карточку приложения, где искать придётся самому, и об этом надо
-     * сказать до перехода: вернувшись, человек подсказку уже не увидит.
-     */
+    // в карточке приложения искать придётся самому, и сказать это надо до перехода
     fun kind(context: Context): String = when {
         vendor() == null -> KIND_NONE
         screens(context).isNotEmpty() -> KIND_SCREEN

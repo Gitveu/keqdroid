@@ -1,39 +1,29 @@
-/// Списки доменов по ссылке в полях маршрутизации.
-///
-/// Ссылку человек вставляет в поле «Напрямую», «Через VPN» или «Блок» рядом с
-/// обычными записями. Ядра её не понимают: генераторам она уезжает уже
-/// скачанными доменами (xray, sing-box) или файлом rule-provider (mihomo).
 library;
 
 import '../models/app_settings.dart';
 
 final _separators = RegExp(r'[\r\n,]+');
 
-/// Записи поля — нарезанные так же, как их режут генераторы.
 List<String> routingEntries(String field) => field
     .split(_separators)
     .map((e) => e.trim())
     .where((e) => e.isNotEmpty)
     .toList();
 
-/// Запись — ссылка на список, а не домен или адрес.
 bool isRuleListUrl(String entry) {
   final lower = entry.trim().toLowerCase();
   return lower.startsWith('https://') || lower.startsWith('http://');
 }
 
-/// Ссылки на списки в поле, без повторов, в порядке появления.
 List<String> ruleListUrls(String field) =>
     {for (final e in routingEntries(field)) if (isRuleListUrl(e)) e}.toList();
 
-/// Поле без ссылок. Без них поле возвращается как было, байт в байт: так
-/// конфиг у тех, кто ссылками не пользуется, не меняется вовсе.
+// без ссылок поле возвращается байт в байт, и конфиг у тех, кто ими не пользуется, не меняется
 String withoutRuleListUrls(String field) {
   if (!field.contains('://')) return field;
   return routingEntries(field).where((e) => !isRuleListUrl(e)).join('\n');
 }
 
-/// Скачанные домены, разложенные по полям маршрутизации.
 class RuleListDomains {
   const RuleListDomains({
     this.direct = const [],
@@ -49,9 +39,6 @@ class RuleListDomains {
 
   bool get isEmpty => direct.isEmpty && proxy.isEmpty && blocked.isEmpty;
 
-  /// Настройки, где домены дописаны в свои поля, — для xray и sing-box.
-  /// mihomo получает их отдельно: доменов десятки тысяч, и правилом на каждый
-  /// он сверял бы их по одному на каждом соединении.
   AppSettings expand(AppSettings settings) {
     if (isEmpty) return settings;
     String add(String field, List<String> domains) =>
@@ -64,10 +51,7 @@ class RuleListDomains {
   }
 }
 
-/// Сколько доменов по ссылкам ещё нормально для xray на телефоне. Замер
-/// 09.10.2026 на списке AdGuard DNS (178 тысяч): xray прибавил 80 МБ, mihomo
-/// со своим набором 30, поэтому предупреждают только про xray. На Android
-/// выросшее ядро система выгружает первым.
+// замер 09.10.2026 на AdGuard DNS (178 тысяч): xray прибавил 80 МБ, mihomo 30
 const int ruleListPhoneDomainBudget = 150000;
 
 final _domainRe = RegExp(
@@ -76,10 +60,8 @@ final _domainRe = RegExp(
 );
 final _ipv4Re = RegExp(r'^\d{1,3}(?:\.\d{1,3}){3}$');
 
-/// Адреса, на которые hosts-списки заворачивают домены.
 const _sinkholes = {'0.0.0.0', '127.0.0.1', '::', '::1', '::0', '0'};
 
-/// Имена, которые hosts-файлы держат для самой машины, а не для блокировки.
 const _hostsSelf = {
   'localhost',
   'localhost.localdomain',
@@ -95,24 +77,15 @@ const _hostsSelf = {
   '0.0.0.0',
 };
 
-/// Условия AdBlock, которые блокировку целого домена не сужают.
 const _wholeDomainOptions = {'important', 'all', 'document', 'doc'};
 
-/// Домены из списка фильтров: AdBlock (`||example.com^`), hosts
-/// (`0.0.0.0 example.com`) или просто по домену в строке.
-///
-/// VPN решает судьбу соединения, а не элемента страницы, поэтому берётся
-/// только то, что значит «весь домен». Правила с путём, регулярки, скрытие
-/// элементов (`##`) и правила с условиями (`$third-party`, `$domain=`)
-/// пропускаются: применённые к домену целиком, они резали бы лишнее.
-/// Исключения `@@||домен^` и отмены `$badfilter` убирают домен из списка.
+// VPN решает судьбу соединения, а не элемента страницы: берём только правила на весь домен
 Set<String> parseFilterList(String body) {
   final blocked = <String>{};
   final allowed = <String>{};
   for (final raw in body.split('\n')) {
     var line = raw.trim();
     if (line.isEmpty || line.startsWith('!') || line.startsWith('[')) continue;
-    // Скрытие элементов и его разновидности (`##`, `#@#`, `#?#`, `#$#`).
     if (RegExp(r'#[@?$%]?#').hasMatch(line)) continue;
     if (line.startsWith('#')) continue;
 
@@ -122,8 +95,6 @@ Set<String> parseFilterList(String body) {
       continue;
     }
     if (line.startsWith('||')) {
-      // `$badfilter` отменяет такое же правило выше по списку: так авторы
-      // снимают ложные срабатывания, не трогая чужую часть списка.
       final cancel = RegExp(r'\$(.*,)?badfilter(,|$)').hasMatch(line);
       final domain = _adblockDomain(
         cancel ? line.replaceFirst(RegExp(r',?badfilter'), '') : line,
@@ -132,7 +103,6 @@ Set<String> parseFilterList(String body) {
       continue;
     }
 
-    // hosts и голые домены: комментарий в конце строки отрезаем.
     final hash = line.indexOf('#');
     if (hash >= 0) line = line.substring(0, hash).trim();
     final parts = line.split(RegExp(r'\s+'));
@@ -149,7 +119,6 @@ Set<String> parseFilterList(String body) {
   return blocked.difference(allowed);
 }
 
-/// `||example.com^` (с условиями, не сужающими блок) → `example.com`.
 String? _adblockDomain(String rule) {
   if (!rule.startsWith('||')) return null;
   var body = rule.substring(2);
@@ -168,12 +137,10 @@ String? _adblockDomain(String rule) {
   } else if (body.endsWith('^')) {
     body = body.substring(0, body.length - 1);
   } else if (body.endsWith('.')) {
-    // `||ads.example.` — начало имени (`ads.example.com`, `ads.example.net`),
-    // а не домен.
+    // ||ads.example. это начало имени, а не домен
     return null;
   }
-  // `||*.example^` — только поддомены, без самого example: правило «домен
-  // целиком» блокировало бы больше, чем просил автор списка.
+  // ||*.example^ это только поддомены, правило на весь домен блокировало бы больше
   if (body.contains('*')) return null;
   return _domain(body);
 }

@@ -1,37 +1,16 @@
-/// Флажок из имени сервера: картинка [FlagArt] или сам эмодзи [FlagGlyph].
-///
-/// Флаг-эмодзи — это не только пара региональных букв. В юникоде их четыре вида,
-/// и провайдеры пользуются всеми: пара региональных индикаторов (включая
-/// не-страны вроде 🇪🇺 и зарезервированные коды), тег-последовательность для
-/// флага субъекта (🏴 плюс невидимые тег-буквы — Шотландия, Уэльс, Каталония),
-/// ZWJ-последовательность (🏴‍☠️, 🏳️‍🌈) и одиночные флаги (🏁, 🚩, 🎌).
-///
-/// Поэтому разбор идёт по структуре последовательности, а не по списку
-/// известных стран: любой существующий флаг опознаётся, даже если картинки для
-/// него у нас нет — тогда рисуем сам эмодзи.
 sealed class ServerFlag {
   const ServerFlag();
 }
 
-/// Флаг, для которого есть векторная картинка.
 final class FlagArt extends ServerFlag {
-  /// Имя ассета: `ru`, `gb-sct`, `eu`.
   final String code;
 
   const FlagArt(this.code);
 
-  /// Путь к `.si`-ассету пакета `country_flags`.
-  ///
-  /// Картинку рисуем сами, минуя `CountryFlag.fromCountryCode`: его таблица
-  /// знает только 254 кода из 266 положенных в пакет — нет `eu`, `un`, `ac`,
-  /// `cp`, `dg`, `ea`, `ic`, `ta`, `xx`, `es-ct`, `es-ga`, — а на незнакомом
-  /// коде виджет рисует белый квадрат со знаком вопроса. Что путь и список
-  /// [flagArtCodes] сходятся с содержимым пакета, проверяет
-  /// `test/models/server_flag_assets_test.dart`.
+  // CountryFlag.fromCountryCode не знает eu, un и ещё десяток кодов из пакета
+  // и рисует на них квадрат с вопросом
   String get assetPath => 'packages/country_flags/res/si/$code.si';
 
-  /// Код региона (ISO alpha-2, в верхнем регистре); у флага субъекта — код
-  /// страны, которой он принадлежит (`gb-sct` → `GB`). У 🏴‍☠️ и 🏁 кода нет.
   String? get countryCode {
     final base = code.split('-').first;
     return base.length == 2 ? base.toUpperCase() : null;
@@ -47,8 +26,6 @@ final class FlagArt extends ServerFlag {
   String toString() => 'FlagArt($code)';
 }
 
-/// Флаг без картинки — рисуем сам эмодзи. Сюда попадают 🏴‍☠️, 🏳️‍🌈 и любой
-/// флаг субъекта, которого нет в ассетах (🏴󠁵󠁳󠁴󠁸󠁿 и подобные).
 final class FlagGlyph extends ServerFlag {
   final String emoji;
 
@@ -64,7 +41,6 @@ final class FlagGlyph extends ServerFlag {
   String toString() => 'FlagGlyph($emoji)';
 }
 
-/// Найденный в строке флаг и его границы (в рунах, `end` не включается).
 class FlagMatch {
   final ServerFlag flag;
   final int start;
@@ -73,22 +49,19 @@ class FlagMatch {
   const FlagMatch(this.flag, this.start, this.end);
 }
 
-const _risFirst = 0x1F1E6; // 🇦
-const _risLast = 0x1F1FF; // 🇿
-const _tagBase = 0xE0000; // тег-символ = _tagBase + ascii
+const _risFirst = 0x1F1E6;
+const _risLast = 0x1F1FF;
+const _tagBase = 0xE0000;
 const _tagFirst = 0xE0020;
 const _tagLast = 0xE007E;
-const _tagTerm = 0xE007F; // CANCEL TAG
-const _flagBlack = 0x1F3F4; // 🏴
-const _flagWhite = 0x1F3F3; // 🏳
+const _tagTerm = 0xE007F;
+const _flagBlack = 0x1F3F4;
+const _flagWhite = 0x1F3F3;
 const _zwj = 0x200D;
 const _vs16 = 0xFE0F;
 
-/// 🏁 клетчатый, 🚩 треугольный, 🎌 скрещенные — самостоятельные флаги без
-/// продолжения.
 const _loneFlags = {0x1F3C1, 0x1F6A9, 0x1F38C};
 
-/// Все флаги в строке, слева направо.
 Iterable<FlagMatch> findFlags(String text) sync* {
   final runes = text.runes.toList(growable: false);
   var i = 0;
@@ -96,8 +69,6 @@ Iterable<FlagMatch> findFlags(String text) sync* {
     final rune = runes[i];
 
     if (_isRegionalIndicator(rune)) {
-      // Одинокая региональная буква флагом не является: показывать её как
-      // страну нельзя, но и «съедать» следующий символ тоже.
       if (i + 1 < runes.length && _isRegionalIndicator(runes[i + 1])) {
         final code = String.fromCharCodes([
           0x61 + rune - _risFirst,
@@ -139,7 +110,6 @@ Iterable<FlagMatch> findFlags(String text) sync* {
   }
 }
 
-/// Первый флаг строки, если он там есть.
 ServerFlag? firstFlagIn(String text) {
   for (final match in findFlags(text)) {
     return match.flag;
@@ -147,8 +117,6 @@ ServerFlag? firstFlagIn(String text) {
   return null;
 }
 
-/// Строка без флагов: аватарка показывает флаг картинкой, дублировать его в
-/// имени незачем. Пробелы, оставшиеся от вырезанного, схлопываются.
 String stripFlags(String text) {
   final runes = text.runes.toList(growable: false);
   final drop = List<bool>.filled(runes.length, false);
@@ -160,7 +128,6 @@ String stripFlags(String text) {
       drop[i] = true;
     }
   }
-  // Непарная региональная буква — обломок флага, а не буква имени.
   for (var i = 0; i < runes.length; i++) {
     if (_isRegionalIndicator(runes[i])) {
       drop[i] = true;
@@ -186,8 +153,6 @@ ServerFlag _artOrGlyph(String code, List<int> runes, int start, int end) =>
     ? FlagArt(code)
     : FlagGlyph(_slice(runes, start, end));
 
-/// 🏴 + тег-буквы + терминатор → код субъекта (`gbsct` → `gb-sct`).
-/// null, если тегов нет или последовательность не закрыта.
 ({String code, int end})? _readTags(List<int> runes, int start) {
   final tags = StringBuffer();
   var i = start + 1;
@@ -203,7 +168,6 @@ ServerFlag _artOrGlyph(String code, List<int> runes, int start, int end) =>
   );
 }
 
-/// Конец последовательности вида «база (+ VS16) (+ ZWJ символ)*».
 int _endOfZwjSequence(List<int> runes, int start) {
   var i = start + 1;
   if (i < runes.length && runes[i] == _vs16) i++;
@@ -214,10 +178,6 @@ int _endOfZwjSequence(List<int> runes, int start) {
   return i;
 }
 
-/// Коды, для которых в пакете `country_flags` лежит векторная картинка.
-///
-/// Список нужен до отрисовки: по нему решается, показать вектор или сам эмодзи.
-/// Спрашивать сам пакет нельзя — его таблица кодов беднее набора ассетов.
 final Set<String> flagArtCodes = Set.unmodifiable(_artCodes.split(' '));
 
 const _artCodes =

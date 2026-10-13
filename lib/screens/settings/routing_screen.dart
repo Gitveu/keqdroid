@@ -1,12 +1,7 @@
 part of '../settings_tab.dart';
 
-/// Вход в экран для виджет-теста: сам экран приватный, а путь к нему через
-/// «Дополнительно» тесту не нужен.
 @visibleForTesting
 Widget routingScreenForTest() => const _RoutingScreen();
-
-// Цвет, значок и слово «куда» одни на строке маршрута, в шторке выбора и в
-// «Всём остальном»: одно действие на экране выглядит одинаково везде.
 
 Color _targetColor(BuildContext context, RouteTarget target) =>
     switch (target) {
@@ -22,7 +17,6 @@ IconData _targetIcon(RouteTarget target) => switch (target) {
       RouteTarget.server => Icons.dns_rounded,
     };
 
-/// «Всё остальное» — то же «куда», только без другого сервера.
 RouteTarget _finalTarget(String finalOutbound) => switch (finalOutbound) {
       AppSettings.finalOutboundDirect => RouteTarget.direct,
       AppSettings.finalOutboundBlock => RouteTarget.block,
@@ -55,8 +49,6 @@ IconData _contentIcon(TrafficRoute route) => switch (route.content) {
       RouteContent.preset => _presetIcon(route.presetId),
     };
 
-/// Имя приложения из записи сплита: путь режется до файла, `.exe` у имени
-/// процесса на экране лишний.
 String _appLabel(String entry, [List<AppInfo> installed = const []]) {
   final app = _installedApp(entry, installed);
   if (app != null && app.appName.isNotEmpty) return app.appName;
@@ -77,8 +69,6 @@ List<AppInfo> _installedForLabels(WidgetRef ref, List<TrafficRoute> routes) {
   return ref.watch(installedAppsProvider(true)).value ?? const [];
 }
 
-/// Значок маршрута приложений — первого из них: у записи с путём это иконка
-/// самой программы, у имени — его буква, как в шторке «Кто».
 Widget _appsBadge(
   List<String> apps,
   AppIconCache cache, [
@@ -91,7 +81,6 @@ Widget _appsBadge(
       cache: cache,
     );
 
-/// Почему маршрут работает не так, как написан; null — работает.
 String? _routeIssue(
   AppLocalizations l10n,
   TrafficRoute route,
@@ -131,7 +120,6 @@ ServerItem? _routeServer(TrafficRoute route, List<ServerItem> servers) =>
         ? servers.where((s) => s.id == route.serverId).firstOrNull
         : null;
 
-/// «Куда» строкой: у другого сервера — его имя.
 String _targetLabel(
   AppLocalizations l10n,
   TrafficRoute route,
@@ -148,9 +136,7 @@ String _targetLabel(
         },
     };
 
-/// «Что» строкой: список сайтов, имя готового списка или «весь трафик».
-/// Ссылка на список — именем хоста, как под полем: полный адрес съел бы
-/// всю строку, не сказав ничего нового.
+// ссылку показываем именем хоста: полный адрес съел бы строку
 String _contentLabel(AppLocalizations l10n, TrafficRoute route) {
   switch (route.content) {
     case RouteContent.allTraffic:
@@ -180,8 +166,7 @@ class _RoutingScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    // Маршруты читаются только в момент connect() — при активном туннеле
-    // изменения вступят в силу после переподключения.
+    // маршруты читаются только в connect(), при живом туннеле правка вступит после переподключения
     final vpnStatus = ref.watch(
       vpnStateProvider.select((a) => a.value?.status),
     );
@@ -238,8 +223,6 @@ class _RoutingScreen extends ConsumerWidget {
             icon: Icons.info_outline_rounded,
             text: l10n.splitTunnelingReconnectHint,
             action: TextButton(
-              // Пока туннель поднимается, второе нажатие ничего бы не дало:
-              // переподключение само дождётся текущего.
               onPressed: vpnStatus == VpnStatus.connected
                   ? () => unawaited(_reconnect(ref))
                   : null,
@@ -259,8 +242,6 @@ class _RoutingScreen extends ConsumerWidget {
               child: Text(l10n.routesHintDismiss),
             ),
           ),
-        // Пустые разделы не показываются: заголовок над пустотой читался бы
-        // как недогруженный список.
         if (block.isNotEmpty) ...[
           ExpressiveSectionHeader(l10n.routesSectionBlock),
           ExpressiveGroup(children: [for (final r in block) tile(r)]),
@@ -304,9 +285,7 @@ class _RoutingScreen extends ConsumerWidget {
   static Future<void> _reconnect(WidgetRef ref) async {
     try {
       await ref.read(vpnStateProvider.notifier).reconnectToActiveServer();
-    } catch (_) {
-      // Исход подключения показывает сам экран VPN, здесь его не дублируем.
-    }
+    } catch (_) {}
   }
 
   static void _openRouteEditor(BuildContext context, TrafficRoute? route) {
@@ -336,7 +315,6 @@ class _RoutingScreen extends ConsumerWidget {
   }
 }
 
-/// Значок, две строки и стрелка — тот же склад, что у пунктов настроек.
 class _RouteRowContent extends StatelessWidget {
   const _RouteRowContent({
     required this.badge,
@@ -352,11 +330,9 @@ class _RouteRowContent extends StatelessWidget {
   final Widget subtitle;
   final bool chevron;
 
-  /// Третья строка — почему маршрут не работает. Своей строкой, а не в хвосте
-  /// подписи: там её обрезал бы длинный список сайтов.
+  // своей строкой: в хвосте подписи её обрезал бы длинный список сайтов
   final Widget? note;
 
-  /// Выключенный маршрут бледнее: на месте и редактируется, но не действует.
   final bool dimmed;
 
   @override
@@ -405,9 +381,7 @@ class _RouteRowContent extends StatelessWidget {
   }
 }
 
-/// Строка маршрута: сверху «кто» (у маршрута для всех приложений — сами
-/// сайты или имя готового списка), снизу «→ куда · что». «Куда» стоит первым,
-/// чтобы при нехватке места обрезался список сайтов, а не сервер.
+// куда стоит первым, чтобы при нехватке места обрезался список сайтов, а не сервер
 class _RouteTile extends StatelessWidget {
   const _RouteTile({
     required this.route,
@@ -449,8 +423,7 @@ class _RouteTile extends StatelessWidget {
           TextSpan(
             children: [
               const TextSpan(text: '→ '),
-              // Флаг сервера — тем же значком, что в списке серверов: имя
-              // «Германия» у трёх провайдеров одинаковое, а вид флага тот же.
+              // флаг нужен: имя Германия у трёх провайдеров одинаковое
               if (_routeServer(route, servers) case final server?)
                 WidgetSpan(
                   alignment: PlaceholderAlignment.middle,
@@ -515,7 +488,6 @@ class _FinalRouteTile extends StatelessWidget {
   }
 }
 
-/// Шторка выбора: заголовок и группы пунктов, выбор в одно нажатие.
 Future<T?> _showChoiceSheet<T>(
   BuildContext context, {
   required String title,
@@ -557,8 +529,6 @@ Future<T?> _showChoiceSheet<T>(
   );
 }
 
-/// «Куда»: через VPN, напрямую, блокировать и — у маршрута, не у «Всего
-/// остального» — раздел «Другой сервер» с пунктом [serverTile].
 Future<RouteTarget?> _showTargetSheet(
   BuildContext context, {
   required String title,
@@ -597,8 +567,6 @@ Future<RouteTarget?> _showTargetSheet(
   );
 }
 
-// ── Шпаргалка «как писать правила» ─────────────────────────────────────────
-
 void _showRoutingCheatSheet(BuildContext context, AppLocalizations l10n) {
   showModalBottomSheet(
     context: context,
@@ -628,9 +596,6 @@ void _showRoutingCheatSheet(BuildContext context, AppLocalizations l10n) {
   );
 }
 
-/// Разбивает текст шпаргалки на строки; строки с префиксом `## ` рисуются как
-/// заголовки секций (акцентом), остальные — обычным текстом. Так один
-/// локализованный текст остаётся живой заметкой, а не стеной.
 List<Widget> _cheatLines(BuildContext context, String body) {
   final out = <Widget>[];
   for (final raw in body.split('\n')) {

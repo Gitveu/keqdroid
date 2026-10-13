@@ -1,18 +1,11 @@
 part of '../subscriptions_tab.dart';
 
-/// Строка «Идентичность устройства» в шторках добавления и редактирования.
-///
-/// Свёрнутая в одну строку намеренно: подмена нужна редко, а раскрытая форма из
-/// пяти полей занимала бы в шторке больше места, чем имя и ссылка вместе — то
-/// есть выглядела бы главным, чем эта шторка занимается.
 class _IdentityTile extends StatelessWidget {
   final SubscriptionFetchIdentity identity;
   final VoidCallback onTap;
 
   const _IdentityTile({required this.identity, required this.onTap});
 
-  /// Что именно подменено — самым узнаваемым сначала. HWID уходит в конец: это
-  /// длинная шестнадцатеричная строка, по которой всё равно ничего не видно.
   static String? summary(SubscriptionFetchIdentity identity) {
     if (!identity.isActive) return null;
     final parts = [
@@ -69,14 +62,7 @@ class _IdentityTile extends StatelessWidget {
   }
 }
 
-/// Потолок размеров шторки идентичности и её списков.
-///
-/// `isScrollControlled` снимает с шторки ограничение высоты — и на десктопе,
-/// где окно высокое, она дорастает до самого верха: ручка уезжает под рамку
-/// экрана (на ноутбуке — прямо под вебкамеру), тянуть её вниз нечем, а фона
-/// вокруг, по которому шторка закрывается тапом, не остаётся вовсе.
-/// Потолок оставляет полосу фона на любом окне, а по ширине держит шторку
-/// читаемой колонкой, а не строкой во весь монитор.
+// isScrollControlled снимает потолок высоты, и на десктопе ручка уезжала под край экрана
 BoxConstraints _sheetConstraints(BuildContext context) {
   final size = MediaQuery.sizeOf(context);
   return BoxConstraints(
@@ -85,8 +71,6 @@ BoxConstraints _sheetConstraints(BuildContext context) {
   );
 }
 
-/// Шторка настройки идентичности. Возвращает новое значение или `null`, если
-/// шторку закрыли, ничего не применив.
 Future<SubscriptionFetchIdentity?> _showIdentitySheet(
   BuildContext context, {
   required SubscriptionFetchIdentity initial,
@@ -100,12 +84,6 @@ Future<SubscriptionFetchIdentity?> _showIdentitySheet(
   );
 }
 
-/// Заголовок шторки с кнопкой закрытия.
-///
-/// Ручка сверху — единственный способ закрыть шторку жестом, и он же
-/// единственный, который отказывает, когда до неё трудно дотянуться (десктоп,
-/// мышь, край экрана). Явный крестик не зависит ни от высоты шторки, ни от
-/// того, чем по ней тыкают.
 class _SheetHeader extends StatelessWidget {
   final String title;
 
@@ -118,7 +96,6 @@ class _SheetHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(0, 0, 4, 8),
       child: Row(
         children: [
-          // Симметрично кнопке справа — иначе заголовок съезжает с центра.
           const SizedBox(width: 48),
           Expanded(
             child: Text(
@@ -168,10 +145,6 @@ class _IdentitySheetState extends ConsumerState<_IdentitySheet> {
         osVersion: _osVersion,
       );
 
-  /// Значения того же поля из других подписок — отдельной секцией «уже
-  /// используется», чтобы не искать их среди пресетов. Чаще всего новую
-  /// подписку заводят ровно с ними, и набирать их заново руками было бы
-  /// единственным способом.
   List<String> _used(String? Function(SubscriptionFetchIdentity) pick) {
     final subs = ref.read(subscriptionsProvider).value ?? const <Subscription>[];
     final out = <String>[];
@@ -208,9 +181,7 @@ class _IdentitySheetState extends ConsumerState<_IdentitySheet> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final l10n = AppLocalizations.of(context)!;
-    // watch, а не read: настройки грузятся асинхронно, и на первый читающий их
-    // экран приходит ещё пустое значение — предупреждение ниже тогда молча не
-    // показывалось бы.
+    // watch: настройки грузятся асинхронно, и read на первом экране отдал бы пустоту
     final shareHwid =
         ref.watch(settingsNotifierProvider).value?.shareDeviceHwid ?? true;
     final deviceHwid = ref.read(storageProvider).getHwid();
@@ -261,8 +232,6 @@ class _IdentitySheetState extends ConsumerState<_IdentitySheet> {
             ),
             if (_enabled) ...[
               const SizedBox(height: 12),
-              // Тумблер приватности главнее подмены — говорим об этом до того,
-              // как поле HWID заполнят и оно молча ничего не сделает.
               if (!shareHwid)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -366,8 +335,6 @@ class _IdentitySheetState extends ConsumerState<_IdentitySheet> {
     );
   }
 
-  // Списки — не const: заголовки берутся из локализации, а items остаются
-  // теми же константами каталога.
   static List<_IdentitySection> _uaPresets(AppLocalizations l10n) => [
     _IdentitySection(
       title: l10n.subscriptionIdentitySectionUaAndroid,
@@ -400,7 +367,6 @@ class _IdentitySheetState extends ConsumerState<_IdentitySheet> {
   ];
 
   static List<_IdentitySection> _modelPresets(AppLocalizations l10n) => [
-    // Android — имя платформы, переводить нечего.
     const _IdentitySection(
       title: 'Android',
       icon: Icons.android_rounded,
@@ -447,8 +413,6 @@ class _IdentitySheetState extends ConsumerState<_IdentitySheet> {
   ];
 }
 
-/// Предупреждение внутри шторки: не snackbar, потому что оно относится к полю
-/// прямо под ним и обязано жить, пока шторка открыта.
 class _IdentityWarning extends StatelessWidget {
   final String text;
   const _IdentityWarning({required this.text});
@@ -490,16 +454,13 @@ class _IdentitySection {
   });
 }
 
-/// Строка одного поля идентичности: текущее значение и вход в список вариантов.
 class _IdentityOptionRow extends StatelessWidget {
   final String label;
   final IconData icon;
   final String? value;
   final List<_IdentitySection> sections;
 
-  /// Приводить набранное вручную к нижнему регистру. Так и уходит HWID —
-  /// показывать в списке одно, а слать другое было бы враньём. Для остальных
-  /// полей регистр значим: `Happ/4.1.0` и `happ/4.1.0` для панели разные.
+  // HWID и уходит в нижнем регистре, у остальных полей регистр значим
   final bool lowercaseCustom;
 
   final ValueChanged<String?> onChanged;
@@ -535,8 +496,6 @@ class _IdentityOptionRow extends StatelessWidget {
             lowercaseCustom: lowercaseCustom,
           ),
         );
-        // Закрыли шторку мимо выбора — значение не трогаем: «сбросить» тут
-        // отдельный пункт, и жест закрытия не должен его подменять.
         if (picked != null) onChanged(picked.value);
       },
       child: Row(
@@ -566,8 +525,6 @@ class _IdentityOptionRow extends StatelessWidget {
                       ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
                 Text(
-                  // Значения технические (UA, hex-HWID) — в RTL-абзаце их
-                  // нельзя отдавать направлению текста.
                   set
                       ? ltrIsolate(value!)
                       : l10n.subscriptionIdentityAppDefault,
@@ -591,13 +548,6 @@ class _IdentityOptionRow extends StatelessWidget {
   }
 }
 
-/// Список вариантов одного поля. Возвращает запись, чтобы «выбрано ничего»
-/// (`App default`) отличалось от «шторку закрыли».
-///
-/// Поле сверху делает обе работы разом: фильтрует каталог и оно же принимает
-/// значение, которого в каталоге нет. Двумя полями это выглядело бы как выбор
-/// между «искать» и «вписать», хотя набирают в них одно и то же — и первое,
-/// что делает человек с непопавшим в список UA, это ищет его, а потом дописывает.
 class _IdentityOptionPicker extends StatefulWidget {
   final String title;
   final IconData icon;
@@ -618,8 +568,6 @@ class _IdentityOptionPicker extends StatefulWidget {
 }
 
 class _IdentityOptionPickerState extends State<_IdentityOptionPicker> {
-  /// Своё значение подставлено в поле сразу: чаще всего его открывают, чтобы
-  /// поправить пару символов, а не набрать заново.
   late final _queryCtrl = TextEditingController(
     text: _isKnown(widget.selected) ? '' : (widget.selected ?? ''),
   );
@@ -637,7 +585,6 @@ class _IdentityOptionPickerState extends State<_IdentityOptionPicker> {
   bool _matches(String value) =>
       _query.isEmpty || value.toLowerCase().contains(_query.toLowerCase());
 
-  /// Набранное не совпало ни с одним вариантом — значит, это своё значение.
   String? get _typedValue {
     final typed = _query.trim();
     if (typed.isEmpty) return null;

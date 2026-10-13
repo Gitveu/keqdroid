@@ -1,11 +1,5 @@
 part of '../settings_tab.dart';
 
-/// Локальные порты SOCKS5/HTTP — секция экрана настроек ядра
-/// ([_XrayCoreSettingsScreen]), а не отдельный экран: порты едут в те же
-/// inbounds генерируемого конфига, что и остальные параметры ядра.
-/// Отдельной кнопки сброса нет — порты возвращает к дефолту общий сброс
-/// экрана (`_resetDefaults` там же), поэтому поля умеют подхватывать
-/// изменение настроек извне.
 class _LocalPortsSection extends ConsumerStatefulWidget {
   const _LocalPortsSection();
 
@@ -22,11 +16,7 @@ class _LocalPortsSectionState extends ConsumerState<_LocalPortsSection> {
   late final VoidCallback _httpBlur;
   bool _initialized = false;
 
-  // Снимок для dispose(). Трогать там `ref` нельзя: Riverpod помечает элемент
-  // defunct в super.unmount() до State.dispose(), а watch-подписки закрывает
-  // после него — брошенный из ref.read StateError обрывает unmount, подписки
-  // остаются живыми на мёртвом элементе, и дальше каждое изменение любого
-  // провайдера валится ассертом markNeedsBuild на defunct-элементе.
+  // снимок для dispose(): ref там кидает StateError и оставляет живую подписку на мёртвом элементе
   SettingsNotifier? _settingsNotifier;
   AppSettings? _lastSettings;
   bool _portsLocked = false;
@@ -34,8 +24,6 @@ class _LocalPortsSectionState extends ConsumerState<_LocalPortsSection> {
   @override
   void initState() {
     super.initState();
-    // Применение по потере фокуса, а не только по Enter: тап мимо поля или
-    // переход к соседнему не должен молча терять введённое значение.
     VoidCallback blurListener(FocusNode focus) => () {
           if (focus.hasFocus) return;
           final settings = ref.read(settingsNotifierProvider).value;
@@ -47,12 +35,9 @@ class _LocalPortsSectionState extends ConsumerState<_LocalPortsSection> {
 
   @override
   void dispose() {
-    // Слушатели снимаем первыми: FocusNode.dispose() снимает фокус и дёрнул бы
-    // _apply, который лезет в context (снекбары) уже на умирающем экране.
+    // слушатели первыми: FocusNode.dispose() снимает фокус и дёрнул бы _apply на умирающем экране
     _socksFocus.removeListener(_socksBlur);
     _httpFocus.removeListener(_httpBlur);
-    // Сохранение при уходе с экрана: «назад» без Enter не должен молча
-    // терять введённые порты.
     _persistSilently();
     _socksFocus.dispose();
     _httpFocus.dispose();
@@ -61,9 +46,6 @@ class _LocalPortsSectionState extends ConsumerState<_LocalPortsSection> {
     super.dispose();
   }
 
-  /// Тихое сохранение валидных портов без снекбаров (контекст экрана уже
-  /// умирает). Невалидный ввод просто отбрасывается. Работает только по
-  /// снимку из build — см. комментарий у полей.
   void _persistSilently() {
     if (!_initialized || _portsLocked) return;
     final settings = _lastSettings;
@@ -79,12 +61,9 @@ class _LocalPortsSectionState extends ConsumerState<_LocalPortsSection> {
     ));
   }
 
-  /// Внешнее изменение настроек (общий сброс экрана). Вызывается из
-  /// `ref.listen`, то есть после фазы build: присваивать текст контроллеру
-  /// прямо в build нельзя — это markNeedsBuild у уже смонтированного TextField.
+  // из ref.listen: в build присваивать текст смонтированному TextField нельзя
   void _adoptExternal(AppSettings settings) {
     void adopt(TextEditingController ctrl, FocusNode focus, int value) {
-      // Поле в фокусе — пользователь печатает, не перебиваем.
       if (focus.hasFocus) return;
       final text = value.toString();
       if (ctrl.text != text) ctrl.text = text;

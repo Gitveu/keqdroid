@@ -9,12 +9,6 @@ import '../core/connections_poll_stats.dart';
 import '../tunnel/linux_tunnel_backend.dart';
 import '../tunnel/windows_tunnel_backend.dart';
 
-/// Слепки памяти процесса в app.log (десктоп).
-///
-/// Заведено ради жалобы «после нескольких пробуждений ПК keqdroid.exe занял
-/// 20 ГБ», где журнал молчал: снимка кучи в релизе нет, и единственный способ
-/// поймать утечку — видеть в журнале, когда память пошла вверх и что рядом с
-/// этим происходило (сон, опросы ядра, картинки, потоки, дескрипторы).
 class MemoryWatch {
   MemoryWatch._();
 
@@ -25,8 +19,6 @@ class MemoryWatch {
   final _schedule = MemoryWatchSchedule();
   Timer? _timer;
 
-  /// На Android слепки снимает служба VPN (native.log): Dart там живёт не
-  /// дольше окна, а память росла при закрытом.
   void start() {
     if (_timer != null || !(Platform.isWindows || Platform.isLinux)) return;
     _timer = Timer.periodic(MemoryWatchSchedule.beat, (_) => _onBeat());
@@ -112,7 +104,6 @@ class MemoryWatch {
     );
   }
 
-  /// Числа из `/proc/<pid>/status`; килобайты переведены в байты.
   static Map<String, int> _procStatus(String pid) {
     try {
       final out = <String, int>{};
@@ -137,32 +128,18 @@ class MemoryWatch {
   }
 }
 
-/// Когда снимать слепок. Отдельно от ввода-вывода, чтобы проверять тестами.
-///
-/// Раз в [periodBeats] тактов по минуте. Сразу после сна и ещё через 1 и 5
-/// минут: у жалобы память дорастала уже после пробуждения. И каждую минуту,
-/// пока она растёт, — чтобы в журнале было видно, когда рост начался и когда
-/// кончился, а не одна цифра раз в десять минут.
 class MemoryWatchSchedule {
   static const beat = Duration(minutes: 1);
   static const periodBeats = 10;
 
-  /// Такт опоздал хотя бы на столько — значит, система спала (или процесс
-  /// заморозили) и таймеры стояли.
   static const sleepGap = Duration(minutes: 3);
 
-  /// Столько прибавилось с прошлого слепка — рост, а не шум.
   static const growthAlarm = 256 * 1024 * 1024;
 
-  /// Пока за минуту прибавляется столько, частые слепки продолжаются.
   static const growthContinues = 32 * 1024 * 1024;
 
-  /// Предел частых слепков подряд: бесконечный рост не должен забить журнал.
   static const maxFastBeats = 30;
 
-  /// Первый порог размера. Следующие — вдвое больше предыдущего: 1, 2, 4 ГБ.
-  /// Медленный ровный рост (50 МБ за десять минут — это 20 ГБ за трое суток)
-  /// скачком не выглядит никогда, и без порогов в «проблемах» его бы не было.
   static const firstThreshold = 1024 * 1024 * 1024;
 
   DateTime? _lastBeat;
@@ -206,9 +183,6 @@ class MemoryWatchSchedule {
     return reason;
   }
 
-  /// Размер из свежего слепка. Возвращает, чем он тревожен (скачок или
-  /// пройденный порог), и при скачке включает частые слепки; null — всё
-  /// спокойно.
   String? onSize(int bytes) {
     final previous = _lastSize;
     _lastSize = bytes;
@@ -232,7 +206,6 @@ class MemoryWatchSchedule {
   }
 }
 
-/// Один слепок. Поля, которых на платформе нет, — null и в строку не идут.
 class MemorySample {
   const MemorySample({
     required this.rss,
@@ -251,11 +224,9 @@ class MemorySample {
   final int rss;
   final int peakRss;
 
-  /// Выделенная память (commit) на Windows — та, что в событии 2004.
   final int? privateBytes;
   final int? threads;
 
-  /// Дескрипторы на Windows, открытые файлы на Linux.
   final int? handles;
   final int? gdiObjects;
   final int? userObjects;
@@ -263,10 +234,8 @@ class MemorySample {
   final int imageBytes;
   final String polls;
 
-  /// Ядро → его память: выделенная на Windows, резидентная на Linux.
   final Map<String, int> cores;
 
-  /// По чему судить о росте: выделенная, если она известна.
   int get size => privateBytes ?? rss;
 
   String describe() {

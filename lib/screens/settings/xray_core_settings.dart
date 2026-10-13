@@ -1,8 +1,5 @@
 part of '../settings_tab.dart';
 
-/// Заголовок секции с иконкой — тонкая обёртка над общим
-/// [ExpressiveSectionHeader]. Собственного вида у него больше нет: раньше он
-/// расходился с остальными настройками и цветом, и ролью текста.
 class _XrayCoreSectionHeader extends StatelessWidget {
   const _XrayCoreSectionHeader({
     required this.icon,
@@ -17,13 +14,6 @@ class _XrayCoreSectionHeader extends StatelessWidget {
       ExpressiveSectionHeader(title, icon: icon);
 }
 
-/// Карточка секции — та же, что на остальных подэкранах настроек
-/// (см. `card()` в ping/lan/permissions).
-///
-/// Волосяных дивайдеров внутри больше нет. В M3E строки разделяет containment,
-/// а не линия: карточка уже сказала «это одна группа», и рисовать внутри неё
-/// ещё и границы — значит говорить это дважды. Отдельная группа отделяется
-/// заголовком секции, а не швом.
 Widget _xraySettingsCard(BuildContext context, {required List<Widget> children}) =>
     ExpressiveCard(
       padding: const EdgeInsets.symmetric(
@@ -42,8 +32,6 @@ TextStyle? _xrayTileSubtitleStyle(BuildContext context) =>
           height: 1.35,
         );
 
-/// Сохранение настроек ядра. Поднято из состояния экрана: тем же самым
-/// пользуются секции, а состояния у них нет — только `ref`.
 Future<void> _saveXrayCore(
   WidgetRef ref,
   AppSettings settings,
@@ -74,14 +62,6 @@ Future<void> _saveFakeIp(
       .save(settings.copyWith(fakeIp: value));
 }
 
-/// Строка выбора. Значение подхватывает [RadioGroup] выше по дереву, поэтому
-/// сама строка объявляет только [value].
-///
-/// Ни `dense`, ни `visualDensity.compact`, ни собственных стилей текста тут
-/// больше нет: строки этого экрана были на полкегля мельче и на восемь
-/// пикселей теснее, чем такие же строки на всех остальных подэкранах. Разница
-/// слишком мала, чтобы прочитаться как решение, и ровно настолько велика,
-/// чтобы прочитаться как небрежность.
 Widget _xrayChoiceTile({
   required BuildContext context,
   required String value,
@@ -114,8 +94,6 @@ class _XrayCoreSettingsScreenState extends ConsumerState<_XrayCoreSettingsScreen
       return;
     }
     if (!mounted) return;
-    // Порты при активном туннеле не трогаем — их и руками менять нельзя, пока
-    // ядро слушает старые (см. _LocalPortsSection).
     final vpn = ref.read(vpnStateProvider).value?.status;
     final portsLocked =
         vpn == VpnStatus.connected || vpn == VpnStatus.connecting;
@@ -124,9 +102,7 @@ class _XrayCoreSettingsScreenState extends ConsumerState<_XrayCoreSettingsScreen
           settings.copyWith(
             xrayCore: const XrayCoreSettings(),
             tun: const TunSettings(),
-            // Кнопка сбрасывает всё, что стоит на этом экране, — включая Fake
-            // IP, хоть он и не часть настроек ядра. Забытое поле здесь
-            // выглядит как «сброс не сработал».
+            // сброс обязан покрывать всё, что есть на экране, включая Fake IP
             fakeIp: defaults.fakeIp,
             localPort: portsLocked ? null : defaults.localPort,
             httpPort: portsLocked ? null : defaults.httpPort,
@@ -144,9 +120,6 @@ class _XrayCoreSettingsScreenState extends ConsumerState<_XrayCoreSettingsScreen
     final settings =
         ref.watch(settingsNotifierProvider).value ?? const AppSettings();
     final accent = AppTheme.accent(context);
-    // Экран общий для обоих ядер, но половина его разделов — поля конфига
-    // ровно одного из них. Раньше стояли все сразу, а про то, что раздел не
-    // про твоё ядро, было сказано мелким шрифтом под переключателем.
     final xray = ref.watch(activeVpnBackendProvider) == VpnBackend.xray;
 
     return ExpressivePage(
@@ -170,15 +143,8 @@ class _XrayCoreSettingsScreenState extends ConsumerState<_XrayCoreSettingsScreen
         ),
       ],
       children: [
-        // Вводной плашки «параметры уходят в конфиг, меняйте осторожно»
-        // здесь больше нет. Она не сообщала ничего, чего не сообщает
-        // название экрана, зато первым делом занимала полтора сантиметра
-        // высоты и отодвигала настройки вниз.
         const _LocalPortsSection(),
-        // DNS и общие настройки читают оба ядра: mihomo собирает свой dns-блок
-        // и сниффер из них же (mihomo_config_gen).
         const _XrayDnsSection(),
-        // Мультиплексирование, фрагментация и шум — поля аутбаунда xray.
         if (xray) ...[
           const _XrayMuxSection(),
           const _XrayXmuxSection(),
@@ -186,9 +152,6 @@ class _XrayCoreSettingsScreenState extends ConsumerState<_XrayCoreSettingsScreen
           const _XrayNoiseSection(),
         ],
         const _XrayGeneralSection(),
-        // TUN есть только на десктопе: на Android интерфейс поднимает
-        // VpnService, и эти поля туда не едут. Ядру при этом всё равно —
-        // стек, MTU и маршруты читают оба.
         if (Platform.isWindows || Platform.isLinux) const _XrayTunSection(),
         const SizedBox(height: 8),
         OutlinedButton.icon(
@@ -209,11 +172,6 @@ class _XrayCoreSettingsScreenState extends ConsumerState<_XrayCoreSettingsScreen
   }
 }
 
-/// Секция «DNS» экрана настроек ядра.
-///
-/// Отдельный виджет, а не кусок общего `build()`: у секции свой `const`
-/// конструктор и своя подписка на настройки, поэтому изменение внутри неё
-/// перестраивает её одну, а не весь экран.
 class _XrayDnsSection extends ConsumerWidget {
   const _XrayDnsSection();
 
@@ -224,12 +182,8 @@ class _XrayDnsSection extends ConsumerWidget {
         ref.watch(settingsNotifierProvider).value ?? const AppSettings();
     final core = settings.xrayCore;
     final accent = AppTheme.accent(context);
-    // Сами серверы и стратегию запросов mihomo читает (собирает из них свой
-    // dns-блок), а раздельного резолвера и отключения кэша у него нет вовсе.
     final xray = ref.watch(activeVpnBackendProvider) == VpnBackend.xray;
     return Column(
-      // Дети слайвера растягиваются по ширине сами. Column по умолчанию
-      // центрирует, и без stretch карточки схлопнулись бы по содержимому.
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _XrayCoreSectionHeader(icon: Icons.dns_rounded, title: l10n.settingsXrayDnsSection),
@@ -338,8 +292,6 @@ class _XrayDnsSection extends ConsumerWidget {
                 activeThumbColor: accent,
                 title: Text(l10n.settingsXrayDnsDisableCache),
               ),
-            // Одна настройка на оба ядра: подменные адреса умеют и mihomo, и
-            // xray (на десктопе их отдаёт sing-box вокруг него).
             SwitchListTile(
               value: settings.fakeIp,
               onChanged: (v) => _saveFakeIp(ref, settings, v),
@@ -354,13 +306,6 @@ class _XrayDnsSection extends ConsumerWidget {
   }
 }
 
-/// Секция «Mux» — мультиплексор соединений (Mux.Cool и XUDP).
-///
-/// Не путать с соседней XMUX: та живёт внутри транспорта XHTTP, эта — над
-/// протоколом и работает на vless, vmess и trojan.
-///
-/// Отдельный виджет по той же причине, что и остальные секции: свой `const`
-/// конструктор и своя подписка, перестраивается она одна.
 class _XrayMuxSection extends ConsumerWidget {
   const _XrayMuxSection();
 
@@ -440,9 +385,6 @@ class _XrayMuxSection extends ConsumerWidget {
                                 hint: '${XrayCoreSettings.defaultMuxConcurrency}',
                                 initialValue: '${core.muxConcurrency}',
                                 keyboardType: TextInputType.number,
-                                // Пустое или нечисловое поле — не повод отдать
-                                // ядру мусор: возвращаем умолчание, как и в
-                                // остальных полях этого экрана.
                                 onSave: (v) => _saveXrayCore(
                                   ref,
                                   settings,
@@ -529,11 +471,6 @@ class _XrayMuxSection extends ConsumerWidget {
   }
 }
 
-/// Секция «XMUX» экрана настроек ядра.
-///
-/// Отдельный виджет, а не кусок общего `build()`: у секции свой `const`
-/// конструктор и своя подписка на настройки, поэтому изменение внутри неё
-/// перестраивает её одну, а не весь экран.
 class _XrayXmuxSection extends ConsumerWidget {
   const _XrayXmuxSection();
 
@@ -545,8 +482,6 @@ class _XrayXmuxSection extends ConsumerWidget {
     final core = settings.xrayCore;
     final accent = AppTheme.accent(context);
     return Column(
-      // Дети слайвера растягиваются по ширине сами. Column по умолчанию
-      // центрирует, и без stretch карточки схлопнулись бы по содержимому.
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _XrayCoreSectionHeader(icon: Icons.merge_type_rounded, title: l10n.settingsXrayXmuxSection),
@@ -588,10 +523,6 @@ class _XrayXmuxSection extends ConsumerWidget {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    // Утопленная подложка под парой полей: роль поверхности
-                    // вместо полупрозрачного фона с рамкой. Рамка тут была
-                    // третьей границей подряд (страница → карточка → панель),
-                    // а тональной ступеньки для вложенности достаточно.
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: Theme.of(context)
@@ -720,11 +651,6 @@ class _XrayXmuxSection extends ConsumerWidget {
   }
 }
 
-/// Секция фрагментации TLS ClientHello.
-///
-/// Отдельный виджет, а не кусок общего `build()`: у секции свой `const`
-/// конструктор и своя подписка на настройки, поэтому изменение внутри неё
-/// перестраивает её одну, а не весь экран.
 class _XrayFragmentSection extends ConsumerWidget {
   const _XrayFragmentSection();
 
@@ -736,8 +662,6 @@ class _XrayFragmentSection extends ConsumerWidget {
     final core = settings.xrayCore;
     final accent = AppTheme.accent(context);
     return Column(
-      // Дети слайвера растягиваются по ширине сами. Column по умолчанию
-      // центрирует, и без stretch карточки схлопнулись бы по содержимому.
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _XrayCoreSectionHeader(
@@ -879,10 +803,6 @@ class _XrayFragmentSection extends ConsumerWidget {
   }
 }
 
-/// Секция шума перед UDP-трафиком.
-///
-/// Стоит следом за фрагментацией не случайно: это её пара. Фрагментация — для
-/// TCP-серверов, шум — для UDP-серверов, где резать нечего.
 class _XrayNoiseSection extends ConsumerWidget {
   const _XrayNoiseSection();
 
@@ -976,9 +896,6 @@ class _XrayNoiseSection extends ConsumerWidget {
                         padding: const EdgeInsets.all(12),
                         child: Column(
                           children: [
-                            // Поля мусора и своего пакета исключают друг друга:
-                            // ядро отвергает конфиг, где заданы оба. Показываем
-                            // ровно те, что относятся к выбранному виду.
                             if (random)
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1085,11 +1002,6 @@ class _XrayNoiseSection extends ConsumerWidget {
   }
 }
 
-/// Общие параметры ядра.
-///
-/// Отдельный виджет, а не кусок общего `build()`: у секции свой `const`
-/// конструктор и своя подписка на настройки, поэтому изменение внутри неё
-/// перестраивает её одну, а не весь экран.
 class _XrayGeneralSection extends ConsumerWidget {
   const _XrayGeneralSection();
 
@@ -1100,13 +1012,8 @@ class _XrayGeneralSection extends ConsumerWidget {
         ref.watch(settingsNotifierProvider).value ?? const AppSettings();
     final core = settings.xrayCore;
     final accent = AppTheme.accent(context);
-    // Уровень лога и сниффер читают оба ядра, а вот стратегию доменов mihomo
-    // не спрашивает: резолвить ли IP-правила, он решает сам по тому, есть ли
-    // они и снят ли sniffingRouteOnly (buildRules).
     final xray = ref.watch(activeVpnBackendProvider) == VpnBackend.xray;
     return Column(
-      // Дети слайвера растягиваются по ширине сами. Column по умолчанию
-      // центрирует, и без stretch карточки схлопнулись бы по содержимому.
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _XrayCoreSectionHeader(icon: Icons.tune_rounded, title: l10n.settingsXrayGeneralSection),
@@ -1223,11 +1130,6 @@ class _XrayGeneralSection extends ConsumerWidget {
   }
 }
 
-/// Секция TUN. Показывается только на десктопе — см. вызов.
-///
-/// Отдельный виджет, а не кусок общего `build()`: у секции свой `const`
-/// конструктор и своя подписка на настройки, поэтому изменение внутри неё
-/// перестраивает её одну, а не весь экран.
 class _XrayTunSection extends ConsumerWidget {
   const _XrayTunSection();
 
@@ -1238,12 +1140,8 @@ class _XrayTunSection extends ConsumerWidget {
         ref.watch(settingsNotifierProvider).value ?? const AppSettings();
     final tun = settings.tun;
     final accent = AppTheme.accent(context);
-    // Стек, MTU, маршруты и strict-route уезжают в tun-блок обоих ядер, а вот
-    // этих полей у mihomo нет вовсе: они из конфига sing-box.
     final xray = ref.watch(activeVpnBackendProvider) == VpnBackend.xray;
     return Column(
-      // Дети слайвера растягиваются по ширине сами. Column по умолчанию
-      // центрирует, и без stretch карточки схлопнулись бы по содержимому.
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _XrayCoreSectionHeader(
@@ -1297,9 +1195,7 @@ class _XrayTunSection extends ConsumerWidget {
                     title: 'mixed',
                     subtitle: l10n.settingsTunStackMixedHint,
                   ),
-                  // mips исполняет только mihomo, поэтому на xray его в списке нет.
-                  // Уже выбранный остаётся видным и там: иначе у группы не осталось
-                  // бы выбранного пункта, а снять его было бы нечем.
+                  // уже выбранный mips виден и на xray, иначе у группы не останется выбранного
                   if (!xray || tun.stack == TunSettings.stackMips)
                     _xrayChoiceTile(
                       context: context,
@@ -1470,10 +1366,7 @@ class _XrayTunSection extends ConsumerWidget {
 }
 
 
-/// Поле со списком DNS-серверов. Оно многострочное (`maxLines > 1`), а такой
-/// TextField не шлёт onSubmitted/onEditingComplete — Enter вставляет перенос
-/// строки, поэтому раньше введённые адреса нигде не сохранялись и «слетали»
-/// при выходе с экрана. Сохраняем по потере фокуса и при уходе с экрана.
+// многострочное поле не шлёт onSubmitted, поэтому сохраняем по потере фокуса и при уходе
 class _DnsServersField extends StatefulWidget {
   const _DnsServersField({
     required this.initialValue,
@@ -1486,7 +1379,6 @@ class _DnsServersField extends StatefulWidget {
   final String label;
   final ValueChanged<String> onSave;
 
-  /// Пример строки внутри поля.
   final String hintText;
 
   @override
@@ -1520,8 +1412,6 @@ class _DnsServersFieldState extends State<_DnsServersField> {
   @override
   void didUpdateWidget(covariant _DnsServersField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Внешнее изменение (например «Сбросить настройки») подхватываем только
-    // когда пользователь не редактирует поле, чтобы не затирать ввод.
     if (widget.initialValue != oldWidget.initialValue &&
         !_focus.hasFocus &&
         widget.initialValue != _ctrl.text) {

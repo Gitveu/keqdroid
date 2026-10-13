@@ -12,7 +12,7 @@ import '../models/traffic_route.dart';
 import '../utils/traffic_routes.dart';
 
 class StorageService {
-  static const _kServers       = 'keqdis_servers_v2';   // v2 = формат ServerItem
+  static const _kServers       = 'keqdis_servers_v2';
   static const _kSubscriptions = 'keqdis_subscriptions';
   static const _kRules         = 'keqdis_rules';
   static const _kRoutes        = 'keqdis_routes';
@@ -34,25 +34,10 @@ class StorageService {
   final SharedPreferences _prefs;
   StorageService(this._prefs);
 
-  /// Кэш распарсенного AppSettings. getSettings() зовётся на горячих путях
-  /// (connect, каждый pingBatch/pingSingle), а fromJsonString делает jsonDecode
-  /// на каждый вызов. Кэшируем объект; инвалидируем в saveSettings (наш write)
-  /// и reloadFromDisk (write из фонового изолята WorkManager).
   AppSettings? _settingsCache;
 
-  /// Все записи, reload() и read-modify-write циклы выполняются строго по
-  /// очереди.
-  /// 1) SharedPreferences.reload() подменяет весь Dart-кэш снапшотом
-  ///    платформы; если снапшот снят до завершения параллельного set*, кэш
-  ///    откатывается к старым значениям (так «воскресали» удалённые пакеты
-  ///    split tunneling).
-  /// 2) upsert/replace/delete читают список, правят и пишут целиком — два
-  ///    параллельных цикла (например, батч обновления подписок) читали одну
-  ///    базу и последняя запись затирала изменения первой (lost update).
-  ///    Поэтому в _serial оборачивается весь цикл, а не только setString.
-  ///
-  /// важно: _serial не реентерабелен — изнутри _serial-блока зовите только
-  /// сырые _write*-хелперы и get*-чтения, не публичные save*-методы.
+  // всё по одной очереди: reload() откатывал кэш поверх параллельного set*, а два цикла
+  // чтение-правка-запись затирали друг друга. _serial не реентерабелен, внутри только сырые _write* и get*
   Future<void> _opChain = Future.value();
 
   Future<T> _serial<T>(Future<T> Function() op) {
@@ -61,13 +46,6 @@ class StorageService {
     return run;
   }
 
-  /// Decodes a stored JSON array, parsing each element with [parse] and
-  /// skipping entries that fail instead of discarding the whole list.
-  ///
-  /// A single corrupt record (interrupted write, schema change across an
-  /// upgrade, manual edit) must not wipe every server/subscription/rule the
-  /// user has. Total corruption (not a JSON array at all) still throws so the
-  /// caller can surface it.
   static List<T> _decodeListResilient<T>(
     String raw,
     T Function(Map<String, dynamic>) parse,
@@ -92,17 +70,12 @@ class StorageService {
     return out;
   }
 
-  /// сбросить кэш prefs и подтянуть с диска (после workmanager)
   Future<void> reloadFromDisk() => _serial(() async {
         await _prefs.reload();
         _settingsCache = null;
       });
 
-  /// Один экземпляр на изолят: serial-очередь (_opChain) защищает от гонок
-  /// только внутри одного экземпляра, а повторный init() (например, из
-  /// desktop-фона runDueUpdates) дал бы вторую очередь поверх тех же
-  /// SharedPreferences — и RMW-циклы снова гонялись бы друг с другом.
-  /// Конструктор остаётся публичным для тестов.
+  // один экземпляр на изолят: вторая очередь поверх тех же prefs вернула бы гонки
   static StorageService? _instance;
 
   static Future<StorageService> init() async {
@@ -111,8 +84,6 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     return _instance = StorageService(prefs);
   }
-
-  // серверы
 
   Future<List<ServerItem>> getServers() async {
     try {
@@ -124,7 +95,6 @@ class StorageService {
     }
   }
 
-  /// Сырая запись серверов — только изнутри _serial-блоков.
   Future<void> _writeServers(List<ServerItem> servers) async {
     try {
       final raw = jsonEncode(servers.map((s) => s.toJson()).toList());
@@ -154,7 +124,6 @@ class StorageService {
         await _writeServers(servers);
       });
 
-  /// подменяет серверы подписки одним списком
   Future<void> replaceServersBySubscription(
     String subscriptionId,
     List<ServerItem> newServers,
@@ -174,10 +143,6 @@ class StorageService {
         );
       });
 
-  /// Точечно применяет результаты пинга к актуальному списку в storage и
-  /// возвращает записанный список. Именно точечно, а не снапшотом провайдера
-  /// через saveServers: если параллельно обновилась подписка, устаревший
-  /// список из памяти затёр бы её новые серверы.
   Future<List<ServerItem>> applyPingUpdates(
     Map<String, ({int? pingMs, String? lastPingType})> updates,
     DateTime testedAt,
@@ -208,8 +173,6 @@ class StorageService {
         return out;
       });
 
-  // подписки
-
   Future<List<Subscription>> getSubscriptions() async {
     try {
       final raw = _prefs.getString(_kSubscriptions);
@@ -220,7 +183,6 @@ class StorageService {
     }
   }
 
-  /// Сырая запись подписок — только изнутри _serial-блоков.
   Future<void> _writeSubscriptions(List<Subscription> subs) async {
     try {
       final raw = jsonEncode(subs.map((s) => s.toJson()).toList());
@@ -248,18 +210,13 @@ class StorageService {
         final subs = await getSubscriptions();
         subs.removeWhere((s) => s.id == id);
         await _writeSubscriptions(subs);
-        // Каскадно удаляем серверы — в том же serial-блоке, чтобы между
-        // двумя записями не вклинился параллельный RMW-цикл.
         final all = await getServers();
         await _writeServers(
           all.where((s) => s.subscriptionId != id).toList(),
         );
       });
 
-  // правила роутинга
-
-  /// «Свои правила» прежних версий. Читает их только перенос в маршруты
-  /// ([getRoutes]); не заводили — пусто.
+  // читает только перенос в маршруты (getRoutes)
   Future<List<RoutingRule>> getRules() async {
     try {
       final raw = _prefs.getString(_kRules);
@@ -279,17 +236,12 @@ class StorageService {
     }
   }
 
-  // маршруты
-
-  /// Маршруты. При первом чтении после обновления собираются из прежних трёх
-  /// списков и «Своих правил» ([routesFromLegacy]) и сохраняются; дальше
-  /// прежние поля не читает никто. Перенос ровно один раз: иначе удалённый
-  /// маршрут возвращался бы из старого поля при каждом запуске.
+  // перенос из трёх списков и своих правил ровно один раз: иначе удалённый маршрут возвращался бы из старого поля
   Future<List<TrafficRoute>> getRoutes() async {
     final raw = _prefs.getString(_kRoutes);
     if (raw != null) return _decodeRoutes(raw);
     return _serial(() async {
-      // Пока ждали очереди, перенос мог сделать другой вызов.
+      // пока ждали очереди, перенос мог сделать другой вызов
       final again = _prefs.getString(_kRoutes);
       if (again != null) return _decodeRoutes(again);
       final settings = await getSettings();
@@ -306,7 +258,6 @@ class StorageService {
   Future<void> saveRoutes(List<TrafficRoute> routes) =>
       _serial(() => _prefs.setString(_kRoutes, _encodeRoutes(routes)));
 
-  /// Разовая подсказка «списки стали маршрутами» ещё не закрыта.
   bool get routesHintPending => _prefs.getBool(_kRoutesHint) ?? false;
 
   Future<void> dismissRoutesHint() =>
@@ -323,8 +274,6 @@ class StorageService {
   static String _encodeRoutes(List<TrafficRoute> routes) =>
       jsonEncode([for (final r in routes) r.toJson()]);
 
-  // активный сервер
-
   String? getActiveServerId() => _prefs.getString(_kActiveId);
 
   Future<void> setActiveServerId(String? id) => _serial(() async {
@@ -334,8 +283,6 @@ class StorageService {
           await _prefs.setString(_kActiveId, id);
         }
       });
-
-  // split tunneling
 
   List<String> getExcludePackages() =>
       _prefs.getStringList(_kExcludePkgs) ?? [];
@@ -349,11 +296,6 @@ class StorageService {
   Future<void> setIncludePackages(List<String> packages) =>
       _serial(() => _prefs.setStringList(_kIncludePkgs, packages));
 
-  // настройки
-
-  /// Настройки из кэша без await; null — [getSettings] ещё ни разу не звали.
-  /// Для синхронных путей вроде HttpClient.findProxy, которому ответ нужен
-  /// прямо в момент запроса.
   AppSettings? get cachedSettings => _settingsCache;
 
   Future<AppSettings> getSettings() async {
@@ -375,8 +317,6 @@ class StorageService {
         _settingsCache = settings;
       });
 
-  // socks порт
-
   int? getSocksPort() => _prefs.containsKey(_kSocksPort)
       ? _prefs.getInt(_kSocksPort)
       : null;
@@ -384,28 +324,13 @@ class StorageService {
   Future<void> setSocksPort(int port) =>
       _serial(() => _prefs.setInt(_kSocksPort, port));
 
-  // Лучший результат в пасхалке. Отдельный ключ, а не поле AppSettings:
-  // к настройкам приложения он отношения не имеет, в резервную копию не
-  // просится и не должен тащиться в каждый copyWith настроек.
-
   int getKeqtrisBest() => _prefs.getInt(_kKeqtrisBest) ?? 0;
 
   Future<void> setKeqtrisBest(int score) =>
       _serial(() => _prefs.setInt(_kKeqtrisBest, score));
 
-  /// HTTP-инбаунд живой сессии; null — VPN не подключён.
-  ///
-  /// Пишется на диск, а не только в ActiveLocalPorts, ради фоновых изолятов:
-  /// WorkManager на Android живёт в своём изоляте и синглтонов главного не
-  /// видит, а обновлять подписки мимо туннеля ему нельзя.
   int? getActiveLocalHttpPort() => _prefs.getInt(_kActiveHttpPort);
 
-  /// Логин и пароль того же инбаунда; пустые — инбаунд без пароля или VPN
-  /// не подключён.
-  ///
-  /// Пишутся и стираются вместе с портом: без пароля фоновый изолят получал
-  /// 407 на каждое обновление подписки, пока включён VPN. Секрета на диске от
-  /// этого не прибавляется — тот же пароль лежит в конфиге ядра.
   ({String username, String password}) getActiveLocalHttpCredentials() => (
         username: _prefs.getString(_kActiveHttpUser) ?? '',
         password: _prefs.getString(_kActiveHttpPass) ?? '',
@@ -431,25 +356,16 @@ class StorageService {
         }
       });
 
-  // hwid
-
-  /// Сохранённый HWID (идентификатор устройства для подписок).
   String? getHwid() => _prefs.getString(_kHwid);
 
   Future<void> setHwid(String hwid) =>
       _serial(() => _prefs.setString(_kHwid, hwid));
 
-  // окно (Linux desktop; Windows хранит placement нативно в реестре)
-
-  /// Сохранённые границы окна: JSON `{x, y, w, h, maximized}`.
   String? getWindowBoundsJson() => _prefs.getString(_kWindowBounds);
 
   Future<void> setWindowBoundsJson(String json) =>
       _serial(() => _prefs.setString(_kWindowBounds, json));
 
-  // сортировка серверов по группам
-
-  /// Режимы сортировки групп серверов (id подписки/'__manual__' → имя режима).
   Map<String, String> getServerSortModes() {
     final raw = _prefs.getString(_kSortModes);
     if (raw == null) return {};
@@ -465,11 +381,6 @@ class StorageService {
   Future<void> setServerSortModes(Map<String, String> modes) =>
       _serial(() => _prefs.setString(_kSortModes, jsonEncode(modes)));
 
-  // уведомления об истёкших подписках
-
-  /// Для каких подписок уже показали «подписка истекла»: id → дата окончания,
-  /// по которой уведомили. Дата в ключе, а не голый флаг: провайдер продлевает
-  /// подписку — expiresAt меняется — и следующее истечение нужно показать снова.
   Map<String, String> getExpiryNotified() {
     final raw = _prefs.getString(_kExpiryNotified);
     if (raw == null) return {};

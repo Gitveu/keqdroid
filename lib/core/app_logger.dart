@@ -18,8 +18,6 @@ class AppLogger {
 
   bool _crashlyticsEnabled = false;
 
-  /// Половина мегабайта на два файла: столько человек ещё пришлёт письмом, а
-  /// причина обычно в последних строках.
   static const _maxLogBytes = 256 * 1024;
 
   File? _logFile;
@@ -28,23 +26,13 @@ class AppLogger {
     _crashlyticsEnabled = enabled;
   }
 
-  /// Дублировать лог в файл рядом с настройками.
-  ///
-  /// developer.log в релизной сборке не видно нигде: упавший до runApp старт
-  /// не оставлял ни строчки ни на экране, ни на диске. На Android есть ещё
-  /// Crashlytics, но он берёт только ошибки и только с согласия, а файл
-  /// человек видит сам — в «Журнале приложения».
   Future<void> enableFileLog() async {
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isAndroid) return;
     try {
       enableFileLogIn(await getApplicationSupportDirectory());
-    } catch (_) {
-      // Каталог недоступен — логгер молчит, но старт не трогает.
-    }
+    } catch (_) {}
   }
 
-  /// Журнал с прошлой половиной (`app.log.1`), не больше [maxChars] с конца.
-  /// Пусто — файл не заведён или не читается.
   Future<String> readFileLog({int maxChars = 512 * 1024}) async {
     final file = _logFile;
     if (file == null) return '';
@@ -60,21 +48,16 @@ class AppLogger {
     }
   }
 
-  /// Каталог параметром, а не через path_provider: в тестах он не отвечает.
   @visibleForTesting
   void enableFileLogIn(Directory dir) {
     final file = File('${dir.path}${Platform.pathSeparator}app.log');
     try {
-      // Ротация одна, на старте: внутри сессии лог растёт редко, а проверять
-      // длину на каждой строке значило бы лишний stat на каждый лог.
       if (file.existsSync() && file.lengthSync() > _maxLogBytes) {
         final previous = File('${file.path}.1');
         if (previous.existsSync()) previous.deleteSync();
         file.renameSync(previous.path);
       }
-    } catch (_) {
-      // Ротация не вышла — пишем дальше в тот же файл.
-    }
+    } catch (_) {}
     _logFile = file;
   }
 
@@ -102,9 +85,6 @@ class AppLogger {
   }) async {
     _log('ERROR', reason, error: error, stackTrace: stackTrace);
     if (_crashlyticsEnabled) {
-      // Крашрепорт уходит на внешний сервис — маскируем секреты (uuid/пароли
-      // в URI серверов, токены подписок). Полным остаётся только developer.log,
-      // который никуда не уезжает.
       final rawText = error.toString();
       final redactedText = redactSensitive(rawText);
       final Object sanitized =
@@ -118,17 +98,12 @@ class AppLogger {
     }
   }
 
-  /// Маскирует чувствительные фрагменты в строке перед отправкой наружу:
-  /// userinfo в URI (uuid/пароль до @), значения секретных query-параметров,
-  /// UUID и длинные токены в path-сегментах URL (секрет подписки).
   static String redactSensitive(String input) {
     var s = input;
-    // scheme://userinfo@host — userinfo это uuid/пароль/base64(method:pass)
     s = s.replaceAllMapped(
       RegExp(r'([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@\s]+@'),
       (m) => '${m.group(1)}***@',
     );
-    // секретные query-параметры
     s = s.replaceAllMapped(
       RegExp(
         r'''([?&](?:token|key|secret|password|pass|auth|hwid|device_id|deviceid)=)[^&\s"']+''',
@@ -136,7 +111,6 @@ class AppLogger {
       ),
       (m) => '${m.group(1)}***',
     );
-    // UUID где угодно (id серверов vless/vmess)
     s = s.replaceAll(
       RegExp(
         r'\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-'
@@ -144,7 +118,6 @@ class AppLogger {
       ),
       '***',
     );
-    // длинный токен последним path-сегментом URL (типичный секрет подписки)
     s = s.replaceAllMapped(
       RegExp(r'''(https?://[^\s"']*/)([A-Za-z0-9_-]{16,})(?![\w-])'''),
       (m) => '${m.group(1)}***',
@@ -178,21 +151,15 @@ class AppLogger {
     if (error != null) line.write(' | error: $error');
     if (stackTrace != null) line.write('\n$stackTrace');
     try {
-      // Файл человек пересылает в поддержку — маскируем то же, что и для
-      // Crashlytics. flush: строка нужна на диске до того, как процесс умрёт.
       file.writeAsStringSync(
         '${redactSensitive(line.toString())}\n',
         mode: FileMode.append,
         flush: true,
       );
-    } catch (_) {
-      // Диск занят, файл заблокирован, места нет — логгер молчит и только.
-    }
+    } catch (_) {}
   }
 }
 
-/// Обёртка для Crashlytics: несёт уже замаскированный toString() исходной
-/// ошибки (тип обычно входит в него, см. [AppLogger.redactSensitive]).
 class _RedactedError implements Exception {
   final String message;
 

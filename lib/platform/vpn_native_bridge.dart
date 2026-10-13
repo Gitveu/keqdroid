@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import '../services/hotkey_service.dart';
 import '../utils/system_accent.dart';
 
-/// android: действия из уведомления; windows: автоподключение, меню трея и хоткеи
 class VpnNativeBridge {
   VpnNativeBridge._();
 
@@ -32,10 +31,6 @@ class VpnNativeBridge {
     await channel.invokeMethod<void>('clearLaunchAction');
   }
 
-  /// Цвет фона окна Android. Нативная тема окна переключается системной тёмной
-  /// темой, а наша — своей настройкой, поэтому цвет присылаем сами; натив его
-  /// запоминает и красит окно ещё до первого кадра на следующем старте.
-  /// Подробности — в `_syncAndroidWindowBackground` (app/app.dart).
   static Future<void> setWindowBackgroundColor(int argb) async {
     if (!Platform.isAndroid) return;
     try {
@@ -43,23 +38,15 @@ class VpnNativeBridge {
         'color': argb,
       });
     } on PlatformException {
-      // Косметика: окно просто останется прежнего цвета.
+      // окно просто останется прежнего цвета
     }
   }
 
-  /// Ссылка vless://… или keqdroid://install-config?url=…, с которой систему
-  /// попросили открыть приложение. Одноразовая: натив отдаёт и забывает её.
-  ///
-  /// На Windows этим же путём приходят и ссылки при живом приложении: натив
-  /// держит их у себя, а `onDeepLink` только будит нас (см. ниже).
   static Future<String?> getPendingDeepLink() async {
     if (!supportsDeepLinks) return null;
     return channel.invokeMethod<String>('getPendingDeepLink');
   }
 
-  /// Android-данные для панели «Внутренности»: каталог нативных библиотек
-  /// (версии ядер читаются прямо из их файлов), PID запущенных ядер и сведения
-  /// об устройстве. Пустая карта — не Android или сервис недоступен.
   static Future<Map<String, Object?>> getNativeInternals() async {
     if (!Platform.isAndroid) return const {};
     try {
@@ -72,9 +59,6 @@ class VpnNativeBridge {
     }
   }
 
-  /// Прошлые смерти процесса приложения, как их записала система (Android
-  /// 11+). Пустой список — записей нет, платформа не та или канал не ответил:
-  /// панель без этой секции обойдётся.
   static Future<List<Map<Object?, Object?>>> getProcessExits() async {
     if (!Platform.isAndroid) return const [];
     try {
@@ -88,10 +72,6 @@ class VpnNativeBridge {
     }
   }
 
-  /// Все источники цвета системной темы разом; выбор между ними — за
-  /// [pickSystemAccent]. Нужны, когда плагин dynamic_color молчит: официальный
-  /// флаг Material You есть далеко не у каждой прошивки, а цвет темы у них при
-  /// этом свой.
   static Future<SystemAccentCandidates> getSystemAccentCandidates() async {
     if (!Platform.isAndroid) return const SystemAccentCandidates.empty();
     try {
@@ -104,26 +84,14 @@ class VpnNativeBridge {
     }
   }
 
-  /// Цвета системы после смены обоев.
-  ///
-  /// Broadcast и без закрытия: слушателей может быть несколько (тема плюс
-  /// диагностика), а живёт поток столько же, сколько само приложение.
   static final _systemAccentCtrl =
       StreamController<SystemAccentCandidates>.broadcast();
 
   static Stream<SystemAccentCandidates> get systemAccentChanges =>
       _systemAccentCtrl.stream;
 
-  /// Слушать смену обоев имеет смысл только там, где её кто-то шлёт.
   static bool get supportsSystemAccentEvents => Platform.isAndroid;
 
-  /// Координаты RESTful API у работающей mihomo-сессии: `port` и `secret`.
-  ///
-  /// Нужно только свежему Dart-изоляту, когда VpnService пережил пересоздание
-  /// Flutter-движка (и после реконнекта из плитки — там сессию поднимает сам
-  /// сервис, а Dart о ней узнаёт постфактум). Натив достаёт пару из того же
-  /// файла конфига, который исполняет ядро, — расходиться им негде.
-  /// null — сессии нет или она не на mihomo.
   static Future<({int port, String secret})?> getMihomoApi() async {
     if (!Platform.isAndroid) return null;
     try {
@@ -137,11 +105,6 @@ class VpnNativeBridge {
     }
   }
 
-  /// Сколько раз ядро сессии не дозвонилось до своего сервера (монотонно).
-  ///
-  /// Число из читателя лога ядра, без сети: приложение сравнивает два чтения
-  /// и только по всплеску отказов идёт проверять сервер по-настоящему.
-  /// null — платформа так не умеет (десктоп) или канал не ответил.
   static Future<int?> dialFailures() async {
     if (!Platform.isAndroid) return null;
     try {
@@ -151,11 +114,6 @@ class VpnNativeBridge {
     }
   }
 
-  /// Имена приложений-владельцев соединений, по одному на каждый элемент
-  /// [connections] (`protocol`, `srcIp`, `srcPort`, `dstIp`, `dstPort`).
-  ///
-  /// Пустая строка — не определилось: соединение уже закрылось (система ищет
-  /// его в живой таблице сокетов), Android младше 10 или у uid нет пакетов.
   static Future<List<String>> resolveConnectionOwners(
     List<Map<String, Object?>> connections,
   ) async {
@@ -188,7 +146,6 @@ class VpnNativeBridge {
     _syncMethodCallHandler();
   }
 
-  /// Windows: окно скрыто в трей / восстановлено (нативный `onWindowVisibility`).
   static void registerWindowVisibilityHandler(
     void Function(bool visible)? handler,
   ) {

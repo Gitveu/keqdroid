@@ -14,15 +14,10 @@
 namespace {
 constexpr UINT kAutostartConnectMsg = WM_APP + 100;
 
-// Окно показывается только по первому кадру (см. SetNextFrameCallback ниже).
-// Если кадра нет — например, старт упал до runApp, — человек получает живой
-// процесс без окна и без трея: иконку трея заводит Dart, которого нет. Убрать
-// такое можно только через диспетчер задач, а понять причину нельзя вовсе.
-//
-// Идентификатор нарочно не единица: её первой берёт всякий, кто подсаживается
-// на это же окно (window_manager сабклассит его), а таймеры нумеруются на окно.
+// окно по первому кадру, без кадра остаётся процесс без окна и трея.
+// id не единица: её первой берёт window_manager, который сабклассит это окно
 constexpr UINT_PTR kStartupWatchdogTimerId = 0x4B440001;
-// Запас на самый медленный честный старт.
+// с запасом на самый медленный честный старт
 constexpr UINT kStartupWatchdogMs = 20000;
 }  // namespace
 
@@ -81,8 +76,7 @@ void FlutterWindow::OnDestroy() {
 }
 
 void FlutterWindow::ReportStartupFailure(HWND hwnd) {
-  // Закрытие обязано завершать процесс: спрятать окно в трей некуда, иконку
-  // туда ставит Dart, а его тут нет — иначе был бы кадр.
+  // закрытие обязано завершать процесс: иконку трея ставит Dart, а его нет
   WindowsTraySetMinimizeToTray(false);
   ::ShowWindow(hwnd, SW_SHOW);
   ::SetForegroundWindow(hwnd);
@@ -98,9 +92,7 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
-  // До Flutter и плагинов и без перехвата: любой из них может ответить на
-  // сообщение сам, и тогда прокси остался бы висеть. На WM_QUERYENDSESSION
-  // рано — выключение ещё могут отменить, и VPN молча остался бы без прокси.
+  // до Flutter и плагинов: любой может ответить сам, и прокси повис бы. на WM_QUERYENDSESSION рано, выключение ещё отменят
   if (message == WM_ENDSESSION && wparam) {
     KeqdisClearSystemProxyOnSessionEnd();
   }
@@ -127,13 +119,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       KeqdisRequestAutostartConnect();
       return 0;
     case WM_COPYDATA: {
-      // A second instance, launched by the browser for a keqdroid:// link,
-      // handed it to us and exited.
       std::string url;
       if (KeqdroidDeepLinkFromCopyData(lparam, &url)) {
-        // Come back from the tray ourselves instead of leaving it to the
-        // other process: only this one knows it is hidden or showing the tray
-        // popup, and the result of the import has to be visible somewhere.
+        // из трея поднимаемся сами: только этот процесс знает, спрятано ли окно, а итог импорта должно быть видно
         WindowsTrayActivateMainWindow();
         KeqdisRequestDeepLink(url);
         return TRUE;

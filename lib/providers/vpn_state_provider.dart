@@ -1,24 +1,14 @@
 part of 'providers.dart';
 
-/// Что делать с состоянием из натива, пока идёт наша попытка подключения.
 enum ConnectInFlightAction {
-  /// Не трогать состояние: сообщение ничего не говорит об исходе попытки.
   ignore,
 
-  /// Применить, попытка продолжается.
   apply,
 
-  /// Применить и считать попытку завершённой.
   applyAndFinish,
 }
 
-/// Правило отсечки для [VpnStateNotifier].
-///
-/// Ключевой случай — `disconnected` до старта сессии. Между тапом и запуском
-/// сервиса стрим и полутрасекундный поллинг успевают доложить «отключено»,
-/// потому что сервис ещё не поднят. Принять этот ответ за исход попытки —
-/// значит погасить UI на полпути: connecting → disconnected → connected.
-/// Особенно заметно на первом подключении, когда сервис холодный.
+// до старта сессии сервис ещё не поднят и честно отвечает disconnected, это не исход попытки
 ConnectInFlightAction connectInFlightAction(
   VpnStatus status, {
   required bool awaitingSessionStart,
@@ -38,22 +28,12 @@ ConnectInFlightAction connectInFlightAction(
 class VpnStateNotifier extends AsyncNotifier<VpnState> {
   StreamSubscription<VpnState>? _sub;
   bool _connectInFlight = false;
-  // Окно от тапа до фактического старта сессии. Всё это время нативный сервис
-  // ещё не поднят и честно отвечает `disconnected` — принимать этот ответ за
-  // исход нашей попытки нельзя.
   bool _awaitingSessionStart = false;
   bool _serverSwitchInProgress = false;
-  // Пользователь отменил попытку подключения (тап по кругу в connecting) —
-  // connect-in-flight сворачивается в disconnected вместо error/connected.
   bool _cancelRequested = false;
-  // Сигналит _waitForDisconnected при приходе события disconnected из стрима —
-  // вместо опроса state с фиксированными задержками.
   Completer<void>? _disconnectWaiter;
   Timer? _androidPollTimer;
 
-  /// Сторож автовыбора: сколько байт туннель пропустил к прошлому тику. Байты
-  /// и есть главное доказательство жизни — пока они идут, в сеть сторож не
-  /// ходит вовсе.
   Timer? _autoSelectTimer;
   Timer? _autoSelectListenTimer;
   int _autoSelectSeenReceived = 0;
@@ -65,13 +45,8 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
   DateTime? _autoSelectQuietUntil;
   bool _autoSelectBusy = false;
 
-  /// Прошлая секунда прослушки ещё не вернулась: на десктопе это запрос к
-  /// ядру, и медленное ядро получало бы их внахлёст, по одному в секунду.
   bool _autoSelectListening = false;
 
-  /// Плановая проверка ([AutoSelectWatchdog.recheckEvery]) и сколько байт
-  /// туннель пропустил к прошлой: не сдвинулось — телефон лежит, и проверять
-  /// нечего.
   Timer? _autoSelectRecheckTimer;
   int? _autoSelectRecheckSeenBytes;
   AppLifecycleListener? _androidLifecycle;
@@ -82,8 +57,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     _persistActiveLocalHttpPort(s.status);
     if (_serverSwitchInProgress && s.status == VpnStatus.error) return;
     if (_connectInFlight) {
-      // Реальный неуспех попытки ловит _awaitNativeConnectOutcome, поэтому
-      // отсечка ничего не теряет.
       switch (connectInFlightAction(
         s.status,
         awaitingSessionStart: _awaitingSessionStart,
@@ -107,18 +80,11 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     state = AsyncData(s);
   }
 
-  /// Порт HTTP-инбаунда живой сессии и пароль к нему — на диск, для фоновых
-  /// изолятов.
-  ///
-  /// Они обновляют подписки, не видя ни riverpod-состояния, ни ActiveLocalPorts
-  /// (синглтон живёт в своём изоляте), а идти мимо туннеля им нельзя: пакет
-  /// приложения исключён из TUN. Пробы порта тут мало — на 2081 может слушать
-  /// другой VPN-клиент, и подписка с токеном ушла бы через него.
+  // для фоновых изолятов: мимо туннеля им нельзя, а пробовать порт мало, на нём может слушать чужой клиент
   void _persistActiveLocalHttpPort(VpnStatus status) {
     final storage = ref.read(storageProvider);
     if (status != VpnStatus.connected) {
-      // Сброс идёт без единого await: иначе запись подключения, застрявшая на
-      // чтении настроек, воскресила бы порт уже после отключения.
+      // сброс без await, иначе зависшая запись подключения воскресит порт после отключения
       if (storage.getActiveLocalHttpPort() != null) {
         unawaited(storage.setActiveLocalHttpPort(null));
       }
@@ -128,18 +94,12 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
   }
 
   Future<void> _writeActiveLocalHttpPort(StorageService storage) async {
-    // Сессионный порт ставит только десктоп (LocalPortResolver); на Android
-    // подмены нет — там правда в настройках, и читать её надо через
-    // getSettings: кэш может быть ещё холодным, и на диск уехал бы дефолтный
-    // порт вместо настроенного.
+    // на Android через getSettings: кэш может быть холодным, и на диск уехал бы порт по умолчанию
     final port =
         ActiveLocalPorts().httpPort ?? (await storage.getSettings()).httpPort;
     if (!ref.mounted) return;
-    // За время чтения статус мог смениться — не воскрешаем порт после отключения
     if (state.value?.status != VpnStatus.connected) return;
-    // _applyNativeState зовётся и на каждый тик телеметрии — пишем только
-    // смену. Пароль сверяем тоже: после переподключения порт прежний, а пароль
-    // новый, и на Android он ещё и приезжает из сервиса позже порта.
+    // пароль сверяем тоже: после реконнекта порт прежний, а пароль новый
     final creds = Socks5Credentials();
     final stored = storage.getActiveLocalHttpCredentials();
     if (storage.getActiveLocalHttpPort() == port &&
@@ -156,12 +116,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
 
   bool _credsRestoreInFlight = false;
 
-  /// VpnService на Android переживает пересоздание Flutter-движка, а синглтон
-  /// Socks5Credentials живёт в Dart-изоляте: свежий изолят видит connected, но
-  /// ходит в запароленный локальный http-инбаунд без Proxy-Authorization и
-  /// получает 407 (проверка обновлений, рефреш подписок). Подтягиваем креды
-  /// работающей сессии из нативного сервиса. Connect-flow перезапишет их при
-  /// следующем подключении через Socks5Credentials().init.
+  // VpnService переживает пересоздание движка, и без кредов свежий изолят получает 407
   void _restoreSocksCredentialsIfNeeded(VpnState s) {
     if (!Platform.isAndroid) return;
     if (s.status != VpnStatus.connected) return;
@@ -186,27 +141,12 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
 
   bool _mihomoApiRestoreInFlight = false;
 
-  /// Держит [MihomoApiSession] в согласии с тем, что реально происходит в
-  /// нативном сервисе.
-  ///
-  /// Два случая, когда синглтон пуст, а сессия жива: пересоздание
-  /// Flutter-движка и реконнект из плитки (там ядро поднимает сервис, connect-
-  /// flow в Dart не выполняется вовсе). В обоих натив достаёт пару из файла
-  /// конфига, который исполняет ядро.
-  ///
-  /// Обратная сторона — отключение: в мёртвый порт экран «Соединения» стучался
-  /// бы по три секунды на каждый опрос, показывая «Core API unreachable»
-  /// вместо честного «сессии нет».
   void _syncMihomoApiSession(VpnState s) {
     final api = MihomoApiSession();
-    // Зачистка — на всех платформах: пара переживает сессию, а по ней
-    // «Соединения» решают, к какому диалекту API обращаться.
     if (s.status == VpnStatus.disconnected || s.status == VpnStatus.error) {
       api.clear();
       return;
     }
-    // Восстановление — только на Android: это единственное место, где сессия
-    // ядра переживает Dart-изолят (плитка, пересоздание движка).
     if (!Platform.isAndroid) return;
     if (s.status != VpnStatus.connected) return;
     if (api.isActive || _mihomoApiRestoreInFlight) return;
@@ -300,8 +240,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     }
   }
 
-  /// Подтягивает фактическое состояние из нативного сервиса (Android VpnService).
-  /// Нужно при возврате в приложение и когда VPN переключали из шторки/плитки QS.
   Future<void> syncFromNative() async {
     try {
       final s = await ref.read(vpnEngineProvider).getCurrentState();
@@ -331,9 +269,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     return engine.getCurrentState();
   }
 
-  /// Домены из списков по ссылкам — из того, что уже лежит на диске: сети
-  /// подключение не ждёт, свежесть держит [ruleListsProvider]. Нечитаемый
-  /// кэш — не повод не подключаться: тогда едем без списков.
   Future<RuleListDomains> _cachedRuleLists(AppSettings settings) async {
     try {
       final lists = await ref.read(ruleListServiceProvider).domainsFor(settings);
@@ -354,11 +289,8 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     }
   }
 
-  /// Правка настроек, сделанная по ходу подключения, ложится на сохранённые
-  /// настройки, а не на `settings` из connect(): там списки уже в виде для
-  /// ядра — со сложенными структурными правилами и без неизвестных geo-кодов.
-  /// На диске этот вид навсегда приклеил бы правила к полям: выключенное
-  /// правило продолжало бы работать, а включённое дописывалось бы ещё раз.
+  // на диск только правка поверх сохранённых настроек: в settings из connect() правила уже
+  // сложены в списки, и так они приклеились бы к полям навсегда
   Future<void> _saveDuringConnect(
     AppSettings Function(AppSettings saved) change,
   ) async {
@@ -366,10 +298,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     await ref.read(settingsNotifierProvider.notifier).save(change(saved));
   }
 
-  /// Сайты маршрута перед генерацией: неизвестные geo-коды выброшены, как и
-  /// у списков (xray на таком коде роняет весь конфиг), а ссылки на списки
-  /// развёрнуты в скачанные домены. Нечитаемый кэш списков подключению не
-  /// мешает — маршрут едет со своими записями.
+  // неизвестные geo-коды выбрасываем: xray на таком коде роняет весь конфиг. нечитаемый кэш списков подключению не мешает
   Future<({String entries, List<String> listDomains})> _prepareRouteEntries(
     String entries,
     GeoAssetIndex index,
@@ -417,10 +346,8 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     return out;
   }
 
-  /// Настройки для sing-box в десктопном TUN: сайты маршрутов на другие
-  /// серверы он обязан отдать встроенному xray (выход `proxy`), а тот уже
-  /// разведёт их по серверам. Без этого при «Всё остальное → напрямую»
-  /// sing-box отправил бы их мимо туннеля, не спросив xray.
+  // сайты маршрутов на другие серверы sing-box обязан отдать встроенному xray,
+  // иначе при всё остальное напрямую он отправил бы их мимо туннеля
   static AppSettings _withRouteServersViaProxy(
     AppSettings settings,
     List<RouteServerOutbound> routeServers,
@@ -461,15 +388,13 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
 
       final engine = ref.read(vpnEngineProvider);
 
-      // Плитка QS / уведомление могли уже поднять VPN, пока Flutter готовил конфиг.
       final native = await engine.getCurrentState();
       if (native.status == VpnStatus.connected) {
         state = AsyncData(native);
         return;
       }
       if (native.status == VpnStatus.connecting) {
-        // Сервис уже поднимается (плитка QS / уведомление) — «отключено» из
-        // стрима с этого момента говорит о нашей же сессии, отсечку снимаем.
+        // сервис уже поднят плиткой или уведомлением, отсечка больше не нужна
         _awaitingSessionStart = false;
         state = AsyncData(native);
         final settled = await _awaitNativeConnectOutcome(engine);
@@ -485,19 +410,14 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       final stored = await ref.read(storageProvider).getSettings();
       final routes = await ref.read(storageProvider).getRoutes();
 
-      // Ядро выбирает формат сервера, а настройка — только там, где формат
-      // берут оба (обычная ссылка). Готовый конфиг исполняет то ядро, на языке
-      // которого он написан: xray-json — xray, clash-yaml — mihomo. Выбирается
-      // до свёртки маршрутов: от ядра зависит, какие «другие серверы» встанут
-      // в конфиг, а сам выбор от маршрутов не зависит.
+      // готовый конфиг исполняет ядро его языка, настройка решает только для обычной ссылки.
+      // выбираем до свёртки маршрутов: от ядра зависит, какие другие серверы встанут в конфиг
       final choice = resolveVpnBackend(
         config: server.config,
         preference: stored.vpnCore,
         mihomoAvailable: mihomoShipsHere,
       );
-      // Маршруты приложений — там же, где их обещает экран (appRoutesRun).
-      // Режим — сохранённый: если автозапуск ниже откатится в прокси,
-      // генератор без туннеля правил по процессам и так не напишет.
+      // режим сохранённый: если автозапуск откатится в прокси, генератор без туннеля правил по процессам и так не напишет
       final appsRun = appRoutesRun(
         core: choice.backend,
         mode: TunnelSessionBuilder.resolveMode(stored),
@@ -518,13 +438,8 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
             )
           : const <RouteAppRules>[];
 
-      // Маршруты «все приложения» складываем в три текстовых списка настроек —
-      // так они попадают во все генераторы конфига без правок в них. Маршрут
-      // на сервер без своего выхода (пропал, совпал с активным, не встаёт в
-      // это ядро) уходит «через VPN». Затем выкидываем geoip:/geosite:-коды,
-      // которых нет в поставляемых базах: xray на неизвестном коде не
-      // игнорирует правило, а падает на разборе всего конфига, и подключение
-      // умирает с «SOCKS port not ready».
+      // маршрут на сервер без своего выхода (пропал, совпал с активным, не встаёт в ядро) уходит через VPN.
+      // неизвестные geo-коды выбрасываем: xray на них падает целиком (SOCKS port not ready)
       var settings = await GeoAssetService.sanitizeRules(
         foldRoutes(
           stored,
@@ -532,9 +447,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
           serverUsable: (r) => routeServers.any((o) => o.serverId == r.serverId),
         ),
       );
-      // Свои DNS-адреса, которых ядро не исполнит, генератор выбрасывает молча
-      // (иначе они не «не сработают», а не дадут ядру подняться). Пользователю
-      // это видно только по тому, что его DNS «не применился» — говорим прямо.
       if (settings.xrayCore.dnsUseCustom) {
         final dropped =
             XrayCoreSettings.xrayDnsServers(settings.xrayCore.dnsServers)
@@ -557,9 +469,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         includePackages: split.includePackages,
         excludePackages: split.excludePackages,
       );
-      // На Linux имена сюда не передавались вовсе — ограничение осталось от
-      // времени, когда десктопом был один Windows, — и сплит в TUN там не
-      // исполнялся. Android отдаёт сплит VpnService, имена ядру не нужны.
       final processNames = (Platform.isWindows || Platform.isLinux)
           ? processNamesForSplit(
               includePackages: split.includePackages,
@@ -569,9 +478,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
 
       var connectionMode = TunnelSessionBuilder.resolveMode(settings);
 
-      // Разрешение на VPN — только если сессия и правда поднимет интерфейс.
-      // В режиме «прокси» на Android establish() не вызывается, и системный
-      // диалог был бы просьбой о праве, которым не воспользуешься.
       if (Platform.isAndroid && connectionMode != ConnectionMode.proxy) {
         final permitted = await engine.requestVpnPermission();
         if (!permitted) throw const VpnPermissionDeniedException();
@@ -579,9 +485,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       if ((Platform.isWindows || Platform.isLinux) &&
           connectionMode == ConnectionMode.proxy &&
           routingMode != AppRoutingMode.allProxy) {
-        // Не «сплит не сработал», а «сессия идёт как весь-трафик»: без туннеля
-        // ядро не знает процесса-владельца соединения, а оставленный от сплита
-        // финал (`onlySelected` → DIRECT) отправил бы мимо прокси всё.
         AppLogger.instance.warn(
           'Split tunneling rules are ignored in Proxy mode on desktop: without '
           'a tunnel the core cannot tell which process a connection belongs '
@@ -597,9 +500,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
             AppLogger.instance.warn(
               'Autostart: TUN requires admin rights, falling back to Proxy',
             );
-            // Персистим фактический режим, чтобы sidebar/tray показывали Proxy,
-            // а не TUN. Иначе UI остаётся в TUN, и повторный выбор TUN не
-            // срабатывает (next == current), вынуждая делать proxy→tun вручную.
+            // иначе интерфейс остаётся в TUN, и повторный выбор TUN не срабатывает (next == current)
             await _saveDuringConnect(
               (saved) => saved.copyWith(
                 connectionMode: ConnectionMode.proxy.storageValue,
@@ -613,14 +514,8 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         }
       }
 
-      // Локальные порты — это пожелание, а не факт. 2080 держит сосед (второй
-      // клиент, наше же осиротевшее ядро, локальный сервер), а на Windows целые
-      // диапазоны изымает Hyper-V/WSL: слушателя нет, `netstat` пуст, бинд
-      // запрещён (WSAEACCES). Раньше любой из этих случаев заканчивался отказом
-      // подключаться — снаружи «прокси/TUN не работает», а чинить надо руками и
-      // в другом месте. Теперь порт подбирается рабочий; расхождение с
-      // настройкой идёт в лог, а сами настройки не переписываются: на диск по
-      // ходу подключения уходят только точечные правки (_saveDuringConnect).
+      // настроенный порт может держать сосед, а на Windows диапазоны изымают Hyper-V и WSL,
+      // поэтому подбираем рабочий и настройки не переписываем
       if (Platform.isWindows || Platform.isLinux) {
         final portPlan = await LocalPortResolver.resolve(settings);
         for (final change in portPlan.changes) {
@@ -633,12 +528,8 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         );
       }
 
-      // 1. забираем SOCKS5-креды у нативного сервиса
       final creds = await engine.fetchSocksCredentials();
-      // В режиме прокси креды вписывают руками в чужое приложение, поэтому там
-      // нужны постоянные, а не сессионные: нативные генерируются заново на
-      // каждое подключение, и настройка в стороннем приложении протухала бы
-      // после первого же реконнекта.
+      // в режиме прокси креды вписывают руками в чужое приложение, сессионные протухали бы на реконнекте
       if (Platform.isAndroid &&
           connectionMode == ConnectionMode.proxy &&
           settings.proxyModeAuth) {
@@ -657,32 +548,15 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         Socks5Credentials().init(creds.username, creds.password);
       }
 
-      // 2. резолвим домен сервера заранее, чтобы direct-правило роутинга
-      //    шло по IP, а не по домену (важно когда DNS сам идёт через прокси)
       final serverIp =
           await _resolveFirstAddress(server.address) ?? server.address;
 
-      // Desktop system/Firefox proxy config — Windows wininet, GNOME gsettings,
-      // Firefox user.js — has no field for SOCKS/HTTP credentials, so password
-      // auth on the localhost inbounds makes browsers prompt endlessly. Use
-      // noauth on the loopback inbounds in desktop proxy mode (safe: they bind
-      // to 127.0.0.1 only).
-      //
-      // На Android в режиме прокси — та же причина, и она там жёстче.
-      // Пароль к локальному SOCKS придуман для тех, кто
-      // ходит в ядро в режиме VPN, и креды ему передаются в обход человека. В
-      // режиме прокси в ядро ходит чужое приложение, а системному полю «прокси»
-      // у Wi-Fi негде взять логин с паролем — там только адрес и порт. Оставь
-      // мы auth, режим не работал бы вовсе: ядро отвечает `invalid username or
-      // password` на каждое соединение.
-      // На десктопе auth в прокси-режиме невозможен всегда (системный прокси и
-      // Firefox кред не шлют), на Android — настройка.
+      // системный прокси Windows/GNOME и поле прокси у Wi-Fi не умеют пароль: с auth браузеры
+      // спрашивают его без конца, а на Android ядро отбивает каждое соединение
       final proxyModeNoAuth = connectionMode == ConnectionMode.proxy &&
           (!Platform.isAndroid || !settings.proxyModeAuth);
 
-      // Несовпадение ядра с выбором пользователя не молчит: раньше это
-      // выглядело как «настройка не работает» (в списке ядер mihomo, в сессии
-      // libxray).
+      // несовпадение ядра с выбором пишем в лог: раньше это выглядело как настройка не работает
       if (choice.skip != null) {
         AppLogger.instance.warn(
           'Core preference "${settings.vpnCore}" is not used for this server: '
@@ -694,8 +568,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       final vpnBackend = choice.backend;
       final mihomoPicked = vpnBackend == VpnBackend.mihomo;
 
-      // Координаты API ядра нужны до генерации: они едут внутрь конфига.
-      // У xray-пути аналога нет — там «Соединения» читают access-лог.
       final mihomoApi = MihomoApiSession();
       if (mihomoPicked) {
         await mihomoApi.renew();
@@ -703,19 +575,13 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         mihomoApi.clear();
       }
 
-      // Туннель принадлежит самому mihomo: адаптер, маршруты и перехват DNS —
-      // его, а не sing-box'а. Различие платформ ровно одно: на
-      // десктопе ядро создаёт устройство само, на Android получает готовый
-      // дескриптор от VpnService (и потому не трогает ни адреса, ни маршруты).
       final MihomoTunOptions? mihomoTun;
       if (!mihomoPicked) {
         mihomoTun = null;
       } else if (Platform.isAndroid) {
         mihomoTun = const MihomoTunOptions(
           fromFileDescriptor: true,
-          // Стек не спрашиваем: `TunSettings` — десктопная настройка, а gvisor
-          // держит весь TCP/IP внутри процесса ядра, что на Android
-          // единственный рабочий вариант без root.
+          // на Android без root работает только gvisor
           stack: TunSettings.stackGvisor,
           autoRoute: false,
         );
@@ -737,12 +603,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
               server.config,
               settings,
               socksPort: settings.localPort,
-              // HTTP-инбаунд нужен и на Android, а не только на десктопе: под
-              // туннель ядро читает само, но приложение ходит в него
-              // через локальный HTTP-прокси — `Dart HttpClient` не умеет SOCKS
-              // вовсе, а свой пакет исключён из TUN. Без этого порта проверка
-              // обновлений на mihomo падала с «connection refused»: xray
-              // http-in поднимает всегда (config_gen), mihomo — не поднимал.
+              // Dart HttpClient не умеет SOCKS, а пакет приложения исключён из TUN, так что http-порт нужен и тут
               httpPort: settings.httpPort,
               resolvedServerIp: serverIp,
               localInboundsNoAuth: proxyModeNoAuth,
@@ -765,20 +626,9 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
             )
           : null;
 
-      // Готовый конфиг несёт свои geo-правила: неизвестный ядру код уронил бы
-      // разбор целиком (для списков настроек это уже сделал
-      // GeoAssetService.sanitizeRules выше).
       final customGeoIndex =
           server.protocol == 'custom' ? await GeoAssetService.index() : null;
-      // Чистка молчит, а выброшенное авторское правило меняет смысл конфига:
-      // его трафик проваливается в наш `final`, и с «остальной трафик = блок»
-      // перестаёт ходить вовсе. Снаружи это «приложение блокирует то, что
-      // провайдер пускает через прокси» — называем причину вслух.
       if (server.protocol == 'custom') {
-        // Правила автора, привязанные к его инбаундам, после подмены инбаундов
-        // не сработают ни разу. Перехват DNS мы делаем за него сами, всё
-        // остальное — молча мёртвый код в конфиге, и снаружи это «правила
-        // провайдера не работают».
         final parsed = CustomXrayConfig.tryParse(server.config);
         final dead = parsed == null
             ? (rules: 0, tags: const <String>[])
@@ -817,16 +667,10 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         }
       }
 
-      // У mihomo свой конфиг, xray-генератор для него не запускаем.
-      // Туннель отдаём самому ядру только там, где ему есть что отдавать:
-      // на Android, в режиме VPN и на самом xray. В режиме «прокси»
-      // интерфейса нет вовсе, у mihomo туннель свой.
       final nativeTun = Platform.isAndroid &&
           connectionMode == ConnectionMode.tun &&
           !mihomoPicked;
 
-      // xray и sing-box получают скачанные домены прямо в полях; у mihomo они
-      // уже в его конфиге набором (см. MihomoConfigGen.buildRuleListProviders).
       final listedSettings =
           mihomoPicked ? settings : ruleLists.expand(settings);
 
@@ -843,18 +687,13 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
               appRoutes: appRoutes,
             );
 
-      // Забирать ли IPv6 в туннель. Спрашиваем машину, а не только настройку:
-      // IPv6-адрес на TUN-интерфейсе там, где IPv6 в системе выключен, роняет
-      // sing-box на старте («set ipv6 dns: Access is denied»), то есть чинил бы
-      // утечку ценой неработающего TUN. См. [TunSettings.blockIpv6Leak].
+      // IPv6-адрес на TUN при выключенном в системе IPv6 роняет sing-box (set ipv6 dns: Access is denied)
       final hostHasIpv6 = connectionMode == ConnectionMode.tun &&
               (Platform.isWindows || Platform.isLinux) &&
               settings.tun.blockIpv6Leak &&
               !mihomoPicked
           ? await hostHasGlobalIpv6(excludeInterfaceName: kTunInterfaceName)
           : false;
-      // Молчаливого отката быть не должно: у mihomo туннель свой, и наш
-      // sing-box-инбаунд с его IPv6-адресом в этой схеме не участвует вовсе.
       if (mihomoPicked &&
           connectionMode == ConnectionMode.tun &&
           settings.tun.blockIpv6Leak &&
@@ -869,10 +708,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         );
       }
 
-      // Свои DNS в десктопном TUN исполняет sing-box, а он держит ровно один
-      // резолвер (см. [SingBoxTunConfigGen.ignoredCustomDnsServers]). На xray
-      // тот же список опрашивается по очереди, поэтому «у меня три сервера, а
-      // работает первый» — не поломка, но и не то, о чём можно молчать.
       if (!mihomoPicked &&
           !Platform.isAndroid &&
           connectionMode == ConnectionMode.tun) {
@@ -911,7 +746,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       _awaitingSessionStart = false;
 
       if (_cancelRequested) {
-        // Отмена пришла, пока сессия поднималась — гасим её и выходим тихо.
         try {
           await engine.stopVpn();
         } catch (_) {}
@@ -930,9 +764,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       if (sessionState.status == VpnStatus.connected) {
         state = AsyncData(sessionState);
       } else if (sessionState.status == VpnStatus.error) {
-        // Присваиваем явно: во время смены сервера _applyNativeState дропает
-        // error-эмиты из стрима (_serverSwitchInProgress), а на десктопе нет
-        // поллинга — без этого UI навсегда застревал в «подключается».
+        // явно: при смене сервера ошибки из стрима отбрасываются, и без поллинга на десктопе UI застревал в подключении
         state = AsyncData(sessionState);
       } else {
         state = AsyncData(VpnState(
@@ -942,8 +774,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       }
     } catch (e, st) {
       if (_cancelRequested) {
-        // Ошибка спровоцирована самой отменой (ядро убито стопом) —
-        // это не сбой подключения, показываем спокойный «отключён».
         state = const AsyncData(VpnState(status: VpnStatus.disconnected));
         return;
       }
@@ -960,25 +790,19 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     } finally {
       _connectInFlight = false;
       _awaitingSessionStart = false;
-      // Ветки connect() присваивают state напрямую, мимо _applyNativeState —
-      // порт сессии на диск кладём здесь, каким бы ни был исход.
+      // ветки выше пишут state мимо _applyNativeState, поэтому порт сохраняем здесь
       _persistActiveLocalHttpPort(
         state.value?.status ?? VpnStatus.disconnected,
       );
     }
   }
 
-  /// Отмена идущей попытки подключения (тап по кругу в состоянии connecting):
-  /// гасим поднимающуюся сессию, connect-in-flight завершится как disconnected.
-  /// Если connect уже не в полёте — обычный disconnect.
   Future<void> cancelConnect() async {
     if (!_connectInFlight) {
       await disconnect();
       return;
     }
     _cancelRequested = true;
-    // Отмена — «отключено» из стрима снова значимо, даже если сессия ещё не
-    // успела стартовать.
     _awaitingSessionStart = false;
     state = const AsyncData(VpnState(status: VpnStatus.disconnecting));
     try {
@@ -994,8 +818,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
 
   Future<void> disconnect() async {
     state = const AsyncData(VpnState(status: VpnStatus.disconnecting));
-    // Порты сессии больше ничего не слушает — апдейтер обязан вернуться к
-    // настройке, а не стучаться в подменённый порт умершего ядра.
     ActiveLocalPorts().clear();
     _persistActiveLocalHttpPort(VpnStatus.disconnecting);
     try {
@@ -1014,7 +836,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     }
   }
 
-  /// Сервер и подписка, за которыми сейчас следит автовыбор, или null.
   ({ServerItem server, String subId})? _autoSelectTarget() {
     if (state.value?.status != VpnStatus.connected) return null;
     final server = ref.read(serversProvider).activeServer;
@@ -1026,7 +847,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     return (server: server, subId: subId);
   }
 
-  /// Адрес замера — тот же, что у пинга серверов в списке.
   Future<String> _autoSelectTestUrl() async {
     final settings = await ref.read(storageProvider).getSettings();
     final custom = settings.pingTestUrlCustom.trim();
@@ -1035,14 +855,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         : kDefaultPingTestUrl;
   }
 
-  /// Запускает замер текущего сервера и его соседей — судью автовыбора.
-  ///
-  /// Меряет тем же url-пингом, что и список серверов, только с коротким
-  /// таймаутом: вопрос не «насколько быстр», а «жив ли прямо сейчас». Ядро
-  /// замера идёт мимо туннеля, поэтому ответ не зависит ни от правил
-  /// роутинга, ни от того, что творится в живой сессии. Результаты копятся по
-  /// мере прихода — решать можно, не дожидаясь таймаута мёртвого сервера — и
-  /// в конце ложатся в список: мёртвый сервер краснеет там же, где его видно.
   _AutoSelectMeasure _autoSelectStartMeasure(
     ServerItem current,
     String subId, {
@@ -1094,20 +906,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     return measure;
   }
 
-  /// Тихая прослушка: раз в секунду, без сети.
-  ///
-  /// Два сигнала. Первый — «ушло, но ничего не пришло»: скорости за последнюю
-  /// секунду сервис считает сам, и на мёртвом сервере приложения продолжают
-  /// слать, а в ответ не приходит ни байта (см. [SilenceStreak]). Второй —
-  /// отказ дозвона в логе ядра: он ловит сервер, который отвечает сбросом
-  /// соединения, — сброс тоже пришедший байт, и тишины тогда нет. Сам по себе
-  /// ни один сигнал сервер не меняет: он только зовёт судью
-  /// ([_autoSelectDecide]).
-  ///
-  /// Замер начинается, только когда судью уже позвали. Начатый раньше, на
-  /// первой тихой секунде, он сам ломал счёт: трафик сервис считает по всему
-  /// приложению, ответы живых соседей выглядели ответом сервера, и тишина не
-  /// набиралась — на Vless живой тест так и не дождался переезда.
+  // замер только после вызова судьи: трафик замера считается ответом сервера и сбивает счёт тишины
   Future<void> _autoSelectListenOnce() async {
     if (_autoSelectListening) return;
     _autoSelectListening = true;
@@ -1138,8 +937,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       );
     }
 
-    // На Android отказы считает нативный читатель лога ядра, на десктопе —
-    // бэкенд, который читает вывод ядра сам.
     final failures = Platform.isAndroid
         ? await VpnNativeBridge.dialFailures()
         : CoreDialFailures.count;
@@ -1147,8 +944,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     if (failures != null) {
       final previous = _autoSelectSeenFailures;
       _autoSelectSeenFailures = failures;
-      // Первое чтение — только точка отсчёта: счётчик копится с запуска
-      // процесса, и старые отказы к этой сессии отношения не имеют.
+      // первое чтение только точка отсчёта: счётчик копится с запуска процесса
       if (previous != null) newFailures = failures - previous;
     }
 
@@ -1168,12 +964,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     );
   }
 
-  /// Сколько ушло и пришло за последнюю секунду; null — пока не знаем.
-  ///
-  /// На Android скорости считает сервис. На десктопе состояние сессии их не
-  /// несёт вовсе, а экранный опрос счётчиков стоит, пока окно в трее, —
-  /// поэтому сторож читает кумулятивные счётчики ядра сам и вычитает прошлое
-  /// показание. Первое чтение и переподключение — только точка отсчёта.
   Future<({int sent, int received})?> _autoSelectSecond() async {
     final engine = ref.read(vpnEngineProvider);
     if (Platform.isAndroid) {
@@ -1188,21 +978,13 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     return (sent: counters.up - previous.up, received: counters.down - previous.down);
   }
 
-  /// Страховочный тик: ловит соединения, которые повисли молча.
-  ///
-  /// Раз в [AutoSelectWatchdog.probeEvery] смотрим, пришёл ли через туннель
-  /// хоть байт, и зовём судью, только если за это время что-то уходило, а не
-  /// пришло ничего. Пришёл, а не прошёл: в мёртвый туннель приложения шлют
-  /// исправно.
   Future<void> _autoSelectTick() async {
     if (_autoSelectBusy) return;
     final target = _autoSelectTarget();
     if (target == null) return;
     final received = state.value?.totalDownload ?? 0;
     final sent = state.value?.totalUpload ?? 0;
-    // Счётчики обнуляются с каждой сессией. Меньше прошлого — значит, это уже
-    // другая сессия, и сравнивать нечего: раньше такой сброс читался как
-    // «ничего не пришло» и будил судью наугад.
+    // меньше прошлого значит новая сессия, раньше такой сброс будил судью зря
     final newSession =
         received < _autoSelectSeenReceived || sent < _autoSelectSeenSent;
     final moved = newSession || received > _autoSelectSeenReceived;
@@ -1226,16 +1008,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     );
   }
 
-  /// Судья: решает по замеру и, если надо, переезжает.
-  ///
-  /// Уйти с сервера можно только если он сам не ответил на свежий замер, и
-  /// только на тот, кто ответил. Не ответил никто — остаёмся: это сеть или
-  /// всё сразу, и переезд ничего не даст. Решение пересматривается с каждым
-  /// пришедшим результатом: отказ текущего и первый живой сосед — и переезд,
-  /// не дожидаясь, пока остальные упрутся в таймаут. Пока судья решает, прослушка стоит ([_autoSelectBusy]): трафик его
-  /// замера она приняла бы за ответ сервера.
-  /// Переезд идёт тем же путём, которым сервер меняет человек, и не чаще
-  /// [AutoSelectWatchdog.maxSwitchesPerWindow] раз за окно.
   Future<void> _autoSelectDecide(
     ServerItem server,
     _AutoSelectMeasure measure, {
@@ -1244,8 +1016,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     if (_autoSelectBusy) return;
     _autoSelectBusy = true;
     var switched = false;
-    // Причина и вердикт — в лог: на десктопе он пишется в файл, и живой тест
-    // без них превращается в гадание, звался ли судья вообще.
     AppLogger.instance.info('Auto select: checking ${server.displayName} — $reason');
     try {
       var verdict = AutoServerSelect.judge(
@@ -1272,7 +1042,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         return;
       }
       if (state.value?.status != VpnStatus.connected) return;
-      // Пока шёл замер, человек мог выбрать сервер сам — его выбор главнее.
       if (ref.read(serversProvider).activeServer?.id != server.id) return;
 
       final now = DateTime.now();
@@ -1319,8 +1088,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         stackTrace: st,
       );
     } finally {
-      // Отсчёт заново: переподключение само даёт отказы и тихие секунды, и
-      // принять их за новую смерть значило бы пойти по кругу.
+      // после переезда считаем заново: само переподключение даёт отказы и тихие секунды
       _autoSelectSeenFailures = null;
       _autoSelectSilence = const SilenceStreak();
       _autoSelectCounters = null;
@@ -1333,19 +1101,11 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     }
   }
 
-  /// Плановая проверка раз в [AutoSelectWatchdog.recheckEvery].
-  ///
-  /// Мерит текущий сервер, свой (если ждём его, см. [AutoSelectHome]) и пару
-  /// лучших соседей. Текущий не ответил — решает судья, как при тревоге.
-  /// Ответил — смотрим на свой: отвечает [AutoSelectHome.returnAfter] раз
-  /// подряд — возвращаемся.
   Future<void> _autoSelectRecheck() async {
     if (_autoSelectBusy) return;
     final target = _autoSelectTarget();
     var home = await AutoSelectHomeStore.load();
     if (target == null) {
-      // VPN выключен — свой сервер ждёт следующего подключения, а «Авто»,
-      // погасшее в его подписке, значит, что сервер выбирает уже человек.
       final subs = ref.read(subscriptionsProvider).value ?? const <Subscription>[];
       if (home != null &&
           !subs.any((s) => s.id == home!.subscriptionId && s.autoSelect)) {
@@ -1367,9 +1127,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       home = waiting;
     }
 
-    // Байты не сдвинулись с прошлой проверки — телефон лежит, и ядро замера
-    // раз в пять минут на всю ночь было бы тратой батареи. Счётчика нет вовсе
-    // (бывает на десктопе) — проверяем без этого условия.
     final bytes = await _autoSelectTotalBytes();
     final seen = _autoSelectRecheckSeenBytes;
     _autoSelectRecheckSeenBytes = bytes;
@@ -1390,11 +1147,8 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
 
     _autoSelectBusy = true;
     try {
-      // Судья решает по первым ответам, а свой сервер мог ответить позже.
       await measure.done;
       if (state.value?.status != VpnStatus.connected) return;
-      // Судья увёз на другой сервер или человек выбрал сам — тогда свой
-      // сервер уже записан заново или сброшен, и решать тут нечего.
       if (ref.read(serversProvider).activeServer?.id != target.server.id) return;
       home = home.afterCheck(
         homeAnswered: measure.results[home.homeId]?.success == true,
@@ -1409,9 +1163,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     await _autoSelectReturnHome(target.server, home);
   }
 
-  /// Переезд обратно на свой сервер — с теми же предохранителями, что у
-  /// аварийного: не чаще [AutoSelectWatchdog.maxSwitchesPerWindow] раз за окно
-  /// и с паузой после.
   Future<void> _autoSelectReturnHome(
     ServerItem from,
     AutoSelectHome home,
@@ -1430,7 +1181,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       (t) => now.difference(t) >= AutoSelectWatchdog.switchWindow,
     );
     if (!AutoSelectWatchdog.switchAllowed(_autoSelectSwitches, now)) {
-      // Окно забито переездами — попробуем на следующей проверке.
       await AutoSelectHomeStore.save(home);
       return;
     }
@@ -1461,7 +1211,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     }
   }
 
-  /// Сколько байт сессия пропустила в обе стороны; null — счётчика нет.
   Future<int?> _autoSelectTotalBytes() async {
     final engine = ref.read(vpnEngineProvider);
     try {
@@ -1479,7 +1228,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     }
   }
 
-  /// переподключение к текущему activeServer (смена сервера на активном VPN)
   Future<void> reconnectToActiveServer() async {
     if (_serverSwitchInProgress || _connectInFlight) return;
 
@@ -1504,20 +1252,17 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
 
   Future<void> _waitForDisconnected() async {
     final status = state.value?.status;
-    // Ждём только если ещё не disconnected. Чтение state и регистрация
-    // _disconnectWaiter синхронны (между ними нет await), поэтому событие из
-    // стрима не может проскользнуть в зазоре — гонки нет (Dart однопоточен).
     if (status != null && status != VpnStatus.disconnected) {
       final waiter = _disconnectWaiter = Completer<void>();
       try {
         await waiter.future.timeout(const Duration(seconds: 4));
       } on TimeoutException {
-        // движок не прислал disconnected за таймаут — не блокируем переподключение
+        // не дождались disconnected, переподключаемся всё равно
       } finally {
         if (identical(_disconnectWaiter, waiter)) _disconnectWaiter = null;
       }
     }
-    // даём ядру/туннелю осесть перед повторным connect
+    // ядру и туннелю нужно осесть перед новым connect
     await Future.delayed(const Duration(milliseconds: 350));
   }
 
@@ -1531,20 +1276,12 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
   }
 }
 
-/// true пока переподключаемся при смене сервера — чтобы не показывать ложные ошибки
 final vpnStateProvider =
     AsyncNotifierProvider<VpnStateNotifier, VpnState>(VpnStateNotifier.new);
 
-/// Замер, начатый сторожем автовыбора.
-///
-/// Результаты копятся в [results] по мере прихода, [complete] — все ответили
-/// или истекли. Отдельный объект, а не голый Future, потому что решать можно
-/// и по неполному замеру: соседи отвечают за доли секунды, а мёртвый сервер
-/// держит замер до таймаута.
 class _AutoSelectMeasure {
   _AutoSelectMeasure(this.serverId);
 
-  /// Сервер, из-за которого замер начат.
   final String serverId;
 
   final results = <String, ({String id, bool success, int? latencyMs})>{};
@@ -1552,7 +1289,6 @@ class _AutoSelectMeasure {
   Future<void> done = Future<void>.value();
   var _changed = Completer<void>();
 
-  /// Дождаться следующего результата или конца замера.
   Future<void> get changed => complete ? Future<void>.value() : _changed.future;
 
   void add(({String id, bool success, int? latencyMs}) result) {

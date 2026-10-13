@@ -1,12 +1,5 @@
 part of '../settings_tab.dart';
 
-/// Настройки десктопа: трей и автозапуск, на Windows и Linux.
-///
-/// Экран с состоянием, потому что автозапуск живёт не только в наших
-/// настройках: на Windows обычный — в ключе реестра Run, повышенный — задачей
-/// планировщика, на Linux — ярлыком в `~/.config/autostart`. Всё это можно
-/// снести мимо приложения, поэтому при открытии экрана переключатели
-/// сверяются с системой.
 class _DesktopSettingsScreen extends ConsumerStatefulWidget {
   const _DesktopSettingsScreen();
 
@@ -28,11 +21,6 @@ class _DesktopSettingsScreenState
     await WindowsDesktopService.applySettings(next);
   }
 
-  /// Приводит настройки к тому, что на самом деле сделано в системе.
-  ///
-  /// Без спроса UAC: экран всего лишь открыли. Если задачу планировщика удалили
-  /// руками или папку с приложением перенесли (задача осталась на старом пути),
-  /// переключатель честно гаснет, и включить его можно заново.
   Future<void> _syncWithSystem() async {
     if (Platform.isLinux) {
       final enabled = LinuxAutostart.isEnabled();
@@ -58,12 +46,6 @@ class _DesktopSettingsScreenState
     await ref.read(settingsNotifierProvider.notifier).save(actual);
   }
 
-  /// Меняет автозапуск и сохраняет то, что из этого вышло.
-  ///
-  /// Задачу планировщика заводит и сносит только администратор, поэтому здесь
-  /// может всплыть UAC — один раз, в момент переключения. Отказались — сохраним
-  /// не намерение, а факт: оба переключателя обязаны показывать то, что система
-  /// действительно делает на входе в систему.
   Future<void> _applyAutostart(AppSettings next) async {
     if (Platform.isLinux) {
       await LinuxAutostart.setEnabled(next.launchAtStartup);
@@ -101,13 +83,6 @@ class _DesktopSettingsScreenState
     final settings =
         ref.watch(settingsNotifierProvider).value ?? const AppSettings();
 
-    // Строки — те же переключатели, что во «Внешнем виде»: кружок с иконкой,
-    // нажатие по всей строке, сегменты одной группы. Своя плоская карточка без
-    // иконки была здесь единственной такой на все настройки.
-    //
-    // Подписи под названиями здесь были пересказом самих названий, поэтому их
-    // нет вовсе. Остался только абзац под группой — он отвечает на вопрос
-    // «почему серое», из названия этого не узнать.
     Widget note(String text) => Padding(
           padding: const EdgeInsets.only(top: 6, left: 4, right: 4),
           child: Text(
@@ -142,8 +117,6 @@ class _DesktopSettingsScreenState
                 _applyAutostart(settings.copyWith(launchAtStartup: v)),
               ),
             ),
-            // Повышенного автозапуска на Linux нет: root для TUN даёт polkit
-            // при подключении.
             if (!linux)
               _AppearanceSwitchTile(
                 icon: Icons.admin_panel_settings_rounded,

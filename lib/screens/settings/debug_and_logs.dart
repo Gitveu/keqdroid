@@ -128,8 +128,6 @@ class _XrayLogsScreenState extends ConsumerState<_XrayLogsScreen> {
     }
   }
 
-  /// Лог целиком в буфер: выделять руками несколько сотен строк на телефоне
-  /// невозможно, а именно они и нужны, когда разбираешься, что решило ядро.
   Future<void> _copyLogs(AppLocalizations l10n) async {
     await Clipboard.setData(ClipboardData(text: _logs));
     if (!mounted) return;

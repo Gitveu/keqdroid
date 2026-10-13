@@ -4,9 +4,7 @@ import '../models/traffic_route.dart';
 import 'routing_presets.dart';
 import 'rule_lists.dart';
 
-/// Раздел экрана маршрутизации. Порядок разделов — порядок проверки в ядре:
-/// блокировка действует во всех приложениях, маршруты отдельных приложений
-/// решают раньше общих, «Всё остальное» — последним.
+// порядок разделов это порядок проверки в ядре: блокировка везде, отдельные приложения раньше общих
 enum RouteSection { block, apps, allApps }
 
 RouteSection sectionOf(TrafficRoute route) {
@@ -14,13 +12,8 @@ RouteSection sectionOf(TrafficRoute route) {
   return route.allApps ? RouteSection.allApps : RouteSection.apps;
 }
 
-/// Маршруты раздела в порядке проверки.
-///
-/// У приложений сайты и готовые списки выше «весь трафик»: «Chrome: YouTube
-/// → Германия» обязан решать раньше «Chrome: всё → Нидерланды». У всех
-/// приложений — «напрямую», «другой сервер», «через VPN»: так стояли прежние
-/// списки (обход раньше прокси), и у обновившихся ничего не переставится.
-/// Внутри одной ступени — порядок добавления.
+// у приложений сайты и списки выше всего трафика: Chrome YouTube на Германию решает раньше Chrome всё на Нидерланды.
+// у всех приложений напрямую, другой сервер, через VPN, как стояли прежние списки, чтобы у обновившихся ничего не переставилось
 List<TrafficRoute> routesIn(RouteSection section, List<TrafficRoute> routes) {
   final inSection = [
     for (final r in routes)
@@ -35,8 +28,7 @@ List<TrafficRoute> routesIn(RouteSection section, List<TrafficRoute> routes) {
             _ => 2,
           },
       };
-  // Сортировка устойчивая: List.sort её не обещает, поэтому ступени
-  // собираются по очереди.
+  // List.sort устойчивость не обещает, поэтому ступени собираются по очереди
   final ranks = {for (final r in inSection) rank(r)}.toList()..sort();
   return [
     for (final k in ranks)
@@ -45,7 +37,6 @@ List<TrafficRoute> routesIn(RouteSection section, List<TrafficRoute> routes) {
   ];
 }
 
-/// Все маршруты в порядке проверки.
 List<TrafficRoute> orderedRoutes(List<TrafficRoute> routes) => [
       for (final s in RouteSection.values) ...routesIn(s, routes),
     ];
@@ -57,8 +48,7 @@ RoutingPreset? presetById(String id) {
   return null;
 }
 
-/// Записи «что» маршрута в формате прежних полей списков. Пусто — у маршрута
-/// «весь трафик» и у пресета, которого больше нет.
+// пусто у всего трафика и у пресета, которого больше нет
 String routeEntriesText(TrafficRoute route) => switch (route.content) {
       RouteContent.sites => route.sites,
       RouteContent.preset => (presetById(route.presetId)?.values ?? const [])
@@ -66,19 +56,12 @@ String routeEntriesText(TrafficRoute route) => switch (route.content) {
       RouteContent.allTraffic => '',
     };
 
-/// Маршрут, который ничего не забирает: свои сайты без единой записи.
 bool routeIsEmpty(TrafficRoute route) =>
     route.content != RouteContent.allTraffic &&
     routingEntries(routeEntriesText(route)).isEmpty;
 
-/// Настройки для генераторов: три списка собраны из маршрутов «все
-/// приложения», прежние поля настроек не участвуют.
-///
-/// Маршруты отдельных приложений сюда не попадают никогда: свёрнутые в общие
-/// списки, их сайты достались бы всем приложениям. [serverUsable] решает,
-/// поедет ли маршрут на свой сервер. Не поедет (сервер пропал, ядро сессии
-/// его не возьмёт) — маршрут уходит «через VPN»: связь важнее, а карточка на
-/// экране показывает причину.
+// маршруты отдельных приложений сюда не попадают: в общих списках их сайты достались бы всем.
+// не едет на свой сервер, значит через VPN: связь важнее, причину покажет карточка
 AppSettings foldRoutes(
   AppSettings settings,
   List<TrafficRoute> routes, {
@@ -111,18 +94,13 @@ AppSettings foldRoutes(
 
 bool _never(TrafficRoute _) => false;
 
-/// Ссылки на списки во всех маршрутах со своими сайтами, без повторов.
 List<String> routeListUrls(List<TrafficRoute> routes) => {
       for (final r in routes)
         if (r.content == RouteContent.sites) ...ruleListUrls(r.sites),
     }.toList();
 
-/// Маршруты из прежних настроек: три списка и «Свои правила».
-///
-/// Списки становятся маршрутами «все приложения» в своих разделах. Правило
-/// по процессу становится маршрутом этих приложений, но выключенным: прежде
-/// такие правила не применялись нигде, и молча включить их значило бы
-/// поменять человеку маршрутизацию при обновлении. [newId] — для тестов.
+// правило по процессу становится маршрутом, но выключенным: раньше такие правила не применялись нигде,
+// и включить их молча значило бы поменять маршрутизацию при обновлении
 List<TrafficRoute> routesFromLegacy(
   AppSettings settings,
   List<RoutingRule> rules, {
@@ -204,9 +182,7 @@ List<TrafficRoute> routesFromLegacy(
   return routes;
 }
 
-/// Человек менял маршрутизацию до обновления — ему одна подсказка о том, что
-/// списки стали маршрутами. Нетронутые значения по умолчанию подсказки не
-/// стоят: на экране новой установки их и так видно.
+// нетронутые значения по умолчанию подсказки не стоят
 bool legacyRoutingCustomized(AppSettings settings, List<RoutingRule> rules) =>
     rules.isNotEmpty ||
     settings.directRules.trim() != RoutingPresets.defaultDirectRules ||

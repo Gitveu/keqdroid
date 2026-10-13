@@ -17,8 +17,6 @@ class DebugLogService {
         final text = backend.exportSessionLogs(maxLines: maxLines);
         if (text.trim().isNotEmpty) return text;
       }
-      // Сессии нет — отдаём последнюю завершённую. Именно она нужна, когда
-      // ядро упало: активного инстанса к моменту открытия логов уже нет.
       final last = WindowsTunnelBackend.lastSessionLogs;
       if (last.trim().isNotEmpty) {
         return '--- Last session (core no longer running) ---\n$last';
@@ -41,7 +39,6 @@ class DebugLogService {
     return text ?? '';
   }
 
-  /// Windows: WinINet/registry proxy diagnostics (also written to %TEMP% file).
   static Future<String> getProxyDebugLogs({int maxLines = 400}) async {
     if (!Platform.isWindows) {
       return 'Proxy debug logs are only available on Windows.';

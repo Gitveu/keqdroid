@@ -31,50 +31,27 @@ import 'tunnel_state.dart';
 import 'vpn_backend.dart';
 import 'xray_session_stats.dart';
 
-/// Пульс «прошла polkit-аутентификация для TUN, а беспарольного правила ещё
-/// нет». Десктопный UI на Linux слушает поток и предлагает один раз установить
-/// правило, чтобы дальше TUN стартовал без пароля. См.
-/// [LinuxTunnelBackend.installPasswordlessTun].
 final StreamController<void> _linuxTunRememberController =
     StreamController<void>.broadcast();
 Stream<void> get linuxTunRememberOffers => _linuxTunRememberController.stream;
 
-/// Linux desktop backend (proxy + TUN).
-///
-/// Тот же чисто дартовый конвейер, что у [WindowsTunnelBackend]: запустить ядра
-/// и дождаться их локальных портов, без нативного канала.
-///
-/// В proxy-режиме ядро поднимает локальный SOCKS/HTTP, а системный прокси
-/// прописывается в настройки GNOME и KDE ([LinuxSystemProxy]); где их не читают,
-/// локальный прокси указывают руками. В TUN-режиме поверх
-/// того же SOCKS запускается sing-box с tun-инбаундом; создать устройство и
-/// править маршруты может только root, поэтому он идёт через `pkexec`. Счётчики
-/// трафика там читаются из sysfs tun-интерфейса.
 class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   static const tunInterfaceName = 'tun-keqdis';
 
-  /// Куда root-обёртка pkexec редиректит stdout/stderr ядра (см.
-  /// [_runKeqrnelAsRoot]): pkexec не держит наш pipe, и без файла реальная
-  /// причина падения ядра терялась — наружу уходил только generic exit code.
-  /// Файл в каталоге сессии (0700), а не общий в /tmp: root создаёт его с
-  /// правами 0644, а в логе адреса серверов и, в режиме отладки, сайты.
+  // pkexec не держит наш pipe, причину падения ядра видно только из файла.
+  // в каталоге сессии (0700), а не в /tmp: root создаёт его 0644, а в логе адреса серверов
   String get _coreLogPath =>
       _sessionDir == null ? '' : p.join(_sessionDir!.path, 'core.log');
 
-  /// Момент запуска pkexec текущей сессии — [_coreLogPath] обнуляется только
-  /// внутри root-обёртки, так что при падении до неё (сам pkexec) файл ещё
-  /// хранит прошлую сессию; по mtime отличаем свежий лог от застарелого.
+  // по mtime отличаем свежий лог от прошлой сессии: при падении самого pkexec файл не обнулён
   DateTime? _keqrnelLaunchedAt;
 
-  /// Active session — lets DebugLogService surface core logs on Linux.
   static LinuxTunnelBackend? activeInstance;
 
   final _stateCtrl = StreamController<VpnState>.broadcast();
 
   Process? _xrayProcess;
   Process? _singboxProcess;
-  // Sentinel the elevated TUN wrapper polls: deleting it asks the root keqrnel
-  // to stop (reverts auto_route/nftables) without re-elevation. See _runKeqrnelAsRoot.
   File? _rootSentinel;
   Directory? _sessionDir;
   ConnectionMode? _activeMode;
@@ -85,34 +62,18 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   final StringBuffer _singboxLog = StringBuffer();
 
   String? _xrayBinPath;
-  // Порт clash_api keqrnel — из него читаем кумулятивный трафик (proxy-режим)
-  // и список соединений для дебаг-экрана (оба режима).
   int? _keqrnelClashPort;
 
-  /// Пароль API keqrnel, свой на каждую сессию (см. [KeqrnelConfig]).
   String? _keqrnelClashSecret;
 
-  /// С какого уровня строки xray доходят до лога сессии; 0 — все. Поднятый
-  /// до info xray пишет больше, чем заказано, ради счётчика отказов (см.
-  /// XraySessionLog). Строки mihomo и sing-box меток xray не несут, и порог
-  /// их не трогает.
   int _xrayLogThreshold = 0;
 
-  // mihomo: одно ядро на оба режима. В proxy-режиме обычный процесс, в TUN —
-  // тот же root-путь через pkexec, что и у keqrnel (tun-устройство и маршруты
-  // без root не создать).
   Process? _mihomoProcess;
 
-  /// Порт clash_api активной сессии; null — сессии нет или API не поднят.
-  /// Читает [ConnectionsService].
-  ///
-  /// У mihomo координаты API придумывает не бэкенд, а тот же код, что собирал
-  /// конфиг ([MihomoApiSession]) — порт и `secret` едут внутрь конфига.
   int? get clashApiPort =>
       _keqrnelClashPort ??
       (_mihomoProcess != null ? MihomoApiSession().port : null);
 
-  /// Пароль к API из [clashApiPort]; пустая строка — без пароля.
   String get clashApiSecret => _keqrnelClashPort != null
       ? _keqrnelClashSecret ?? ''
       : MihomoApiSession().secret;
@@ -125,11 +86,6 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     ].join();
   }
 
-  /// PID живых процессов ядра: подпись → pid. Пустая карта — сессии нет.
-  /// Читает панель «Внутренности».
-  ///
-  /// У root-процесса TUN это pid обёртки (pkexec/helper), а не самого ядра:
-  /// ядро он поднимает уже под собой, и его pid этой стороне не виден.
   Map<String, int> get activeCorePids => {
     if (_xrayProcess != null) 'keqrnel': _xrayProcess!.pid,
     if (_mihomoProcess != null)
@@ -137,13 +93,10 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     if (_singboxProcess != null) 'keqrnel (root, TUN)': _singboxProcess!.pid,
   };
 
-  /// TUN-сессия mihomo идёт через pkexec, и остановить её нужно так же, как
-  /// keqrnel: удалением сентинела, а не сигналом (обычный пользователь
-  /// root-процессу сигнал послать не может).
+  // root-процессу обычный пользователь сигнал не пошлёт, останавливаем удалением сентинела
   bool _mihomoRunsAsRoot = false;
 
-  // true пока идёт штатный stopSession — чтобы вотчдог не принял наш же
-  // kill за внезапную смерть ядра.
+  // пока идёт штатный стоп, вотчдог не должен принять наш kill за смерть ядра
   bool _stoppingSession = false;
 
 
@@ -160,7 +113,6 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     _stateCtrl.close();
   }
 
-  /// Tail of xray + sing-box stdout/stderr for the debug screen.
   String exportSessionLogs({int maxLines = 400}) {
     final combined = StringBuffer()
       ..writeln('=== xray ===')
@@ -170,12 +122,7 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     return _tail(combined, maxLines: maxLines);
   }
 
-  /// Also persist the combined core logs to a stable file so they can be read
-  /// after disconnect (the session dir is wiped on stop). Path is logged.
-  ///
-  /// Не в общий /tmp: файл там читали все пользователи машины, а в нём адреса
-  /// серверов и, в режиме отладки, посещённые сайты. `$XDG_RUNTIME_DIR` —
-  /// личный каталог сессии (0700); без него — каталог приложения и права 0600.
+  // не в общий /tmp: там адреса серверов и посещённые сайты
   Future<void> _dumpLogsToFile() async {
     try {
       final runtime = Platform.environment['XDG_RUNTIME_DIR'];
@@ -194,8 +141,6 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
 
   @override
   Future<({String username, String password})> fetchSocksCredentials() async {
-    // Linux doesn't stash these (unlike Windows, which guards startSession on
-    // them): the caller applies the returned pair via Socks5Credentials().init.
     return SocksCredentialGenerator.generatePair();
   }
 
@@ -210,11 +155,7 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     try {
       await _cleanupForRestart();
       activeInstance = this;
-      // _cleanupForRestart() зануляет _activeMode внутри _stopSessionInner —
-      // вернуть режим новой сессии. Иначе вся сессия живёт с _activeMode=null:
-      // getCurrentState теряет режим, а setTrafficStatsPollingEnabled(true)
-      // после разворота из трея молча не перезапускает опрос счётчиков —
-      // трафик/время замерзают до реконнекта.
+      // _cleanupForRestart обнуляет режим, без возврата опрос счётчиков после трея не перезапустится
       _activeMode = request.mode;
       _sessionDir = await LinuxCorePaths.sessionDir();
 
@@ -231,15 +172,9 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       startStatsLoop(request.mode);
       emitConnectedTelemetry(request.mode);
 
-      // «Ядро поднялось» и «через него что-то ходит» — разные утверждения, и
-      // расходятся они постоянно: истёкшая подписка, мёртвый сервер, правило,
-      // отправившее всё в block. Снаружи это «подключено, но ничего не
-      // грузится» без единой строчки о причине. Проверяем сами — в фоне, чтобы
-      // не задерживать подключение.
       unawaited(_verifyChainReachable(request));
 
-      // Смерть ядра посреди сессии без вотчдога оставляла UI в «Connected»,
-      // а системный прокси (gsettings) — направленным на мёртвый порт.
+      // без вотчдога смерть ядра оставляла UI в Connected, а системный прокси на мёртвом порту
       _watchProcessExit(_xrayProcess, 'keqrnel');
       _watchProcessExit(_mihomoProcess, 'mihomo');
       _watchProcessExit(_singboxProcess, 'keqrnel TUN');
@@ -263,10 +198,6 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  // ---- xray ---------------------------------------------------------------
-
-  /// proxy-режим на keqrnel: sing-box держит локальные SOCKS/HTTP и считает
-  /// трафик (clash_api), внутри — встроенный xray. Root не нужен.
   Future<void> _startKeqrnelProxySession(TunnelSessionRequest request) async {
     final bin = await LinuxCorePaths.keqrnelExecutable();
     if (bin == null) {
@@ -293,8 +224,7 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     final configFile = File(p.join(_sessionDir!.path, 'keqrnel.json'));
     await configFile.writeAsString(merged);
 
-    // HTTP-инбаунд ядро поднимает всегда (через него ходит апдейтер), поэтому
-    // занятый HTTP-порт роняет ядро целиком независимо от системного прокси.
+    // HTTP-инбаунд ядро поднимает всегда (через него ходит апдейтер), занятый порт роняет всё
     await _ensurePortsAvailable(request, needsHttp: true);
 
     final geoDir = await LinuxCorePaths.geoAssetDir();
@@ -338,15 +268,11 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  /// TUN-режим на keqrnel: один процесс (sing-box TUN + встроенный xray) под root.
   Future<void> _startKeqrnelTunSession(TunnelSessionRequest request) async {
     final singConfig = request.singboxConfig;
     if (singConfig == null || singConfig.isEmpty) {
       throw const VpnStartException('singboxConfig is required for TUN mode');
     }
-    // Локальные порты в TUN-режиме слушает встроенный xray внутри keqrnel:
-    // занял их сосед — ядро падает на старте инбаунда, и наружу это выглядит
-    // как «TUN не поднялся», хотя TUN тут ни при чём.
     await _ensurePortsAvailable(request, needsHttp: true);
 
     final clashPort = await _freePort();
@@ -365,12 +291,6 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     await _runKeqrnelAsRoot(merged);
   }
 
-  // ---- mihomo -------------------------------------------------------------
-
-  /// mihomo — второе полноценное ядро, а не обёртка вокруг keqrnel: в
-  /// TUN-режиме tun-устройство и маршруты создаёт оно само (внутри у него тот
-  /// же sing-tun), поэтому связки «ядро → локальный SOCKS → keqrnel» здесь нет.
-  /// Требование то же, что у keqrnel: root через pkexec.
   Future<void> _startMihomoSession(TunnelSessionRequest request) async {
     final bin = await LinuxCorePaths.mihomoExecutable();
     if (bin == null) {
@@ -384,20 +304,15 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
 
     final isTun = request.mode == ConnectionMode.tun;
-    // Локальные socks/http поднимает то же ядро и в TUN-режиме: через HTTP
-    // ходит апдейтер, и занятый соседом порт роняет старт целиком.
     await _ensurePortsAvailable(request, needsHttp: true);
 
-    // Расширение `.yaml` — то, что ядро ждёт; содержимое при этом JSON (YAML 1.2
-    // его надмножество, см. MihomoConfigGen).
+    // ядро ждёт .yaml, а JSON для YAML 1.2 подмножество
     final configFile = File(p.join(_sessionDir!.path, 'mihomo.yaml'));
     await configFile.writeAsString(config);
 
     if (isTun) {
       _mihomoRunsAsRoot = true;
-      // Дом для root-запуска — в каталоге сессии, а не в пользовательском
-      // кэше: иначе root наплодил бы там своих `config.yaml`/`cache.db`,
-      // которые следующий обычный запуск уже не перепишет.
+      // дом в каталоге сессии: иначе root наплодил бы в кэше файлов, которые обычный запуск не перепишет
       final home = await _stageGeoAssetsForRoot() ?? _sessionDir!.path;
       final rootBin = await _stageBinaryForRoot(bin, 'mihomo');
 
@@ -476,37 +391,22 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  // ---- passwordless TUN (polkit rule) -------------------------------------
+  // путь версионирован: тело обёртки это контракт по позициям аргументов, и со старым путём
+  // у тех, кто уже поставил правило, mihomo запускался бы командой keqrnel
 
-  /// Root-owned хелпер, который pkexec запускает вместо inline `sh -c`.
-  /// polkit-правило разрешает беспарольный запуск именно этого пути.
-  /// Путь версионирован намеренно. Тело обёртки — контракт по позициям
-  /// аргументов, а установленный у пользователя хелпер живёт своей жизнью:
-  /// добавь мы восьмой аргумент к прежнему пути, у всех, кто уже поставил
-  /// беспарольное правило, mihomo молча запускался бы командой keqrnel. Новый
-  /// путь честнее: [isPasswordlessTunInstalled] отвечает «нет», пользователь
-  /// один раз вводит пароль и ставит правило заново (старый хелпер при этом
-  /// удаляется).
   static const _polkitHelperPath = '/usr/local/lib/keqdroid/core-tun-root';
 
-  /// Хелпер прежней версии — умел запускать только keqrnel. Установка новой
-  /// его сносит, иначе он остался бы разрешён в polkit навсегда.
+  // старый хелпер сносим, иначе он остался бы разрешён в polkit навсегда
   static const _legacyPolkitHelperPath =
       '/usr/local/lib/keqdroid/keqrnel-tun-root';
 
-  /// polkit JS-правило (polkit >= 0.106). Разрешает беспарольный запуск хелпера
-  /// для активной локальной сессии.
   static const _polkitRulePath = '/etc/polkit-1/rules.d/49-keqdroid-tun.rules';
 
-  /// Доверенные копии ядер, root-owned. Беспарольный хелпер запускает только
-  /// их, см. [_tunWrapperBody].
   static const _trustedCoresDir = '/usr/local/lib/keqdroid/cores';
 
-  /// Метка тела хелпера. Хелпер без неё — прошлой версии, запускавший от root
-  /// любой бинарь из аргумента.
+  // хелпер без метки запускал от root любой бинарь из аргумента
   static const _helperVersionMark = '[wrap v5';
 
-  /// Код выхода хелпера: ядро не совпало с доверенной копией (обновилось).
   static const _untrustedCoreExit = 4;
 
   @visibleForTesting
@@ -521,33 +421,10 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   @visibleForTesting
   static const helperVersionMarkForTest = _helperVersionMark;
 
-  /// Разово за запуск приложения: показали ли уже предложение установить правило.
   static bool _rememberOfferedThisRun = false;
 
-  /// Тело root-обёртки TUN. Скрипт один, а путей два: без правила polkit это
-  /// `pkexec sh -c <body>` с запросом пароля, с правилом — `pkexec` по
-  /// фиксированному пути хелпера без пароля, и файл хелпера это shebang плюс то
-  /// же тело.
-  /// Восьмой аргумент — какое ядро запускать: командные строки у них разные
-  /// (`keqrnel run -c <cfg>` против `mihomo -d <home> -f <cfg>`), а обёртка
-  /// одна. Пустой KIND означает keqrnel — так обёртка ведёт себя как прежняя.
-  ///
-  /// Беспарольный хелпер (`$0` — его путь) зовёт без пароля любой процесс
-  /// этого пользователя, а путь к ядру — аргумент. Поэтому хелпер запускает
-  /// только ядро, байт в байт совпавшее с доверенной копией ([_trustedCoresDir]),
-  /// и запускает саму копию: подмена файла между сверкой и запуском ничего не
-  /// даёт. Копии кладёт установка правила, а после обновления ядра хелпер
-  /// отказывает кодом [_untrustedCoreExit], подключение один раз идёт с паролем,
-  /// и этот запуск обновляет копию. Путь с паролем заодно снимает хелпер
-  /// прошлых версий, который запускал от root что угодно.
-  ///
-  /// `modprobe tun` здесь потому, что это единственное место, где мы root:
-  /// без модуля `/dev/net/tun` не существует, и ядро падает на открытии
-  /// устройства («no such file or directory») — типовой случай минимальных
-  /// сборок ядра и контейнеров. Позиции аргументов при этом не тронуты, так
-  /// что уже установленный хелпер прежней версии остаётся корректным (он
-  /// просто не умеет этого чинить, и тогда причину называет
-  /// [tunFailureHint]).
+  // хелпер без пароля запускает только ядро, байт в байт совпавшее с доверенной копией, и запускает саму копию.
+  // modprobe tun здесь: это единственное место, где мы root, а без модуля нет /dev/net/tun
   static const _tunWrapperBody = r'''SB="$1"; CFG="$2"; GEO="$3"; LOGF="$4"; SENT="$5"; APPPID="$6"; AUTHF="$7"; KIND="$8"
 HELPER=/usr/local/lib/keqdroid/core-tun-root
 CORES=/usr/local/lib/keqdroid/cores
@@ -584,8 +461,6 @@ kill -TERM "$sb" 2>/dev/null
 wait "$sb"
 ''';
 
-  /// polkit-правило: беспарольный exec фиксированного хелпера для активной
-  /// локальной сессии. Удаление файла возвращает запрос пароля.
   static const _polkitRuleContent =
       '''// keqdroid: passwordless authorization for TUN mode (installed on user request).
 // Removing this file restores the password prompt on every TUN connect.
@@ -598,20 +473,10 @@ polkit.addRule(function(action, subject) {
 });
 ''';
 
-  /// Установлено ли беспарольное правило. Признаком берём root-хелпер по
-  /// [_polkitHelperPath], а polkit-правило намеренно не статим: каталог
-  /// `/etc/polkit-1/rules.d` имеет режим 0700 (root/polkitd), обычный юзер в
-  /// него не может зайти — `existsSync` на файле внутри всегда вернёт false,
-  /// даже когда правило на месте. Гейт по нему держал тумблер вечно
-  /// «выключенным» после успешной установки (пользователь вводил пароль,
-  /// файлы писались, но UI перечитывал «не установлено» и просил пароль снова).
-  /// Хелпер лежит в общедоступном каталоге и ставится/удаляется вместе с
-  /// правилом — это верный признак «беспарольный TUN установлен».
+  // правило не статим: /etc/polkit-1/rules.d с правами 0700, existsSync оттуда всегда false. признак это хелпер
   static bool isPasswordlessTunInstalled() {
     if (!Platform.isLinux) return false;
     try {
-      // Хелпер прошлой версии считаем отсутствующим: подключение спросит
-      // пароль, снимет его и предложит поставить новый.
       final helper = File(_polkitHelperPath);
       return helper.existsSync() &&
           helper.readAsStringSync().contains(_helperVersionMark);
@@ -620,12 +485,9 @@ polkit.addRule(function(action, subject) {
     }
   }
 
-  /// Ставит root-хелпер и polkit-правило одним элевейтед-запуском (polkit
-  /// спросит пароль один раз). После этого TUN стартует без пароля. true — успех.
   static Future<bool> installPasswordlessTun() async {
     if (!Platform.isLinux) return false;
     final helper = '#!/bin/sh\n$_tunWrapperBody';
-    // Доверенные копии ядер — те, что приложение запустит сейчас.
     final cores = <String, String?>{
       'keqrnel': await LinuxCorePaths.keqrnelExecutable(),
       'mihomo': await LinuxCorePaths.mihomoExecutable(),
@@ -635,8 +497,7 @@ polkit.addRule(function(action, subject) {
         if (value != null)
           "install -m 0755 ${_shellQuote(value)} '$_trustedCoresDir/$key'",
     ].join('\n');
-    // Кавычки вокруг разделителей heredoc (<<'EOF') запрещают шеллу разворачивать
-    // $1/$SB/$(...) внутри — они пишутся в файлы буквально.
+    // <<'EOF' в кавычках: $1 и $(...) пишутся в файл буквально
     final script = '''
 set -e
 mkdir -p /usr/local/lib/keqdroid '$_trustedCoresDir'
@@ -670,8 +531,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     }
   }
 
-  /// Удаляет root-хелпер и polkit-правило (снова элевейтед-запуск с паролем) —
-  /// возвращает поведение к запросу пароля на каждый TUN-коннект.
   static Future<bool> removePasswordlessTun() async {
     if (!Platform.isLinux) return false;
     final script =
@@ -687,15 +546,9 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     }
   }
 
-  /// Строка в одинарных кавычках для sh: путь в домашнем каталоге может
-  /// содержать что угодно, включая саму кавычку.
   static String _shellQuote(String value) =>
       "'${value.replaceAll("'", r"'\''")}'";
 
-  // ---- sing-box TUN (root via pkexec) -------------------------------------
-
-  /// Запускает keqrnel под root через pkexec (TUN нужен root). keqrnel — это
-  /// sing-box host: поднимает переданный sing-box-конфиг xray-протоколов.
   Future<void> _runKeqrnelAsRoot(String config) async {
     final singBin = await LinuxCorePaths.keqrnelExecutable();
     if (singBin == null) {
@@ -704,10 +557,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       );
     }
 
-    // Стек TUN-инбаунда — под возможности этого бинаря: ядро без
-    // `-tags with_gvisor` на `stack: gvisor` не ругается в конфиге, а падает
-    // при старте («gVisor is not included in this build»), и TUN не поднимается
-    // вовсе. Поставляемый keqrnel собран с тегом, собранный руками — вряд ли.
     final stackFix = applyTunStackFallback(
       config,
       gvisorAvailable: await CoreCapabilities.hasGvisor(singBin),
@@ -739,8 +588,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       log: _singboxLog,
     );
 
-    // Pull the core's own output (the file above) into the session log so the
-    // debug screen and the error below show the real sing-box/xray message.
     final coreLog = await _readRootCoreLog();
     if (coreLog.trim().isNotEmpty) {
       _singboxLog
@@ -761,11 +608,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     }
   }
 
-  /// Копия ядра, которую сможет исполнить root.
-  ///
-  /// В AppImage бинарь лежит на пользовательском FUSE-монте (`/tmp/.mount_*`),
-  /// куда root вообще не может зайти, и pkexec умирает с «Permission denied» /
-  /// кодом 127. Копия в каталоге сессии (обычный /tmp) от этого избавлена.
+  // монт AppImage root не видит, pkexec падает с Permission denied, поэтому копия в каталоге сессии
   Future<String> _stageBinaryForRoot(String binPath, String name) async {
     final staged = p.join(_sessionDir!.path, name);
     try {
@@ -777,7 +620,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     return staged;
   }
 
-  /// Вывод root-ядра из файла, куда его редиректит обёртка.
   Future<String> _readRootCoreLog() async {
     try {
       return await File(_coreLogPath).readAsString();
@@ -786,14 +628,8 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     }
   }
 
-  /// Общий pkexec-путь для обоих ядер: сентинел, auth-маркер, запуск обёртки и
-  /// ожидание самой авторизации. Возвращает процесс pkexec — готовность TUN
-  /// меряет уже вызывающий.
-  ///
-  /// [onStarted] зовётся сразу после запуска, до ожидания авторизации: стоп,
-  /// пришедший в это окно, обязан найти процесс на месте и снять сентинел.
-  /// Иначе root-ядро остаётся жить с поднятым TUN, а убить его нам уже нечем —
-  /// обычный пользователь root-процессу сигнал не пошлёт.
+  // onStarted сразу после запуска: стоп в этом окне обязан найти процесс и снять сентинел,
+  // иначе root-ядро останется с поднятым TUN
   Future<Process> _startElevatedCore({
     required String binPath,
     required String configPath,
@@ -804,39 +640,16 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     required void Function(Process) onStarted,
     bool allowPasswordless = true,
   }) async {
-    // sing-box runs as root via pkexec. pkexec does NOT reliably forward signals
-    // to its root child, and a normal user cannot signal a root process — so we
-    // can't stop sing-box by killing the pkexec wrapper. Doing that orphans
-    // sing-box with the TUN + routes + nftables rules still installed, which
-    // breaks the network even after disconnect (and in Proxy mode afterwards).
-    // Instead run a tiny root wrapper that ties sing-box's lifetime to a sentinel
-    // file: while the file exists AND the app is alive it keeps running; when we
-    // delete the file (on stop) — or the app dies — it SIGTERMs sing-box AS ROOT,
-    // letting it revert auto_route/nftables.
-    //
-    // Sentinel-файл + `kill -0` PID poll, а не stdin: после polkit-аутентификации
-    // pkexec не пробрасывает stdin вызывающего в elevated-потомка — у того stdin
-    // сразу на EOF, и любой stdin-вотчдог убивает keqrnel в момент запуска.
-    // Сентинел не требует ни stdin, ни повторной элевации.
-    //
-    // pkexec runs keqrnel as root in the background; its stdout/stderr don't
-    // reliably reach our captured pipe (the process can exit before the async
-    // stream drains), which left core errors invisible — only a generic "code 1"
-    // surfaced. Redirect them to a stable, root-readable file so the REAL reason
-    // a TUN start failed is always available. Readiness is detected via the tun
-    // interface appearing, so this doesn't depend on the live pipe.
+    // pkexec не пробрасывает сигналы root-потомку, а stdin у него сразу на EOF,
+    // поэтому жизнь ядра привязана к файлу-сентинелу и kill -0 по pid приложения
     final sentinelFile = File(p.join(_sessionDir!.path, 'core.run'));
     await sentinelFile.writeAsString('1');
     _rootSentinel = sentinelFile;
-    // Auth-маркер: root-обёртка создаёт его сразу после успешной polkit-
-    // аутентификации. По нему отличаем «пользователь ещё вводит пароль» от
-    // «ядро стартовало и должно поднять TUN» (см. _waitForElevation). Session
-    // dir свежий на каждую сессию — застарелый маркер исключён.
+    // маркер создаёт обёртка сразу после polkit: по нему отличаем ввод пароля от старта ядра
     final authMarker = File(p.join(_sessionDir!.path, 'core.auth'));
     _keqrnelLaunchedAt = DateTime.now();
 
-    // Позиции аргументов — контракт с телом обёртки; менять их можно только
-    // вместе с версией [_polkitHelperPath].
+    // позиции аргументов это контракт с телом обёртки, менять только вместе с путём хелпера
     final coreArgs = <String>[
       binPath,
       configPath,
@@ -855,10 +668,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       asRoot: runningAsRoot(),
       passwordless: usePasswordless,
     );
-    // Проверяем до запуска: без polkit `Process.start` бросает
-    // `ProcessException`, а она печатает себя вместе со всей командой — то есть
-    // с телом root-обёртки, где `$1`..`$8` ещё не подставлены. Пользователь
-    // видел несколько экранов шелла вместо одной фразы «поставьте polkit».
     if (launch.viaPkexec && LinuxCorePaths.findPkexec() == null) {
       throw const VpnStartException(
         'TUN mode needs root through pkexec, and polkit is not installed. '
@@ -875,7 +684,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
         mode: ProcessStartMode.normal,
       );
     } on ProcessException catch (e) {
-      // Только message: `$e` затащил бы сюда команду целиком.
+      // только message: $e затащил бы сюда команду целиком
       throw VpnStartException(
         'Could not launch $label with elevated privileges through '
         '${launch.executable}: ${e.message}',
@@ -884,9 +693,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     onStarted(process);
     _pipeProcessOutput(process, log);
 
-    // Сначала дожидаемся polkit-аутентификации, и только потом меряем
-    // готовность TUN — иначе 20с бюджета _waitForTunCore тикали, пока
-    // пользователь вводил пароль, и коннект падал «после запроса прав».
+    // сначала ждём polkit: иначе бюджет готовности TUN тикал, пока человек вводил пароль
     final authorized = await _waitForElevation(
       process: process,
       authMarker: authMarker,
@@ -894,8 +701,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       untrustedCoreExit: usePasswordless ? _untrustedCoreExit : null,
     );
     if (!authorized) {
-      // Ядро обновилось и разошлось с доверенной копией беспарольного хелпера.
-      // Это подключение один раз идёт с паролем — оно же обновит копию.
       AppLogger.instance.info(
         '$label changed since passwordless TUN was set up; asking for the '
         'password once to trust the new one',
@@ -912,10 +717,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       );
     }
 
-    // Пользователь только что ввёл пароль в polkit, а беспарольного правила нет —
-    // разово за запуск сигналим UI предложить его установить. Дальше — гейт по
-    // настройке linuxTunRememberDismissed на стороне UI. Под root пароля не
-    // было и polkit может быть вовсе не установлен: предлагать там нечего.
     if (launch.viaPkexec && !usePasswordless && !_rememberOfferedThisRun) {
       _rememberOfferedThisRun = true;
       if (!_linuxTunRememberController.isClosed) {
@@ -942,19 +743,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     return copied ? rootGeoDir.path : null;
   }
 
-  /// Ждёт завершения polkit-аутентификации перед отсчётом готовности TUN.
-  ///
-  /// [Process.start] для pkexec возвращается сразу — ещё до того, как
-  /// пользователь ввёл пароль в окне polkit. Если запустить 20-секундный
-  /// бюджет [_waitForSingbox] в этот же момент, его съедает сам ввод пароля:
-  /// tun-интерфейс не успевает появиться и коннект падает «keqrnel TUN did
-  /// not start» сразу после запроса прав.
-  ///
-  /// Root-обёртка первым действием создаёт [authMarker] — это сигнал «пароль
-  /// принят, ядро запускается». До маркера ждём без TUN-бюджета (до 2 минут на
-  /// ввод пароля); выход pkexec до маркера — отмена/нет агента (126/127) или
-  /// реальная ошибка, обе ветки объясняет [_elevationError]. false — хелпер
-  /// вышел кодом [untrustedCoreExit]: ядро не то, которому он доверяет.
   Future<bool> _waitForElevation({
     required Process process,
     required File authMarker,
@@ -970,12 +758,10 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
         throw VpnStartException(_elevationError(code, log));
       }
       if (authMarker.existsSync()) return true;
-      // Подстраховка: ядро уже подняло TUN, а маркер не виден (экзотика ФС).
       if (await _tunInterfaceExists()) return true;
       await Future<void>.delayed(const Duration(milliseconds: 300));
     }
-    // Диалог так и висит без ответа — сворачиваем pkexec. Это безопасно:
-    // auth не выдана, root-потомка ещё нет, осиротевшего TUN не будет.
+    // auth не выдана и root-потомка ещё нет, сворачивать pkexec безопасно
     try {
       process.kill(ProcessSignal.sigterm);
     } catch (_) {}
@@ -985,9 +771,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     );
   }
 
-  /// Готовность TUN. Работает для обоих ядер: главный признак — появление
-  /// самого интерфейса, а он у нас назван одинаково (`tun-keqdis`) независимо
-  /// от того, кто его создал.
   Future<bool> _waitForTunCore({
     required Process process,
     required StringBuffer log,
@@ -998,19 +781,14 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       if (code != null) {
         throw VpnStartException(_elevationError(code, log));
       }
-      // Строка только от sing-box: прежнее «"started" где-то и "tun"
-      // где-то» ловило баннер встроенного xray, а он печатается раньше, чем
-      // поднят tun-инбаунд (ядро стартует аутбаунды до инбаундов).
+      // строка только от sing-box: баннер встроенного xray печатается раньше tun-инбаунда
       if (singboxTunReady(log.toString())) return true;
-      // tun interface up is the most reliable signal across versions.
       if (await _tunInterfaceExists()) return true;
       await Future<void>.delayed(const Duration(milliseconds: 300));
       waited += 300;
     }
-    // Timed out — only treat as ready if the tun device actually appeared.
     if (await _tunInterfaceExists()) return true;
 
-    // Pull core log one last time for the error message below.
     try {
       final coreLog = await File(_coreLogPath).readAsString();
       if (coreLog.trim().isNotEmpty) {
@@ -1027,13 +805,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     return false;
   }
 
-  /// Что показать человеку, когда ядро под root вышло с ошибкой.
-  ///
-  /// У pkexec два своих кода на «root не дали»: 126 — диалог пароля закрыли,
-  /// 127 — не авторизовано или спросить некому, агента polkit в сессии нет (так
-  /// бывает на тайлингах без polkit-gnome и подобных). Их разбираем и советуем
-  /// proxy-режим; любой другой код — настоящая поломка ядра, оставляем код и
-  /// хвост лога.
+  // 126 значит окно пароля закрыли, 127 не авторизовано или нет агента polkit
   String _elevationError(int code, StringBuffer log) {
     switch (code) {
       case 126:
@@ -1044,9 +816,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
             '(pkexec). Install/start a polkit authentication agent, or use '
             'Proxy mode.';
       default:
-        // Реальный вывод ядра лежит в _coreLogPath (pipe pkexec обычно пуст,
-        // см. коммент у обёртки) — тянем его, иначе юзер видит голый код.
-        // Файл доверяем только если он записан после запуска этой сессии.
         var coreTail = '';
         try {
           final coreLog = File(_coreLogPath);
@@ -1058,9 +827,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
         } catch (_) {}
         final detail =
             coreTail.isNotEmpty ? _tail(StringBuffer(coreTail)) : _tail(log);
-        // Причину ищем в полном выводе (в хвосте её часто уже нет), а сам
-        // хвост всё равно показываем: типовые случаи объясняет подсказка,
-        // разбирать приходится нетиповые.
         final hint = tunFailureHint(
           coreTail.isNotEmpty ? coreTail : log.toString(),
           windows: false,
@@ -1078,19 +844,9 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     return Directory('/sys/class/net/$tunInterfaceName').exists();
   }
 
-  /// Ходит ли хоть что-нибудь через поднятое ядро.
-  ///
-  /// Проверка идёт через локальный HTTP-инбаунд — он есть в обоих режимах (в
-  /// TUN его инбаунды лифтит keqrnel, через него же качается обновление), и
-  /// путь через него тот же, что у трафика из туннеля: те же правила
-  /// роутинга, тот же аутбаунд, тот же сервер.
-  ///
-  /// Только предупреждение: сессию не рвём. Правило пользователя, отправляющее
-  /// тестовый адрес в block, — тоже причина, и разрывать из-за неё живой
-  /// туннель нельзя.
   Future<void> _verifyChainReachable(TunnelSessionRequest request) async {
     await Future<void>.delayed(const Duration(seconds: 3));
-    if (_activeMode == null) return; // сессию уже погасили
+    if (_activeMode == null) return;
     final client = HttpClient();
     String outcome;
     try {
@@ -1116,8 +872,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     );
   }
 
-  // ---- system proxy (see LinuxSystemProxy) --------------------------------
-
   Future<void> _applySystemProxy(TunnelSessionRequest request) async {
     final ok = await (await LinuxSystemProxy.system()).enable(
       httpPort: request.httpPort,
@@ -1140,21 +894,12 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     }
   }
 
-  /// Best-effort cleanup of state a previous (possibly crashed) run may have
-  /// left behind: a system proxy still pointing at a dead local port. Called on
-  /// Linux app startup. Does not touch core processes (avoid killing unrelated
-  /// xray/sing-box the user may run).
   static Future<void> cleanupStaleState() => _restoreSystemProxy();
 
-  // ---- lifecycle ----------------------------------------------------------
-
-  /// Вотчдог: ядро завершилось само (не через [stopSession]) → чистим
-  /// системный прокси/состояние и эмитим error вместо вечного «Connected».
   void _watchProcessExit(Process? process, String label) {
     if (process == null) return;
     unawaited(process.exitCode.then((code) async {
       if (_stoppingSession) return;
-      // Процесс уже не из активной сессии (штатный stop занулил поля).
       if (!identical(process, _xrayProcess) &&
           !identical(process, _singboxProcess) &&
           !identical(process, _mihomoProcess)) {
@@ -1184,10 +929,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     }
   }
 
-  /// Зачистка перед стартом новой сессии — без эмитов disconnecting/disconnected.
-  /// Нотифаер пропускает disconnected из стрима в UI даже при connect-in-flight
-  /// (так нужно Android'у: отмена диалога разрешения), поэтому эмит отсюда
-  /// проваливал кнопку в серый «отключён» на пару секунд, пока поднимались ядра.
+  // без эмитов: disconnected из стрима проходит в UI и при connect-in-flight, кнопка проваливалась в серое
   Future<void> _cleanupForRestart() async {
     _stoppingSession = true;
     try {
@@ -1207,16 +949,11 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       await _dumpLogsToFile();
     }
 
-    // Always restore the system proxy on stop — even if this instance did not
-    // set it (left over from a previous run/crash) — otherwise the desktop
-    // keeps routing to a dead 127.0.0.1 proxy.
+    // прокси возвращаем всегда, даже если ставил не этот экземпляр (прошлое падение)
     await _restoreSystemProxy();
 
-    // sing-box first: it owns the tun device + routes, tear it down before the
-    // upstream SOCKS provider so traffic fails closed, not into a dead socks.
+    // сначала ядро с TUN: трафик должен падать закрытым, а не в мёртвый socks
     await _stopRootCore(_singboxProcess, 'keqrnel');
-    // mihomo под root останавливается тем же сентинелом; обычный (proxy-режим)
-    // — сигналом, как любой свой процесс.
     if (_mihomoRunsAsRoot) {
       await _stopRootCore(_mihomoProcess, 'mihomo');
     } else {
@@ -1278,9 +1015,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
   Future<List<Map<String, dynamic>>> getInstalledApps({
     bool includeSystem = false,
   }) async {
-    // Запущенные процессы из /proc, по одному на имя файла: отмеченная
-    // строка сохраняется именем. Потоки ядра (без /exe) — только с
-    // includeSystem.
     final seen = <String>{};
     final apps = <Map<String, dynamic>>[];
     try {
@@ -1292,7 +1026,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
         try {
           exePath = await Link('${entry.path}/exe').target();
         } catch (_) {
-          exePath = null; // permission denied or kernel thread
+          exePath = null;
         }
 
         String name;
@@ -1350,9 +1084,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     int concurrency = 16,
     UrlTestProgress? onEach,
   }) async =>
-      // Десктоп меряет поштучно: процессов тут не жалко, а общий конфиг xray
-      // пришлось бы ещё и заворачивать в keqrnel, чьи инбаунды принадлежат
-      // sing-box и про xray-роутинг ничего не знают.
       null;
 
   @override
@@ -1370,8 +1101,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     bool keepAlive = true,
   }) async {
     if (items.isEmpty) return [];
-    // EphemeralXrayPing is Windows-only for now; on Linux this degrades to a
-    // clear per-item error (TCP ping still works via getPing).
     final raw = await EphemeralXrayPing.urlTestBatch(
       items: items.map((e) => (id: e.$1, xrayConfigJson: e.$2)).toList(),
       socksPort: socksPort,
@@ -1412,8 +1141,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     );
   }
 
-  // ---- internals ----------------------------------------------------------
-
   static Map<String, String>? _coreProcessEnvironment(String? geoDir) {
     if (geoDir == null) return null;
     return {...Platform.environment, 'XRAY_LOCATION_ASSET': geoDir};
@@ -1421,7 +1148,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
 
   void _pipeProcessOutput(Process process, StringBuffer buffer) {
     void append(String line) {
-      // Тихая прослушка автовыбора — см. CoreDialFailures.
       CoreDialFailures.observe(line);
       XrayRouteDecisions.observe(line);
       if (!XraySessionLog.keep(line, _xrayLogThreshold)) return;
@@ -1434,13 +1160,9 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       }
     }
 
-    // allowMalformed: a core line in a non-UTF-8 locale (or a stray binary
-    // byte) must not throw FormatException and silently kill the log pipe —
-    // that's exactly when the log matters most.
+    // allowMalformed: строка ядра не в UTF-8 иначе роняет весь пайп лога
     const decoder = Utf8Decoder(allowMalformed: true);
-    // Строки режутся по всему потоку, а не по кускам пайпа: кусок обрывается
-    // где попало, и строка на границе распадалась на две половинки, которых
-    // не узнал бы ни счётчик отказов, ни человек в логе.
+    // строки режем по всему потоку: кусок пайпа обрывается где попало
     process.stderr
         .transform(decoder)
         .transform(const LineSplitter())
@@ -1451,17 +1173,11 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
         .listen(append);
   }
 
-  /// Non-blocking peek at a process's exit status. `null` means still running;
-  /// otherwise the exit code — which is NEGATIVE when the process was killed by
-  /// a signal on Linux (SIGKILL -> -9, SIGTERM -> -15). Callers must therefore
-  /// treat "not null" (not ">= 0") as "exited", or an OOM/kill reads as alive.
+  // убитый сигналом процесс на Linux даёт отрицательный код, поэтому вышел значит не null
   static Future<int?> _exitCodeOrNull(Process process) => process.exitCode
       .then<int?>((c) => c)
       .timeout(const Duration(milliseconds: 1), onTimeout: () => null);
 
-  /// Stops the elevated core gracefully. We cannot signal the root process
-  /// directly, so we delete the sentinel file the root wrapper polls — it then
-  /// SIGTERMs the core AS ROOT, which reverts auto_route/nftables before exiting.
   Future<void> _stopRootCore(Process? proc, String coreName) async {
     if (proc == null) return;
     try {
@@ -1472,8 +1188,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     try {
       await proc.exitCode.timeout(const Duration(seconds: 8));
     } catch (_) {
-      // Wrapper didn't exit in time — last resort so we never leave a root
-      // core holding the TUN. The elevated pkill may show a polkit prompt.
+      // обёртка не вышла вовремя: добиваем, чтобы root-ядро не держало TUN (может спросить пароль)
       try {
         await Process.run('pkexec', ['pkill', '-TERM', '-x', coreName]);
       } catch (_) {}
@@ -1482,11 +1197,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       } catch (_) {}
     }
 
-    // Процесс мёртв — устройство ещё нет: ядро снимает интерфейс и маршруты уже
-    // после выхода из main, а при жёстком добивании эту уборку доделывает ядро
-    // ОС. Стартовать поверх ещё живого `tun-keqdis` нельзя: имя занято, и
-    // следующая сессия либо падает, либо поднимается на умирающем устройстве —
-    // «через раз ошибка, через раз туннеля нет».
+    // процесс мёртв, а устройство ещё нет: поверх живого tun-keqdis следующая сессия падает
     const budgetMs = 6000;
     var waited = 0;
     while (waited < budgetMs && await _tunInterfaceExists()) {
@@ -1558,12 +1269,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     return port;
   }
 
-  /// Последняя проверка портов перед стартом ядра.
-  ///
-  /// Порты сюда приезжают уже подобранные ([LocalPortResolver] отработал до
-  /// генерации конфига), так что остаётся гонка «занял между проверкой и
-  /// стартом». Причину всё равно называем: «занят соседом» и «запрещён» —
-  /// разные действия пользователя.
   Future<void> _ensurePortsAvailable(
     TunnelSessionRequest request, {
     required bool needsHttp,
@@ -1613,8 +1318,8 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
 
 
 
-  /// Счётчики API ядра, а не tun-интерфейса: рукопожатия TCP там отвечает
-  /// локальный стек, и «пришло» было бы и от мёртвого сервера.
+  // счётчики API ядра, а не интерфейса: рукопожатия TCP отвечает локальный стек,
+  // и пришло было бы и от мёртвого сервера
   @override
   Future<({int down, int up})?> sessionTrafficCounters() async {
     if (_mihomoProcess != null) {
@@ -1641,9 +1346,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       final int outOctets;
 
       if (_mihomoProcess != null) {
-        // У mihomo источник один на оба режима — его собственный RESTful API.
-        // Счётчики tun-интерфейса тут не годятся: в TUN-режиме их пишет ядро
-        // ОС, а в proxy-режиме интерфейса нет вовсе.
         final api = MihomoApiSession();
         final port = api.port;
         if (port == null) {
@@ -1658,8 +1360,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
         inOctets = t.down;
         outOctets = t.up;
       } else if (mode == ConnectionMode.tun) {
-        // tun interface stats: kernel writes the app's egress to the device
-        // (tx) and reads sing-box's downloaded replies from it (rx).
+        // в интерфейс ядро ОС пишет исходящее (tx) и читает ответы (rx)
         final c = await _queryTunCounters();
         if (c == null) {
           emitConnectedTelemetry(mode);
@@ -1668,7 +1369,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
         inOctets = c.rx;
         outOctets = c.tx;
       } else if (_keqrnelClashPort != null) {
-        // keqrnel proxy: кумулятивный трафик из clash_api sing-box.
         final t = await queryClashTraffic(
           _keqrnelClashPort!,
           secret: _keqrnelClashSecret ?? '',
@@ -1725,7 +1425,6 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
 
 
 
-  /// Cumulative tun interface counters from sysfs (download = rx, upload = tx).
   Future<({int rx, int tx})?> _queryTunCounters() async {
     try {
       final base = '/sys/class/net/$tunInterfaceName/statistics';

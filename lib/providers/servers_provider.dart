@@ -6,8 +6,6 @@ class ServersState {
   final bool isLoading;
   final String? error;
 
-  /// Индекс серверов по id — считается один раз на состояние, чтобы каждый
-  /// `_ServerTile` не искал себя в `servers` линейно (O(N²) на длинный список).
   final Map<String, ServerItem> byId;
 
   ServersState({
@@ -19,8 +17,6 @@ class ServersState {
 
   ServerItem? get activeServer => byId[activeServerId];
 
-  // sentinel чтобы отличить "не передали" от явного null (сброс activeServerId):
-  // через обычный nullable + ?? занулить поле в copyWith не получится
   static const _sentinel = Object();
 
   ServersState copyWith({
@@ -53,16 +49,6 @@ class ServersNotifier extends Notifier<ServersState> {
     state = ServersState(servers: servers, activeServerId: activeId);
   }
 
-  /// Подтягивает в цепочки свежие ссылки их узлов.
-  ///
-  /// Обновление подписки переписывает ссылки серверов (ротация
-  /// reality-параметров, смена порта), а цепочка хранит их снимок — без этого
-  /// шага она молча оставалась бы на протухшем конфиге. Узлы, которых в списке
-  /// уже нет, остаются на снимке: цепочка продолжает работать по последней
-  /// известной ссылке, а не разваливается.
-  ///
-  /// Пишем только реально изменившиеся цепочки — обычная загрузка списка не
-  /// должна дёргать хранилище.
   Future<List<ServerItem>> _syncChains(
     StorageService storage,
     List<ServerItem> servers,
@@ -98,8 +84,6 @@ class ServersNotifier extends Notifier<ServersState> {
     return result;
   }
 
-  /// Создаёт цепочку из выбранных серверов (порядок — от входного узла к
-  /// выходному) и кладёт её в список обычным сервером.
   Future<ServerItem> saveChain({
     String? id,
     required String name,
@@ -146,9 +130,6 @@ class ServersNotifier extends Notifier<ServersState> {
 
   Future<void> reload() => _load();
 
-  /// перечитывает серверы после обновления подписки.
-  /// subscription_service переиспользует старые ID при совпадении конфига,
-  /// так что activeServerId в storage уже актуален — просто читаем заново
   Future<void> reloadPreservingActive() => _load();
 
   Future<void> setActive(ServerItem server) async {
@@ -161,8 +142,6 @@ class ServersNotifier extends Notifier<ServersState> {
     final validationError = validateServerConfig(config);
     if (validationError != null) throw Exception(validationError);
 
-    // Ссылка mieru описывает столько серверов, сколько в ней пар порт/протокол.
-    // Остальные форматы разворачиваются сами в себя, и путь для них прежний.
     final configs = MieruLink.expand(config);
     final fresh = configs
         .where((c) => !state.servers.any((s) => s.config == c))
@@ -178,7 +157,6 @@ class ServersNotifier extends Notifier<ServersState> {
     state = state.copyWith(servers: [...state.servers, ...added]);
   }
 
-  /// Пользовательское имя сервера; null/пусто — сброс к имени из конфига.
   Future<void> rename(String id, String? name) async {
     final trimmed = name?.trim();
     await _updateServer(
@@ -196,8 +174,6 @@ class ServersNotifier extends Notifier<ServersState> {
     );
   }
 
-  /// Замена конфига сервера из GUI-редактора. Для подписочных серверов взводит
-  /// configOverridden, чтобы правка пережила обновление подписки.
   Future<void> updateConfig(String id, String rawConfig) async {
     final config = normalizeImportedConfig(rawConfig);
     final validationError = validateServerConfig(config);
@@ -215,8 +191,6 @@ class ServersNotifier extends Notifier<ServersState> {
     );
   }
 
-  /// Возврат подписочного сервера к конфигу из подписки: снимает
-  /// override-флаг и тянет свежий конфиг рефрешем подписки.
   Future<void> revertConfigOverride(ServerItem server) async {
     if (!server.configOverridden || server.subscriptionId == null) return;
     await _updateServer(server.id, (s) => s.copyWith(configOverridden: false));
@@ -230,8 +204,6 @@ class ServersNotifier extends Notifier<ServersState> {
     }
   }
 
-  /// Точечное обновление сервера: пишет через serial-очередь storage и
-  /// обновляет state, не трогая остальной список.
   Future<void> _updateServer(
     String id,
     ServerItem Function(ServerItem) change,
@@ -244,13 +216,6 @@ class ServersNotifier extends Notifier<ServersState> {
     state = state.copyWith(servers: list);
   }
 
-  /// Ссылка `wg://` — тот же AmneziaWG, только в одну строку: разворачиваем её
-  /// в `.conf` на входе, и дальше по приложению живёт один формат. Хранить
-  /// ссылку как есть было бы дешевле на импорте и дороже везде потом — имя,
-  /// пинг, редактор и генератор mihomo написаны под `.conf`.
-  ///
-  /// Битую ссылку отдаём обратно нетронутой: её причину назовёт
-  /// [validateServerConfig], и сообщение будет одно, а не два разных.
   static String normalizeImportedConfig(String rawConfig) {
     final trimmed = rawConfig.trim();
     if (!AwgUri.looksLikeUri(trimmed)) return trimmed;
@@ -264,8 +229,6 @@ class ServersNotifier extends Notifier<ServersState> {
   static String? validateServerConfig(String rawConfig) {
     if (rawConfig.isEmpty) return 'Configuration is empty';
 
-    // Цепочка серверов: собственный формат приложения, узлы внутри уже
-    // проверены при сборке — здесь только целостность ссылки.
     if (ProxyChainConfig.looksLikeChain(rawConfig)) {
       return ProxyChainConfig.describeProblem(rawConfig);
     }
@@ -279,9 +242,6 @@ class ServersNotifier extends Notifier<ServersState> {
       return null;
     }
 
-    // Ссылку проверяем развёрнутой: сюда она попадает только если
-    // [normalizeImportedConfig] развернуть её не смог, и сказать надо, чего
-    // в ней не хватает, а не «Unsupported format» на формат, который мы знаем.
     if (AwgUri.looksLikeUri(rawConfig)) {
       try {
         AwgProfile.parse(AwgUri.toConf(rawConfig));
@@ -291,16 +251,9 @@ class ServersNotifier extends Notifier<ServersState> {
       return null;
     }
 
-    // Готовый конфиг ядра целиком (провайдеры отдают такие «сервера с готовым
-    // роутингом»): проверяем, что это именно конфиг того ядра, за которое себя
-    // выдаёт. Clash — раньше xray: json-конфиг Clash тоже начинается с '{', а
-    // xray-парсер его не возьмёт и выдаст непонятную жалобу про outbounds.
     if (CustomClashConfig.looksLikeClash(rawConfig)) {
       return CustomClashConfig.describeProblem(rawConfig);
     }
-    // Конфиг sing-box импорт раскладывает на ссылки, так что целиком он
-    // доходит сюда, только если брать из него нечего или его вставили в
-    // редактор одного сервера. Сервером целиком он не станет ни там, ни тут.
     if (SingboxOutbounds.looksLike(rawConfig)) {
       return SingboxOutbounds.describeProblem(rawConfig) ??
           'A sing-box config lists several servers: add it through import, '
@@ -325,17 +278,10 @@ class ServersNotifier extends Notifier<ServersState> {
       return 'Unsupported format. Use vless://, vmess://, trojan://, ss://, ssr://, hysteria://, hysteria2://, hy2://, tuic://, anytls://, mierus://, wg://, an Xray JSON config, a sing-box config, a Clash YAML config or an AmneziaWG .conf';
     }
 
-    // Схема `hysteria://` носит обе версии, и различить их можно только по
-    // параметрам. Первую не собирает ни одно наше ядро; собранная как вторая,
-    // она даёт молчащий сервер, и причину человек ищет в чём угодно, кроме
-    // версии протокола.
     if (HysteriaLinkParams.isV1(rawConfig)) {
       return 'Hysteria v1 is not supported. Ask the provider for a hysteria2:// link';
     }
 
-    // У SSR хост и порт лежат внутри base64, у Mieru порт — в запросе. Общая
-    // проверка ниже находила у них пустой хост или нулевой порт, и руками
-    // нельзя было добавить ни то, ни другое, хотя подписка их приносила.
     if (lower.startsWith('ssr://')) {
       return SsrLink.tryParse(rawConfig) == null
           ? 'Invalid SSR link: expected ssr:// with base64 of '
@@ -394,37 +340,25 @@ class ServersNotifier extends Notifier<ServersState> {
     );
   }
 
-  /// батч-обновление ping + типа теста: один write в storage и один rebuild
   Future<void> updatePingResults(
     Map<String, ({int? pingMs, String? lastPingType})> updates,
   ) async {
     if (updates.isEmpty) return;
-    // Мержим в актуальный список внутри serial-очереди storage: запись
-    // снапшота провайдера целиком (saveServers) затирала серверы, если
-    // параллельно успела обновиться подписка.
+    // мержим внутри очереди storage: запись снапшота целиком затирала параллельно обновлённую подписку
     final merged = await ref
         .read(storageProvider)
         .applyPingUpdates(updates, DateTime.now());
     state = state.copyWith(servers: merged);
   }
 
-  /// пингует серверы: UI обновляем по мере результатов, в storage пишем разом в конце
   Future<List<PingResult>> _pingServersWithBatchedUpdates(
     List<ServerItem> servers,
   ) async {
     final results = <PingResult>[];
     final pending = <String, ({int? pingMs, String? lastPingType})>{};
 
-    // Троттлинг UI: результаты приходят по одному, а каждый эмит state
-    // перестраивает всю панель серверов (перегруппировка, пересортировка групп,
-    // все раскрытые тайлы). Копим результаты и применяем пачкой ~5 раз/сек —
-    // прогресс в UI живой, но ребилдов на порядок меньше на больших списках.
     final buffered = <PingResult>[];
 
-    // Крутилка на каждом тайле, а не только на кнопке группы. Раньше её ставил
-    // один pingSingle, поэтому «пинг всех» выглядел так, будто ничего не
-    // происходит: список стоял неподвижно, пока не приедет первый результат.
-    // Гасим по мере готовности — видно, как замер идёт по списку.
     final pingingIds = servers.map((s) => s.id).toSet();
     void stopPinging(Iterable<String> ids) {
       if (ids.isEmpty) return;
@@ -433,10 +367,6 @@ class ServersNotifier extends Notifier<ServersState> {
           .update((set) => {...set}..removeAll(ids));
     }
 
-    // Крутилка снимается здесь, вместе с цифрой, а не когда пришёл результат.
-    // Снятая раньше открывала до следующего флаша старую цифру от прошлого
-    // замера, и строка в сортировке по пингу дёргалась дважды. Флаш идёт раз в
-    // 200 мс — столько крутилка над готовым результатом на глаз не висит.
     void flushBufferedToState() {
       if (buffered.isEmpty) return;
       final done = [for (final r in buffered) r.serverId];
@@ -463,7 +393,6 @@ class ServersNotifier extends Notifier<ServersState> {
     final vpnState = await _vpnStateForPing();
     final vpnConnected = vpnState?.status == VpnStatus.connected;
     final tunMode = vpnState?.activeMode == ConnectionMode.tun;
-    // Raw TCP ping is unmeasurable through a TUN tunnel — switch to URL ping.
     final pingType = PingService.pingTypeForConnectionState(
       PingService.pingTypeFromSettings(settings),
       vpnConnected: vpnConnected,
@@ -513,15 +442,11 @@ class ServersNotifier extends Notifier<ServersState> {
     } finally {
       flushTimer.cancel();
       flushBufferedToState();
-      // Сюда попадают те, по кому результата так и не пришло, — например если
-      // весь батч упал исключением на полпути.
       stopPinging(pingingIds);
     }
 
     if (pending.isNotEmpty) {
-      // Мержим результаты в актуальный список из storage, а не пишем снапшот
-      // провайдера целиком: если за время пинга обновилась подписка, снапшот
-      // устарел и затёр бы её новые серверы.
+      // мержим в список из storage: снапшот провайдера затёр бы подписку, обновлённую за время пинга
       final merged = await ref
           .read(storageProvider)
           .applyPingUpdates(pending, DateTime.now());
@@ -530,13 +455,7 @@ class ServersNotifier extends Notifier<ServersState> {
     return results;
   }
 
-  /// Состояние VPN для выбора типа пинга.
-  ///
-  /// Снимком читать нельзя: пока провайдер в loading (первый кадр после старта,
-  /// смена сервера, перезапуск ядра) `.value` отдаёт null, «подключены» выходит
-  /// false — и замер уходит сырым TCP прямо в туннель, где меряет локальный
-  /// конец вместо сервера. Ждём первое значение, но недолго: пинг не должен
-  /// зависать из-за состояния, а без него отработает как раньше.
+  // снимок в loading даёт null, и сырой TCP-замер ушёл бы в туннель мерить локальный конец
   Future<VpnState?> _vpnStateForPing() async {
     final snapshot = ref.read(vpnStateProvider);
     if (snapshot.hasValue) return snapshot.value;
@@ -553,9 +472,6 @@ class ServersNotifier extends Notifier<ServersState> {
     await _pingServersWithBatchedUpdates(state.servers);
   }
 
-  /// пингует серверы одной подписки (или manual-серверы при subscriptionId == null)
-  ///
-  /// Цепочки в «ручную» группу не входят — у них своя ([pingChains]).
   Future<void> pingSubscription(String? subscriptionId) {
     final servers = subscriptionId == null
         ? state.servers
@@ -567,12 +483,8 @@ class ServersNotifier extends Notifier<ServersState> {
     return _pingScoped(subscriptionId ?? manualGroupKey, servers);
   }
 
-  /// Ключ скоупа группы цепочек — общий для пинга, сворачивания и сортировки.
-  /// Значение живёт в `models/server_group.dart` вместе с самим разбиением на
-  /// группы: по нему же боковой навигатор находит, куда прыгать.
   static const String chainsGroupKey = kChainsServerGroupKey;
 
-  /// То же для серверов, добавленных руками (без подписки).
   static const String manualGroupKey = kManualServerGroupKey;
 
   Future<void> pingChains() => _pingScoped(
@@ -611,7 +523,6 @@ class ServersNotifier extends Notifier<ServersState> {
       final vpnState = await _vpnStateForPing();
       final vpnConnected = vpnState?.status == VpnStatus.connected;
       final tunMode = vpnState?.activeMode == ConnectionMode.tun;
-      // Raw TCP ping is unmeasurable through a TUN tunnel — switch to URL ping.
       final pingType = PingService.pingTypeForConnectionState(
         PingService.pingTypeFromSettings(settings),
         vpnConnected: vpnConnected,

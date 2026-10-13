@@ -1,14 +1,11 @@
 import 'connection_mode.dart';
 import 'vpn_backend.dart';
 
-/// параметры запуска туннеля (android tun и desktop proxy/tun)
 class TunnelSessionRequest {
   final ConnectionMode mode;
   final VpnBackend vpnBackend;
   final String xrayConfig;
 
-  /// Конфиг mihomo (когда [vpnBackend] == mihomo). JSON — ядро читает его как
-  /// YAML, тот надмножество; см. MihomoConfigGen.
   final String? mihomoConfig;
   final int socksPort;
   final int httpPort;
@@ -20,12 +17,8 @@ class TunnelSessionRequest {
   final String? serverName;
   final bool systemProxy;
 
-  /// Ядро: `chain` (xray → sing-box) или `keqrnel` (единое ядро). Дефолт `chain`.
   final String coreEngine;
 
-  /// Дебаг-режим приложения. Включает то, что стоит денег в рантайме и нужно
-  /// только для диагностики: поиск процесса-владельца соединения в sing-box
-  /// (`find_process`) для дебаг-экрана «Соединения».
   final bool debugMode;
 
   const TunnelSessionRequest({

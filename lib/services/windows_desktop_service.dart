@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 
 import '../models/app_settings.dart';
 
-/// Windows-only: трей, автозапуск, флаг --autostart.
 class WindowsDesktopService {
   WindowsDesktopService._();
 
@@ -21,23 +20,13 @@ class WindowsDesktopService {
     await _channel.invokeMethod<void>('setMinimizeToTray', {
       'enabled': settings.minimizeToTray,
     });
-    // allowElevation здесь снят: это приведение системы к сохранённым
-    // настройкам при запуске, и спрашивать UAC на каждом запуске нельзя.
+    // без UAC: это приведение системы к настройкам на каждом запуске
     await applyLaunchAtStartup(
       enabled: settings.launchAtStartup,
       elevated: settings.launchAtStartupElevated,
     );
   }
 
-  /// Приводит автозапуск Windows к заданному виду.
-  ///
-  /// [elevated] — стартовать сразу с правами администратора (задача
-  /// планировщика вместо ключа Run). Создать или снести такую задачу может
-  /// только администратор, поэтому смена этого режима требует [allowElevation]
-  /// и показывает UAC — один раз, а не при каждом входе в систему.
-  ///
-  /// false — задачу не создали и не удалили (отказ от UAC, нет прав). Обычный
-  /// автозапуск при этом уже выставлен, приложение стартовать будет.
   static Future<bool> applyLaunchAtStartup({
     required bool enabled,
     required bool elevated,
@@ -61,10 +50,7 @@ class WindowsDesktopService {
     return await _channel.invokeMethod<bool>('isLaunchAtStartup') ?? false;
   }
 
-  /// Есть ли задача планировщика, поднимающая именно этот exe.
-  ///
-  /// Спрашивается у системы, а не у настроек: задачу могли снести руками, а
-  /// папку с приложением — перенести, и тогда сохранённый флаг врёт.
+  // спрашиваем систему: задачу могли снести руками или перенести папку
   static Future<bool> isLaunchAtStartupElevated() async {
     if (!Platform.isWindows) return false;
     try {
@@ -81,7 +67,6 @@ class WindowsDesktopService {
         false;
   }
 
-  /// UAC-диалог и новый процесс с правами администратора; текущий завершается.
   static Future<bool> restartAsAdministrator() async {
     if (!Platform.isWindows) return false;
     try {
@@ -92,27 +77,24 @@ class WindowsDesktopService {
     }
   }
 
-  /// Убивает осиротевшие xray/sing-box после аварийного выхода и создаёт job object.
   static Future<void> initCoreProcessGuard() async {
     if (!Platform.isWindows) return;
     try {
       await _channel.invokeMethod<void>('initCoreProcessGuard');
     } on PlatformException {
-      // Non-fatal: tunnel may still work if ports are free.
+      // не смертельно, порты могут быть свободны
     }
   }
 
-  /// Эфемерный xray (ping/speed): при падении приложения процесс завершится вместе с ним.
   static Future<void> attachCoreProcess(int pid) async {
     if (!Platform.isWindows || pid <= 0) return;
     try {
       await _channel.invokeMethod<void>('attachCoreProcess', {'pid': pid});
     } on PlatformException {
-      // Best-effort.
+      // не вышло, не страшно
     }
   }
 
-  /// VPN-сессия: pid-файл для очистки при следующем запуске + job object.
   static Future<void> registerSessionCoreProcesses({
     required int xrayPid,
     int singboxPid = 0,
@@ -124,7 +106,7 @@ class WindowsDesktopService {
         'singboxPid': singboxPid,
       });
     } on PlatformException {
-      // Best-effort.
+      // не вышло, не страшно
     }
   }
 
@@ -133,7 +115,7 @@ class WindowsDesktopService {
     try {
       await _channel.invokeMethod<void>('clearSessionCoreProcesses');
     } on PlatformException {
-      // Best-effort.
+      // не вышло, не страшно
     }
   }
 
@@ -142,7 +124,6 @@ class WindowsDesktopService {
     return await _channel.invokeMethod<bool>('restoreMainWindow') ?? false;
   }
 
-  /// Хоткей «показать/скрыть»: видимое окно прячется в трей, скрытое — наверх.
   static Future<bool> toggleMainWindow() async {
     if (!Platform.isWindows) return false;
     return await _channel.invokeMethod<bool>('toggleMainWindow') ?? false;

@@ -1,13 +1,8 @@
-/// Разобранная вручную share-ссылка (vless:// / trojan:// / ss:// / hy2://).
-///
-/// Разбираем строку сами, а не через Uri.parse: акцессоры Uri декодируют
-/// компоненты, и пересборка меняла бы percent-encoding нетронутых частей
-/// (userInfo, fragment, незнакомые query-параметры). GUI-редактор конфига
-/// правит только управляемые параметры, всё остальное возвращается байт в байт.
+// разбираем сами: акцессоры Uri декодируют компоненты, и пересборка меняла бы percent-encoding нетронутых частей
 class RawShareUri {
   final String scheme;
   String userInfo; // сырой, без хвостового '@'; '' если нет
-  String host; // сырой, IPv6 — в скобках '[..]'
+  String host; // сырой, IPv6 в скобках [..]
   String port; // строкой; '' если не указан
   final String path; // с ведущим '/', обычно ''
   final List<RawQueryToken> query;
@@ -54,7 +49,6 @@ class RawShareUri {
       rest = rest.substring(0, slashIdx);
     }
 
-    // authority: [userInfo@]host[:port]
     String userInfo = '';
     var hostPort = rest;
     final atIdx = rest.lastIndexOf('@');
@@ -110,8 +104,6 @@ class RawShareUri {
     );
   }
 
-  /// Забирает первое значение managed-ключа (декодированное) и удаляет все
-  /// его вхождения из [query].
   String takeParam(String key) {
     String value = '';
     query.removeWhere((t) {
@@ -132,8 +124,6 @@ class RawShareUri {
 
   bool hasParam(String key) => query.any((t) => t.key == key);
 
-  /// Пересборка ссылки: оставшиеся (незнакомые) query-токены идут как есть,
-  /// затем [managedParams] с непустыми значениями (кодируются заново).
   String build({required List<MapEntry<String, String>> managedParams}) {
     final sb = StringBuffer('$scheme://');
     if (userInfo.isNotEmpty) sb.write('$userInfo@');
@@ -152,9 +142,6 @@ class RawShareUri {
   }
 }
 
-/// query-токен исходной ссылки: [key] — декодированное имя для матчинга,
-/// [raw] — сырой токен `key=value`, который для незнакомых параметров
-/// возвращается в ссылку без изменений.
 class RawQueryToken {
   final String key;
   final String raw;

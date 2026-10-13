@@ -1,7 +1,6 @@
 import '../services/subscription_service.dart';
 import 'app_settings.dart';
 
-/// пресеты и разрешение url-пинга
 class PingTestConfig {
   PingTestConfig._();
 
@@ -17,7 +16,7 @@ class PingTestConfig {
     targetCustom,
   ];
 
-  /// HTTPS only — Android blocks cleartext HTTP (network_security_config).
+  // только https: Android режет http (network_security_config)
   static const Map<String, String> presetUrls = {
     targetGstatic: 'https://connectivitycheck.gstatic.com/generate_204',
     targetCloudflare: 'https://one.one.one.one/cdn-cgi/trace',
@@ -50,7 +49,6 @@ class PingTestConfig {
     return u;
   }
 
-  /// Returns error message if invalid, null if OK.
   static String? validateCustomUrl(String raw) {
     final u = _normalizeCustomUrl(raw);
     if (!SubscriptionService.isSafeUrl(u)) {

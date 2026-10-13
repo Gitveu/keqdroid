@@ -1,28 +1,18 @@
 part of '../servers_tab.dart';
 
-/// Trailing-слот строки сервера: контейнер XSmall-иконки M3E.
 const _trailingSlotSize = 32.0;
 
 class _ServerTile extends ConsumerWidget {
   final ServerItem server;
   final bool isActive;
 
-  /// Форма сегмента. Считает её список ([ExpressiveListSegment.segmentRadius]):
-  /// только он знает, где у тайла сосед, а где край группы.
   final BorderRadius radius;
 
-  /// Поля сегмента внутри шага списка — из них и набирается зазор между
-  /// строками (см. [ExpressiveListSegment.segmentMargin]).
   final EdgeInsets margin;
 
-  /// Строкой или карточкой и шаг списка — оба решает список по ширине ячейки;
-  /// тем же шагом он считает `mainAxisExtent` сетки и смещение якоря.
   final ServerRowLayout layout;
   final double height;
 
-  /// Цвета, выведенные из картинки подписки. null — у подписки нет своей
-  /// подложки (или сервер добавлен руками), тогда тайл живёт на ролях темы,
-  /// как и раньше.
   final SubscriptionAccent? accent;
   final VoidCallback onTap;
   final VoidCallback onDelete;
@@ -77,9 +67,6 @@ class _ServerTile extends ConsumerWidget {
       }),
     );
 
-    // Во время смены сервера движок на миг проходит через `disconnected`;
-    // для активного (целевого) тайла держим «подключается», чтобы кружок не
-    // мелькал spinner → play → spinner, а плавно дошёл до паузы.
     final switching = ref.watch(vpnServerSwitchInProgressProvider);
     final isConnected =
         isActive && vpnStatus == VpnStatus.connected && !switching;
@@ -89,43 +76,16 @@ class _ServerTile extends ConsumerWidget {
             vpnStatus == VpnStatus.connecting ||
             vpnStatus == VpnStatus.disconnecting);
 
-    // кэшируем цвета, чтобы не дёргать Theme.of() на каждый вложенный виджет
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    // Акцент подписки подменяет роль, а не отдельный цвет: и заливка выбранного
-    // сегмента, и текст на нём берутся из одной тональной схемы, поэтому
-    // контраст остаётся выверенным при любой картинке. Подписи «серверов
-    // вообще» (пинг, протокол) остаются на ролях темы — иначе список стал бы
-    // пёстрым, а не связанным.
     final accent = this.accent;
     final accentColor = accent?.seed ?? AppTheme.accent(context);
     final textLightColor = AppTheme.textLight(context);
 
-    // Активный сервер — выбранный сегмент списка, по спеке expressive-списка:
-    // форма морфится к 16dp по кругу, заливка уходит в цветной контейнер. Ни
-    // подъёма, ни отступа, ни подсветки поверх — выделение несут контейнер и
-    // его форма, и больше ничего.
-    //
-    // Прежде тайл «поднимался» из группы (свой inset 6×3 и радиус 20). Приём
-    // понадобился ровно потому, что строки стояли встык и отличить одну из них
-    // было нечем; в сегментированном списке зазор уже есть у всех, и выбранной
-    // строке достаточно перестать быть квадратной.
     final tileColor =
         accent?.surface(AppTheme.card(context)) ?? AppTheme.card(context);
     final selectedColor = accent?.container ?? scheme.secondaryContainer;
 
-    // Сам ряд — общий с выбором узлов цепочки (shared/ui/server_row.dart).
-    // Плитка добавляет к нему только состояние выбора, форму и жесты.
-    //
-    // Цвет протокола — идентичность сервера, и на выбранной строке его терять
-    // нельзя. Но полупрозрачная подложка поверх secondaryContainer сводит тон
-    // бейджа с тоном контейнера, и надпись проваливается по контрасту. Поэтому
-    // на выбранном сегменте бейдж встаёт на собственную непрозрачную подложку —
-    // ту же, на которой живут бейджи остальных строк.
-    //
-    // В фокусе пульта строка уже на инверсной заливке, и тёмный текст
-    // выбранного сегмента на ней пропадал — там цвета берутся из темы, а она
-    // под фокусом инверсная. Поэтому ряд строится под обёрткой фокуса.
     final rowBody = Builder(
       builder: (context) => ServerRow(
         server: server,
@@ -136,8 +96,6 @@ class _ServerTile extends ConsumerWidget {
             ? (accent?.onContainer ?? scheme.onSecondaryContainer)
             : null,
         opaqueBadge: isActive,
-        // Активный сервер отличается весом, а не размером: у M3E это и есть
-        // роль усиленного варианта.
         emphasizeTitle: isActive,
         layout: layout,
         trailing: layout == ServerRowLayout.inline
@@ -164,12 +122,6 @@ class _ServerTile extends ConsumerWidget {
       ),
     );
 
-    // Один семантический узел на тайл (имя + протокол + пинг + tap). Сервис
-    // доступности/autofill включает семантику реально, а её геометрия
-    // пересчитывается на каждом кадре свайпа — чем меньше узлов, тем дешевле.
-    //
-    // Внешний SizedBox — шаг списка, а не высота сегмента: зазор набирается
-    // полями внутри него.
     return RepaintBoundary(
       child: MergeSemantics(
         child: SizedBox(
@@ -186,7 +138,6 @@ class _ServerTile extends ConsumerWidget {
                 onTap();
               },
               onLongPress: () => _showOptions(context, ref),
-              // на десктопе правый клик открывает то же меню
               onSecondaryTap: () => _showOptions(context, ref),
               splashColor: accentColor.withValues(alpha: 0.2),
               highlightColor: accentColor.withValues(alpha: 0.08),
@@ -207,22 +158,13 @@ class _ServerTile extends ConsumerWidget {
     Color accentColor,
     Color textLightColor,
   ) {
-    // «Морфинг-кружок»: сам кружок стоит на месте и плавно перетекает цветом
-    // (прозрачный → accent → зелёный) через AnimatedContainer, а внутри мягко
-    // (fade + scale) сменяется только центр — иконка/спиннер — через
-    // AnimatedSwitcher. Это заметно плавнее, чем кросс-фейд двух разных кружков.
-    // Особенно на смене активного сервера при подключённом VPN: у старого тайла
-    // зелёная пауза утекает в шеврон, у нового — шеврон → спиннер → пауза.
     final green = AppTheme.green(context);
 
-    // Пинг/подключение имеют приоритет над паузой: иначе у активного сервера
-    // крутилка была бы перекрыта значком паузы.
     final Color bgColor;
     final Widget center;
     if (isPinging || isConnecting) {
       bgColor = accentColor.withValues(alpha: 0.18);
       center = SizedBox(
-        // один ключ для обоих спиннеров — крутилка не мигает при ping↔connect.
         key: const ValueKey('spinner'),
         width: ExpressiveIconSize.medium,
         height: ExpressiveIconSize.medium,
@@ -241,10 +183,6 @@ class _ServerTile extends ConsumerWidget {
       );
     } else if (isActive) {
       bgColor = accentColor.withValues(alpha: 0.18);
-      // Тот же глиф, что в главной кнопке подключения: outlined, пока не
-      // подключено, и filled `pause_rounded`, когда подключено. Кружок в строке
-      // сервера — тот же переключатель, только маленький, и разные треугольники
-      // в двух местах читались как недосмотр.
       center = Icon(
         Icons.play_arrow_outlined,
         key: const ValueKey('play'),
@@ -261,9 +199,6 @@ class _ServerTile extends ConsumerWidget {
       );
     }
 
-    // Кружок ровно с XSmall-иконкой M3E (32dp контейнер, 20dp глиф): у списка
-    // это trailing-слот, а не отдельная кнопка — вся строка и есть одна цель
-    // нажатия, поэтому 48dp здесь набирать нечем и незачем.
     return AnimatedContainer(
       duration: ExpressiveMotion.durationDefault,
       curve: ExpressiveMotion.emphasized,
@@ -287,9 +222,6 @@ class _ServerTile extends ConsumerWidget {
     );
   }
 
-  /// Состояние сервера в карточке сетки — в том же порядке, что у кружка в
-  /// строке, но значком перед пингом. null — показывать нечего: карточка
-  /// жмётся целиком, и шеврону в ней не место.
   Widget? _buildInlineStatus(
     BuildContext context,
     bool isConnected,
@@ -337,12 +269,6 @@ class _ServerTile extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
-      // Цвет не задаём: из темы шторка берёт surfaceContainerLow. Здесь стоял
-      // AppTheme.bg — ровно фон страницы, поэтому шторка не отделялась от неё
-      // ничем, кроме затемнения, и читалась плоской.
-      // Настоящая ручка вместо нарисованной. Прежняя была просто Container
-      // внутри прокручиваемого содержимого: выглядела как ручка, но тянуть за
-      // неё было нельзя — жест уходил в скролл, и шторка не закрывалась.
       showDragHandle: true,
       builder: (_) => SafeArea(
         child: SingleChildScrollView(
@@ -360,8 +286,6 @@ class _ServerTile extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
               ),
-              // У цепочки на месте адреса — её маршрут: адрес входного узла
-              // тут не главное, а копировать его незачем.
               if (server.protocol == 'chain')
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -386,16 +310,11 @@ class _ServerTile extends ConsumerWidget {
                   ),
                 )
               else
-                // Адрес и есть кнопка копирования: отдельный пункт списка занимал
-                // целую строку меню ради того, что уже написано здесь.
                 _CopyableAddress(
                   text: '${server.address}:${server.port}',
                   onCopied: () => Navigator.pop(context),
                 ),
               const SizedBox(height: 16),
-              // Пункты собраны в группы: «проверить/закрепить», «править» и
-              // отдельно удаление. Прежде это был плоский список ListTile —
-              // без границ и без подсказки, куда именно жать.
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: ExpressiveGroup(
@@ -501,8 +420,6 @@ class _ServerTile extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              // Удаление — отдельной группой и в роли error: рядом с
-              // безобидным «скопировать» по нему промахивались.
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: ExpressiveGroup(
@@ -529,8 +446,6 @@ class _ServerTile extends ConsumerWidget {
     );
   }
 
-  /// Диалог переименования: пишет customName поверх имени из конфига
-  /// (переживает обновление подписки); пустое или исходное имя — сброс.
   void _showRenameDialog(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final cardColor = AppTheme.card(context);
@@ -642,7 +557,6 @@ class _ServerTile extends ConsumerWidget {
   void _applyRename(BuildContext dialogCtx, WidgetRef ref, String raw) {
     Navigator.pop(dialogCtx);
     final name = raw.trim();
-    // имя, совпавшее с исходным из конфига, — это сброс, а не override
     unawaited(
       ref
           .read(serversProvider.notifier)
@@ -678,8 +592,6 @@ class _ServerTile extends ConsumerWidget {
           ],
         ),
         content: Text(
-          // У цепочки важно сказать, что серверы из неё останутся: иначе
-          // удаление маршрута выглядит как удаление всех его узлов.
           isChain
               ? l10n.chainDeleteConfirm(name)
               : l10n.serversDeleteConfirm(name),
@@ -724,16 +636,10 @@ String _shortError(Object e, [BuildContext? context]) {
   return '${localized.title}: ${localized.message}';
 }
 
-/// Адрес сервера в шапке меню, он же кнопка копирования.
-///
-/// Раньше рядом жил отдельный пункт списка «скопировать адрес» — целая строка
-/// меню ради значения, которое тут же и написано. Теперь копирует сам адрес:
-/// иконка показывает, что он нажимается, state layer подтверждает нажатие.
 class _CopyableAddress extends StatelessWidget {
   final String text;
 
-  /// Меню закрывается до снек-бара: он живёт на Scaffold под модальной шторкой
-  /// и иначе оказался бы за ней.
+  // меню закрывается до снек-бара, иначе он оказался бы под шторкой
   final VoidCallback onCopied;
 
   const _CopyableAddress({required this.text, required this.onCopied});
@@ -764,11 +670,7 @@ class _CopyableAddress extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Flexible(
-                // Направлением, а не изолятом: эту же строку кладут в буфер
-                // обмена, и невидимые U+2066/U+2069 уехали бы туда вместе с
-                // адресом. Без фикса `nl.example.com:443` в персидской локали
-                // показывается как `443:nl.example.com` — двоеточие между
-                // латиницей и цифрами перестаёт быть частью числа.
+                // направлением, без изоляторов: строка уходит и в буфер обмена, U+2066/U+2069 уехали бы с ней
                 child: LtrBlock(
                   child: Text(
                     text,

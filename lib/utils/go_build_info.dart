@@ -2,15 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-/// Версии, зашитые в Go-бинарь — то же, что печатает `go version -m`.
-///
-/// Все ядра приложения — Go-бинари, и своей команды `version` у них
-/// может не быть вовсе (keqrnel трактует первый аргумент как путь к конфигу и
-/// падает на `keqrnel version` с «read config: open version»). Зато компоновщик
-/// Go кладёт в каждый бинарь блок build info: версия тулчейна и версии всех
-/// модулей, включая вкомпилированные движки. Так «какое ядро и какой версии»
-/// читается прямо из файла, не запуская процесс, — на Android это ещё и
-/// единственный дешёвый способ (fork ядра ради строчки версии там ни к чему).
+// своей команды version у ядер может не быть: keqrnel падает на keqrnel version (read config: open version)
 class GoBuildInfo {
   const GoBuildInfo({
     required this.goVersion,
@@ -20,25 +12,16 @@ class GoBuildInfo {
     this.settings = const {},
   });
 
-  /// Версия тулчейна, например `go1.26.0`.
   final String goVersion;
 
-  /// Путь модуля самой программы, например `keqrnel`.
   final String? modulePath;
 
-  /// Версия самой программы. У собранной из рабочего дерева — `(devel)`:
-  /// keqrnel собирается так, поэтому на него не рассчитываем.
   final String? moduleVersion;
 
-  /// Версии зависимостей: полный путь модуля → версия.
   final Map<String, String> deps;
 
-  /// Настройки сборки (`build`-строки `go version -m`): `-tags`, `GOOS`,
-  /// `CGO_ENABLED` и прочее. Пустая карта — бинарь собран Go без них.
   final Map<String, String> settings;
 
-  /// Теги сборки из `-tags`. Пусто — тегов не было либо настроек в бинаре нет
-  /// вовсе; отличать эти случаи должен вызывающий (см. [hasBuildSettings]).
   Set<String> get buildTags {
     final raw = settings['-tags'];
     if (raw == null || raw.trim().isEmpty) return const {};
@@ -49,18 +32,9 @@ class GoBuildInfo {
         .toSet();
   }
 
-  /// Есть ли в бинаре блок настроек сборки. Без него «тега нет» означает лишь
-  /// «неизвестно», и решать по нему нельзя.
   bool get hasBuildSettings => settings.isNotEmpty;
 
-  /// Версия зависимости, чей путь оканчивается на [suffix]:
-  /// `depVersion('xtls/xray-core')` → `v1.260327.1-…`. Null — нет такой.
-  ///
-  /// Мажорная версия Go-модуля живёт в самом пути (`…/amneziawg-go/v3`), и
-  /// выпуск мажора переименовывает зависимость целиком. Поиск это учитывает:
-  /// суффикс `/vN` отбрасывается с обеих сторон, поэтому движок не пропадает с
-  /// панели ровно в тот релиз, когда его обновили, — а панель существует, чтобы
-  /// показывать реальную версию, а не ту, что успели вписать в код.
+  // мажор Go-модуля живёт в пути (.../v3), /vN отбрасываем с обеих сторон
   String? depVersion(String suffix) {
     final wanted = _withoutMajor(suffix);
     for (final entry in deps.entries) {
@@ -72,9 +46,6 @@ class GoBuildInfo {
     return null;
   }
 
-  /// Сама программа и есть этот модуль? Правила сравнения те же, что у
-  /// [depVersion], — иначе «xray-core внутри xray-core» отфильтруется по одному
-  /// написанию пути и не отфильтруется по другому.
   bool isModule(String suffix) {
     final path = modulePath;
     if (path == null) return false;
@@ -88,28 +59,17 @@ class GoBuildInfo {
   static String _withoutMajor(String modulePath) =>
       modulePath.replaceFirst(_majorSuffix, '');
 
-  /// `\xff Go buildinf:` — метка начала блока.
   static const magic = <int>[
     0xff, 0x20, 0x47, 0x6f, 0x20, 0x62, 0x75, 0x69, //
     0x6c, 0x64, 0x69, 0x6e, 0x66, 0x3a,
   ];
 
-  /// Версия и модули лежат в самом заголовке, а не по указателям (Go 1.18+).
   static const _flagVersionInline = 0x2;
 
-  /// Заголовок фиксированной длины: метка, размер указателя, флаги и два слота
-  /// под указатели. В inline-варианте слоты нулевые, но не исчезают — строки
-  /// начинаются только после них.
   static const _headerLength = 32;
 
-  /// Блок модулей обрамлён двумя 16-байтовыми маркерами — их Go вставляет,
-  /// чтобы блок можно было найти и в бинаре без build info.
   static const _frameLength = 16;
 
-  /// Разбор блока, начинающегося с [magic] в начале [bytes].
-  ///
-  /// Null — не наш блок, старый (не inline) формат или обрезанные данные:
-  /// панель просто покажет ядро без версии, это не ошибка.
   static GoBuildInfo? parse(Uint8List bytes) {
     if (bytes.length < _headerLength) return null;
     for (var i = 0; i < magic.length; i++) {
@@ -117,8 +77,6 @@ class GoBuildInfo {
     }
     final flags = bytes[magic.length + 1];
     if (flags & _flagVersionInline == 0) {
-      // Go младше 1.18: строки лежат по указателям, а их разбор требует
-      // разбирать ещё и секции PE/ELF. Наши ядра собраны новее.
       return null;
     }
 
@@ -134,8 +92,6 @@ class GoBuildInfo {
     );
   }
 
-  /// Читает build info из файла [file]. Null — файла нет, он не Go-бинарь или
-  /// прочитать не вышло.
   static Future<GoBuildInfo?> fromFile(File file) async {
     RandomAccessFile? handle;
     try {
@@ -144,8 +100,6 @@ class GoBuildInfo {
       final start = await _findMagic(handle, length);
       if (start == null) return null;
       await handle.setPosition(start);
-      // Блок модулей у keqrnel — несколько килобайт; мегабайта хватает
-      // с запасом, а читать весь 60-мегабайтный файл незачем.
       final window = await handle.read(
         (length - start).clamp(0, 1 << 20).toInt(),
       );
@@ -157,9 +111,6 @@ class GoBuildInfo {
     }
   }
 
-  /// Позиция метки в файле. Ищем чтением кусками с перекрытием: бинарь ядра
-  /// весит десятки мегабайт, и втягивать его в память целиком (тем более на
-  /// телефоне) ради четырнадцати байт не нужно.
   static Future<int?> _findMagic(RandomAccessFile handle, int length) async {
     const chunkSize = 1 << 20;
     final overlap = magic.length - 1;
@@ -196,7 +147,6 @@ class GoBuildInfo {
     final settings = <String, String>{};
     for (final line in const LineSplitter().convert(modinfo)) {
       final parts = line.split('\t');
-      // `build`-строка короче остальных: ключ и значение, без хеша.
       if (parts.length == 2 && parts[0] == 'build') {
         final eq = parts[1].indexOf('=');
         if (eq > 0) {
@@ -211,7 +161,6 @@ class GoBuildInfo {
           moduleVersion = parts[2];
         case 'dep':
           deps[parts[1]] = parts[2];
-        // `=>` (replace) панели не нужен.
       }
     }
     return GoBuildInfo(
@@ -223,10 +172,7 @@ class GoBuildInfo {
     );
   }
 
-  /// Снимает маркеры и декодирует. Режем по байтам до декодирования: маркеры
-  /// не являются валидным UTF-8, и после декодирования с allowMalformed их
-  /// длина в символах уже не равна шестнадцати — срез уехал бы в текст.
-  /// Проверка на `\n` перед хвостовым маркером — как в самом Go.
+  // режем по байтам до декодирования: маркеры не UTF-8, и после allowMalformed длина уже не 16
   static String _stripFrame(Uint8List modinfo) {
     if (modinfo.length < 2 * _frameLength + 1) return '';
     if (modinfo[modinfo.length - _frameLength - 1] != 0x0a) return '';
@@ -236,7 +182,6 @@ class GoBuildInfo {
     );
   }
 
-  /// Байты с длиной-uvarint впереди.
   static _Slice? _readBytes(Uint8List bytes, int offset) {
     final length = _readUvarint(bytes, offset);
     if (length == null) return null;

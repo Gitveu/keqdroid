@@ -38,9 +38,7 @@ import 'package:keqdroid/ui/responsive/window_breakpoints.dart';
 Future<void> main() async {
   await runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
-    // Раньше всего остального: всё, что упадёт ниже, иначе не оставит следа —
-    // на десктопе Crashlytics нет, а исключение до runApp глушит runZonedGuarded
-    // и приложение остаётся процессом без окна.
+    // до всего остального: ошибка до runApp иначе не оставит следа
     await AppLogger.instance.enableFileLog();
     await PrefsRecovery.prepare();
 
@@ -60,9 +58,7 @@ Future<void> main() async {
       await BackgroundService.registerPeriodicTask();
       await NotificationService.init();
       await PlatformBootstrap.initialize();
-      // Телевизор: фокус показываем всегда. Сам Flutter включает его только по
-      // нажатию с настоящей клавиатуры, а пульт в телефоне и adb шлют клавиши
-      // как виртуальная клавиатура — и фокус оставался невидимым.
+      // пульт шлёт клавиши как виртуальная клавиатура, без этого фокус не видно
       if (PlatformBootstrap.isTelevision) {
         FocusManager.instance.highlightStrategy =
             FocusHighlightStrategy.alwaysTraditional;
@@ -72,16 +68,12 @@ Future<void> main() async {
     } else if (Platform.isLinux || Platform.isMacOS) {
       await DesktopBackgroundService.init();
       if (Platform.isLinux) {
-        // Single instance: a second launch just restores the running window.
         final primary =
             await LinuxBackgroundService.instance.ensureSingleInstance();
         if (!primary) {
           exit(0);
         }
-        // Recover from an unclean previous exit: drop any stale system/Firefox
-        // proxy so the desktop isn't stuck routing to a dead local proxy.
         await LinuxTunnelBackend.cleanupStaleState();
-        // Close-to-tray + background; the tunnel keeps running when hidden.
         await LinuxBackgroundService.instance.initWindowAndTray();
       }
     }
@@ -106,8 +98,7 @@ Future<void> main() async {
     }
 
     final storage = await StorageService.init();
-    // До первого кадра: список подписок рисует свои картинки синхронно, и без
-    // известного каталога выбранная картинка не показалась бы вовсе.
+    // до первого кадра, иначе выбранная картинка карточки не покажется
     await CardImageService.warmUp();
 
     final home = Platform.isWindows || Platform.isLinux
@@ -121,12 +112,8 @@ Future<void> main() async {
       ),
     );
 
-    // Слепки памяти в app.log: утечку после сна на десктопе иначе не поймать
-    // (см. MemoryWatch). На Android их снимает служба VPN.
     MemoryWatch.instance.start();
 
-    // После первого кадра и в фоне: иначе это чтение ложится на первое
-    // подключение (см. CoreCapabilities.warmUp).
     if (Platform.isWindows) {
       unawaited(CoreCapabilities.warmUp(WindowsCorePaths.keqrnelExecutable()));
     } else if (Platform.isLinux) {
@@ -178,11 +165,6 @@ class _VpnHomeScreenState extends ConsumerState<VpnHomeScreen> {
     final page = _pageCtrl.page;
     if (page == null) return;
 
-    // Push provider updates only when a *meaningful* value changes. Writing the
-    // raw fractional page on every scroll frame forced every listener's selector
-    // and every ref.listen callback to run on each swipe frame. Consumers only
-    // care whether the servers tab is visible (page < 0.05), so we notify just
-    // on that threshold crossing.
     final serversVisible = page < 0.05;
     if (serversVisible != _lastServersVisible) {
       _lastServersVisible = serversVisible;
@@ -244,23 +226,11 @@ class _VpnHomeScreenState extends ConsumerState<VpnHomeScreen> {
     final railAtLeft = Directionality.of(context) == TextDirection.ltr;
     return Scaffold(
       backgroundColor: AppTheme.bg(context),
-      // Оболочка не ужимается под клавиатуру.
-      //
-      // В теле вкладок нет ни одного поля ввода: всё, что печатается —
-      // добавление сервера, правка подписки, идентичность, редактор конфига —
-      // живёт в шторках и отдельных маршрутах, и каждый из них сам отступает
-      // на `viewInsets.bottom`. Оболочке ужиматься не для чего, а вред
-      // конкретный: она ужимается и за компанию с ними (шторка открыта —
-      // список под ней перекладывается), а если инсет по возврату из маршрута
-      // не схлопнулся, «дыра под клавиатуру» остаётся насовсем: список влезает
-      // в пару строк, кнопка добавления уезжает в середину экрана. Оболочка,
-      // которая не ужимается никогда, застрять ужатой не может.
+      // шторки и маршруты отступают от клавиатуры сами, а ужатая оболочка
+      // иногда так и оставалась ужатой после возврата
       resizeToAvoidBottomInset: false,
       body: Row(
         children: [
-          // Шире «expanded» (телефон боком, планшет) навигация — рейка у
-          // переднего края: нижняя панель отнимала и без того короткую высоту,
-          // а спека M3 на такой ширине держит только рейку.
           if (expanded)
             AppNavRail(
               index: _navIndex,
@@ -268,25 +238,18 @@ class _VpnHomeScreenState extends ConsumerState<VpnHomeScreen> {
               onTap: _selectTab,
             ),
           Expanded(
-            // Ключ сохраняет вкладки при повороте: число детей у Row меняется,
-            // и без него PageView пересоздался бы вместе со всем их состоянием.
+            // без ключа PageView пересоздаётся при повороте вместе с состоянием вкладок
             key: const ValueKey('home-pages'),
             child: MediaQuery.removePadding(
               context: context,
-              // Врезку со своей стороны рейка забрала себе.
               removeLeft: expanded && railAtLeft,
               removeRight: expanded && !railAtLeft,
               child: PageView(
                 controller: _pageCtrl,
                 physics: const ClampingScrollPhysics(),
                 dragStartBehavior: DragStartBehavior.down,
-                // Сосед пребилдится в спокойный кадр после settle, а не в
-                // первый кадр драга при самом первом свайпе.
                 allowImplicitScrolling: true,
                 onPageChanged: _onPageSettled,
-                // const-список обязателен: с ним shouldRebuild делегата =
-                // false, и setState(_navIndex) на середине свайпа не
-                // перестраивает сами вкладки.
                 children: const [
                   _HomeTabPage(index: 0, child: ServersTab()),
                   _HomeTabPage(index: 1, child: SubscriptionsTab()),
@@ -325,14 +288,10 @@ class _HomeTabPageState extends ConsumerState<_HomeTabPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    // Соседние вкладки живут за краем экрана, и стрелка пульта уводила фокус
-    // туда: ближайшая строка справа от рейки оказывалась на чужой вкладке, а
-    // PageView сам прокручивался к ней.
+    // иначе стрелка пульта уводит фокус на соседнюю вкладку за краем экрана
     final current = ref.watch(homeTabIndexProvider) == widget.index;
     return ExcludeFocus(
       excluding: !current,
-      // Isolate each page into its own layer so that during a swipe the two
-      // visible pages don't repaint each other.
       child: RepaintBoundary(child: widget.child),
     );
   }

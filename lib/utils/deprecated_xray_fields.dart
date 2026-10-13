@@ -1,17 +1,7 @@
-/// Перевод полей, которые xray объявил к удалению, в их новую запись — для
-/// готовых конфигов провайдеров.
-///
-/// Удалённое поле ядро не игнорирует, а отказывается запускать конфиг целиком:
-/// так уже случилось с `allowInsecure` (см. removed_tls_fields). Пока поля
-/// живы, ядро само переводит их в новую запись и пишет предупреждение. Здесь
-/// тот же перевод делается заранее, по его же правилам, чтобы конфиг
-/// провайдера пережил обновление ядра. То, что ядро и сегодня отвергло бы, не
-/// трогаем: наш перевод не должен ни чинить ошибку автора, ни прятать её.
+// удалённое поле ядро не игнорирует, а роняет конфиг. переводим заранее по правилам самого ядра,
+// то, что ядро отвергло бы и сегодня, не трогаем
 library;
 
-/// Переводит устаревшие поля в аутбаундах [config] на месте.
-///
-/// Возвращает число переведённых мест: ноль — переводить было нечего.
 int migrateDeprecatedXrayFields(Map<String, dynamic> config) {
   final outbounds = config['outbounds'];
   if (outbounds is! List) return 0;
@@ -26,10 +16,7 @@ int migrateDeprecatedXrayFields(Map<String, dynamic> config) {
   return migrated;
 }
 
-/// `nonIPQuery`/`blockTypes` у `dns`-аутбаунда → `rules`, как их разворачивает
-/// ядро (`buildLegacyDNSPolicy`): сначала блокируемые типы, потом A/AAAA в
-/// DNS-модуль, потом всё прочее по режиму. Вместе с `rules` старые поля ядро не
-/// принимает вовсе — такой конфиг оставляем как есть.
+// вместе с rules старые поля ядро не принимает, такой конфиг оставляем как есть
 bool _migrateDnsOutbound(Map<dynamic, dynamic> outbound) {
   final settings = outbound['settings'];
   if (settings is! Map) return false;
@@ -70,7 +57,6 @@ bool _migrateDnsOutbound(Map<dynamic, dynamic> outbound) {
   return true;
 }
 
-/// Значения стратегии, которые ядро принимает и у freedom, и в `sockopt`.
 const _strategies = {
   '',
   'asis',
@@ -86,12 +72,7 @@ const _strategies = {
   'forceipv6v4',
 };
 
-/// `domainStrategy`/`targetStrategy` в настройках freedom → `sockopt`.
-///
-/// Ядро берёт `targetStrategy`, а при пустом — `domainStrategy`, и кладёт
-/// значение в `sockopt.domainStrategy` поверх того, что там было. Но если на
-/// самом аутбаунде стоит свой `targetStrategy`, побеждает он, а поле freedom
-/// ядро не читает вовсе — тогда его просто убираем.
+// свой targetStrategy на аутбаунде побеждает, поле freedom ядро тогда не читает
 bool _migrateFreedomStrategy(Map<dynamic, dynamic> outbound) {
   final settings = outbound['settings'];
   if (settings is! Map) return false;
@@ -130,11 +111,6 @@ bool _migrateFreedomStrategy(Map<dynamic, dynamic> outbound) {
   return true;
 }
 
-/// `Host` в `headers` у WebSocket → отдельное `host`.
-///
-/// Ядро удаляет из заголовков каждое написание `Host` и берёт его значение,
-/// только если своего `host` нет. Пустые после этого заголовки ему всё равно
-/// что отсутствующие — убираем и их.
 bool _migrateWsHost(Map<dynamic, dynamic> outbound) {
   final stream = outbound['streamSettings'];
   if (stream is! Map) return false;

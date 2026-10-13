@@ -35,10 +35,7 @@ struct AppEntry {
 ULONG_PTR g_gdiplus_token = 0;
 std::once_flag g_gdiplus_once;
 
-// Выемку иконок теперь зовут с рабочих потоков (см. `getAppIcon` в
-// tunnel_channel_handler.cpp), поэтому инициализация GDI+ обязана быть
-// однократной при любой гонке: два потока, одновременно прошедшие проверку
-// `token != 0`, стартовали бы библиотеку дважды.
+// иконки зовут с рабочих потоков, поэтому GDI+ стартует строго один раз
 void EnsureGdiplus() {
   std::call_once(g_gdiplus_once, []() {
     Gdiplus::GdiplusStartupInput input;
@@ -115,22 +112,10 @@ int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
   return -1;
 }
 
-// Иконка нужного КЕГЛЯ, а не «системного большого».
-//
-// `ExtractIconW` всегда отдаёт SM_CXICON, то есть 32×32. В слоте списка (40dp)
-// при масштабе экрана 125–150% такая иконка растягивается до 50–60 физических
-// пикселей — отсюда и мыло. `SHDefExtractIconW` умеет просить КОНКРЕТНЫЙ
-// размер и берёт из ресурса подходящий вариант: у современных приложений в exe
-// лежат 256 и 128, у старых — 48.
-//
-// Идём сверху вниз и останавливаемся на первом, который система отдала
-// целиком (`S_OK`): на `S_FALSE` она сообщает, что такого варианта нет и
-// вернула бы растянутый — а растягивать мы и сами умеем, только качеством это
-// не назвать.
+// ExtractIconW всегда даёт 32×32, и на 125–150% это мыло. SHDefExtractIconW просит конкретный размер,
+// берём первый, отданный целиком (S_OK): S_FALSE значит вариант растянут
 HICON ExtractIconAtSize(const std::wstring& path, int index) {
-  // Только СТАНДАРТНЫЕ размеры ресурса (256 не просим — он тяжелее кодируется,
-  // а слот списка 40dp): на нестандартный вроде 96 система вернула бы S_OK с
-  // растянутым 64, и вся затея с чёткостью пропала бы даром.
+  // только стандартные размеры: на 96 система вернёт S_OK с растянутым 64. 256 не просим, для слота 40dp он тяжело кодируется
   static const int kSizes[] = {128, 64, 48};
   for (const int size : kSizes) {
     HICON icon = nullptr;
@@ -161,7 +146,7 @@ std::string IconFileToBase64Png(const std::wstring& icon_source) {
     hicon = ExtractIconAtSize(path, index);
     if (!hicon) {
       hicon = ExtractIconW(nullptr, path.c_str(), index);
-      // ExtractIconW returns (HICON)1 when the file exists but has no icon at index.
+      // ExtractIconW возвращает (HICON)1, если файл есть, а иконки по индексу нет
       if (hicon == reinterpret_cast<HICON>(1)) {
         hicon = nullptr;
       }
@@ -380,7 +365,7 @@ void CollectFromUninstallKey(HKEY root,
         }
       }
       if (exe_path.empty() && !install.empty()) {
-        // Heuristic: first DisplayIcon often points to uninstaller; keep install path.
+        // первый DisplayIcon часто ведёт на деинсталлятор
         exe_path = install;
       }
 

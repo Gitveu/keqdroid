@@ -1,31 +1,8 @@
 import 'dart:convert';
 
-/// Один сервер внутри общего конфига замера: его одиночный конфиг и порт,
-/// на котором проба будет ходить именно через него.
 typedef PingProbe = ({String id, String configJson, int port});
 
-/// Склеивает конфиги замера нескольких серверов в один.
-///
-/// Зачем: url-пинг поднимает ядро на каждый сервер, и на телефоне это упирается
-/// не во время старта (оно копеечное), а в память — полсотни процессов с Go-
-/// рантаймом там держать негде, поэтому замеров одновременно идёт шесть, а
-/// остальные ждут очереди за мёртвыми, которые выкупают весь таймаут. Один
-/// конфиг на весь батч снимает именно это: процесс один, а проб столько,
-/// сколько серверов.
-///
-/// Почему склейка готовых конфигов, а не отдельный генератор: конфиг замера
-/// несёт тонкости, которые видно не сразу, — фрагментацию, шум перед UDP,
-/// direct-правила под адрес самого сервера, звенья цепочки. Второй генератор
-/// разошёлся бы с первым молча и намерил бы не то, что потом подключается.
-/// Здесь только механика: теги получают суффикс, каждое правило — свой
-/// inboundTag, списки складываются.
 abstract final class MultiPingConfig {
-  /// Общий xray-конфиг: N инбаундов, N наборов аутбаундов, правила с привязкой
-  /// «этот инбаунд — в этот прокси».
-  ///
-  /// Теги суффиксуются ВСЕ, включая `direct` и `block`: общие на весь конфиг
-  /// они стоили бы разбора, чьё правило на них ссылается, а лишняя пара
-  /// freedom/blackhole на сервер ядру ничего не стоит.
   static String mergeXray(List<PingProbe> probes) {
     if (probes.isEmpty) throw ArgumentError('no probes');
 
@@ -55,7 +32,6 @@ abstract final class MultiPingConfig {
           renamed[tag] = '$tag$suffix';
           inbound['tag'] = '$tag$suffix';
         }
-        // Порт назначает вызывающий: он же потом стучится на него пробой.
         inbound['port'] = probe.port;
         probeInbounds.add(inbound);
       }
@@ -69,10 +45,7 @@ abstract final class MultiPingConfig {
         }
         probeOutbounds.add(outbound);
       }
-      // Вторым проходом: dialerProxy ссылается на тег соседнего аутбаунда (так
-      // подключены фрагментация и звенья цепочки), и к моменту замены карта
-      // имён обязана быть полной. Лежит он в streamSettings.sockopt, но искать
-      // его по известному пути нельзя — у цепочек он глубже.
+      // вторым проходом: dialerProxy ссылается на соседний тег, и карта имён к этому моменту должна быть полной
       for (final outbound in probeOutbounds) {
         _renameDialerProxies(outbound, renamed);
       }
@@ -95,9 +68,7 @@ abstract final class MultiPingConfig {
             for (final tag in ruleInbounds) renamed[tag.toString()] ?? tag,
           ];
         } else {
-          // Правило без inboundTag действовало бы на все пробы разом: адрес
-          // одного сервера уводил бы в direct чужую пробу, а её catch-all —
-          // в чужой прокси.
+          // без inboundTag правило действовало бы на все пробы разом
           rule['inboundTag'] = inboundTags;
         }
         rules.add(rule);
@@ -131,12 +102,7 @@ abstract final class MultiPingConfig {
     }
   }
 
-  /// Общий mihomo-конфиг: прокси на сервер, листенер на пробу и свой набор
-  /// правил у каждого листенера.
-  ///
-  /// Привязка листенера к прокси идёт через `rule` + `sub-rules`: у листенера
-  /// mihomo нет поля «ходи через этот прокси», зато есть имя набора правил, а
-  /// в наборе уже `MATCH,<имя прокси>`. Тем же способом сделана LAN-раздача.
+  // у листенера mihomo нет поля ходи через этот прокси, привязка через rule и sub-rules с MATCH
   static String mergeMihomo(
     List<PingProbe> probes, {
     required bool httpListeners,
@@ -173,7 +139,6 @@ abstract final class MultiPingConfig {
         'name': ruleSet,
         'type': httpListeners ? 'http' : 'socks',
         'listen': '127.0.0.1',
-        // Порт у листенера — строка: mihomo читает его как диапазон портов.
         'port': '${probe.port}',
         if (!httpListeners) 'udp': false,
         'rule': ruleSet,
@@ -193,14 +158,11 @@ abstract final class MultiPingConfig {
       'proxies': proxies,
       'listeners': listeners,
       'sub-rules': subRules,
-      // Основной набор не используется ни одним листенером, но пустым его
-      // оставлять нельзя: конфиг без `rules` mihomo считает неполным.
+      // без rules mihomo считает конфиг неполным
       'rules': const ['MATCH,DIRECT'],
     });
   }
 
-  /// `MATCH,proxy` → `MATCH,proxy-3`. Имя прокси у правила mihomo — последнее
-  /// поле, и только оно меняется.
   static String _renameProxyInRule(String rule, Map<String, String> renamed) {
     final comma = rule.lastIndexOf(',');
     if (comma < 0) return rule;

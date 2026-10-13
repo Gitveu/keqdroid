@@ -1,4 +1,3 @@
-/// parses hysteria / hysteria2 / hy2 share links for config and ping.
 class HysteriaLinkParams {
   final String obfsType;
   final String obfsPassword;
@@ -22,17 +21,7 @@ class HysteriaLinkParams {
     this.hopInterval = '',
   });
 
-  /// Ссылка первой версии Hysteria — той, что мы не поддерживаем.
-  ///
-  /// Схема `hysteria://` одна на обе версии, поэтому решают параметры. Эти
-  /// бывают только у первой: полосу она называет `upmbps`/`downmbps`, имя
-  /// сертификата — `peer`, а `protocol`, `auth_str` и `obfsParam` во второй
-  /// версии не существуют вовсе.
-  ///
-  /// Ссылку без этих признаков считаем второй версией намеренно: часть панелей
-  /// выдаёт hysteria2 под старой схемой, и отбрасывать её значило бы терять
-  /// рабочие серверы. Проверять по признакам, а не по схеме, — единственный
-  /// способ различить их вообще.
+  // схема одна на обе версии, решают параметры. без признаков считаем второй: часть панелей так выдаёт hysteria2
   static bool isV1(String config) {
     final trimmed = config.trim();
     if (!trimmed.toLowerCase().startsWith('hysteria://')) return false;
@@ -48,16 +37,7 @@ class HysteriaLinkParams {
         .any((key) => (params[key] ?? '').trim().isNotEmpty);
   }
 
-  /// Список портов, записанный прямо в адресе: `hy2://pwd@host:20000-20050,443`.
-  ///
-  /// Такую ссылку `Uri.parse` не берёт вовсе — порт у неё не число, — и до сих
-  /// пор она разваливалась целиком, вместе со всеми остальными параметрами.
-  /// Возвращает ссылку, где в адресе оставлен первый порт (её уже можно
-  /// разобрать), и сам список; список пуст — значит адрес был обычный.
-  ///
-  /// Разбор повторяет `splitHysteria2Ports` ядра (`common/convert/v.go`),
-  /// включая отказ трогать IPv6-адрес в скобках: там двоеточий и без того
-  /// хватает.
+  // как splitHysteria2Ports ядра (common/convert/v.go), IPv6 в скобках не трогаем
   static (String link, String ports) splitPorts(String config) {
     final line = config.trim();
     final schemeEnd = line.indexOf('://');
@@ -97,13 +77,9 @@ class HysteriaLinkParams {
 
   static HysteriaLinkParams fromConfig(String config) {
     try {
-      // Список портов из адреса вынимаем до разбора: с ним `Uri.parse` падает
-      // и терялись бы заодно все остальные параметры ссылки.
       final (normalized, addressPorts) = splitPorts(config);
       final uri = Uri.parse(normalized);
-      // Пин сертификата — base64 с `+` и `/`. Разбор запроса по правилам
-      // HTML-формы читает `+` как пробел, и пин приезжает испорченным; ядру
-      // это неотличимо от неверного отпечатка.
+      // пин base64 с +, разбор по правилам формы читает + как пробел
       String raw(String key) {
         for (final pair in uri.query.split('&')) {
           final eq = pair.indexOf('=');
@@ -145,7 +121,6 @@ class HysteriaLinkParams {
     }
   }
 
-  /// xray finalmask.udp for salamander obfs.
   Map<String, dynamic>? buildFinalmask() {
     if (!hasSalamanderObfs) return null;
     return {

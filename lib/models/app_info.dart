@@ -3,9 +3,7 @@ class AppInfo {
   final String appName;
   final bool isSystem;
   final String? iconBase64;
-  /// Windows: процесс сейчас запущен.
   final bool isRunning;
-  /// Полный путь к exe (Windows), для отображения.
   final String? installPath;
 
   const AppInfo({
@@ -17,7 +15,7 @@ class AppInfo {
     this.installPath,
   });
 
-  // .toString() вместо as String — нативка иногда шлёт int вместо строки
+  // нативка иногда присылает int
   factory AppInfo.fromJson(Map<String, dynamic> json) => AppInfo(
     packageName: json['packageName']?.toString() ?? '',
     appName: json['appName']?.toString() ?? '',
@@ -53,8 +51,6 @@ class AppInfo {
         installPath: installPath ?? this.installPath,
       );
 
-  // сравниваем по packageName — это уникальный ключ пакета.
-  // iconBase64 не берём: тяжёлый и на идентичность не влияет
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

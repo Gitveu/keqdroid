@@ -8,34 +8,25 @@ object NativeHelper {
 
     private const val TAG = "KEQDIS"
 
-    // Имена бинарей, которые мы запускаем через fork+execv. По ним же ищутся
-    // осиротевшие процессы, см. killOrphans().
+    // по этим же именам ищутся сироты
     private val coreBinaries = setOf(
         "libxray.so",
         "libmihomo.so",
     )
 
-    // pid'ы ядер, запущенных ИМЕННО ЭТИМ процессом приложения.
-    //
-    // Единственный способ отличить своё живое ядро от чужого осиротевшего:
-    // список живёт в памяти процесса и умирает вместе с ним, поэтому всё, что
-    // нашлось в /proc и в списке не значится, запущено прошлой жизнью
-    // приложения.
+    // только свои: список живёт в памяти процесса и умирает с ним, всё прочее в /proc запущено прошлой жизнью
     private val livePids = Collections.synchronizedSet(mutableSetOf<Int>())
 
     @JvmStatic
     private external fun nativeDialFailures(): Long
 
-    /// Сколько раз ядро сессии не дозвонилось до своего сервера — с запуска
-    /// процесса, монотонно. Считает читатель лога в forkexec.c; вызывающему
-    /// важна только разница между двумя чтениями.
+    // монотонно с запуска процесса, вызывающему важна разница двух чтений
     fun dialFailures(): Long = runCatching { nativeDialFailures() }.getOrDefault(0L)
 
     @JvmStatic
     private external fun nativeSetCoreLogLevel(level: Int)
 
-    /// С какого уровня строки xray доходят до лога и logcat: 0 — все, дальше
-    /// debug, info, warning, error, none. Счётчик отказов видит все строки.
+    // 0 пропускает всё, дальше debug, info, warning, error, none. счётчик отказов видит все строки
     fun setCoreLogLevel(level: Int) {
         runCatching { nativeSetCoreLogLevel(level) }
     }
@@ -43,9 +34,7 @@ object NativeHelper {
     @JvmStatic
     private external fun nativeTunReadyCount(): Long
 
-    /// Сколько раз mihomo сессии сообщил, что взял туннель — с запуска
-    /// процесса, монотонно. Строка уровня info, в лог при warning не попадает,
-    /// поэтому считается до порога.
+    // строка info, в лог при warning не попадает, поэтому считается до порога
     fun tunReadyCount(): Long = runCatching { nativeTunReadyCount() }.getOrDefault(0L)
 
     @JvmStatic
@@ -59,17 +48,7 @@ object NativeHelper {
         ownerSocket: String,
     ): Int
 
-    // Запуск ядра прокси. logName: имя файла логов ядра внутри assetDir
-    // (filesDir); пустая строка — файловое логирование выключено (используется
-    // ping/спидтестом).
-    //
-    // coreKind: "xray" или "mihomo". От него зависит argv — xray хочет
-    // `run -c <config>` и базы geo через XRAY_LOCATION_ASSET, mihomo —
-    // `-d <dir> -f <config>` и берёт базы из рабочего каталога.
-    //
-    // tunFd: дескриптор TUN-устройства; -1 — туннеля нет вовсе (режим прокси).
-    // Дескриптор переживает execv только со снятым FD_CLOEXEC, и снимает его
-    // натив — см. forkexec.c.
+    // пустой logName выключает файл. tunFd -1 значит туннеля нет, FD_CLOEXEC снимает натив
     fun startCore(
         binPath: String,
         configPath: String,
@@ -87,30 +66,12 @@ object NativeHelper {
         return pid
     }
 
-    // Прибить ядра, оставшиеся от прошлой жизни приложения.
-    //
-    // Ядро запускается двойным fork'ом и намеренно живёт отдельно от нас: так
-    // оно переживает пересоздание сервиса. Обратная сторона — оно переживает и
-    // смерть самого приложения (force stop, переустановка из `flutter run`,
-    // отстрел системой): onDestroy при SIGKILL не приходит, убивать процесс
-    // некому, и он остаётся сидеть на 2080.
-    //
-    // Дальше начинается неочевидное: новое ядро порт занять не может, а
-    // локальный прокси приложения дозванивается до СТАРОГО ядра — с чужими
-    // credentials. В логе это выглядит как `rejected username/password`, будто
-    // сломалась авторизация, хотя сломан порядок запуска.
-    //
-    // Убиваем только то, чего нет в livePids: ephemeral-ядра пингов живут в
-    // этом же процессе и сиротами не являются.
-    //
-    // Возвращает, скольких прибили: SIGKILL асинхронен, и вызывающему стоит
-    // дождаться освобождения порта, прежде чем поднимать своё ядро.
+    // ядро живёт отдельно и переживает смерть приложения (force stop, flutter run), продолжая сидеть на 2080.
+    // новое тогда порт не займёт, а прокси приложения ходит в старое с чужими кредами. ядра замера в livePids и не трогаются
     fun killOrphans(): Int {
         var killed = 0
         val mine = android.os.Process.myPid()
-        // Сначала выкидываем из списка мёртвых. Иначе он растёт всю сессию —
-        // каждый пинг это своё ядро — а когда pid пойдёт по второму кругу,
-        // застрявшая в списке запись спрячет от нас настоящую сироту.
+        // мёртвых выкидываем: иначе список растёт всю сессию, и pid, пошедший по второму кругу, спрячет настоящую сироту
         synchronized(livePids) {
             livePids.removeAll { !File("/proc/$it").exists() }
         }
@@ -118,10 +79,7 @@ object NativeHelper {
         for (dir in dirs) {
             val pid = dir.name.toIntOrNull() ?: continue
             if (pid == mine || livePids.contains(pid)) continue
-            // /proc чужих процессов на Android нам не виден (hidepid), так что
-            // под раздачу попадают только процессы нашего же uid.
-            //
-            // cmdline разделён нулями, а не пробелами: argv[0] — всё до первого.
+            // чужой /proc на Android закрыт (hidepid), видим только свой uid. cmdline разделён нулями
             val argv0 = runCatching {
                 File(dir, "cmdline").readBytes()
                     .toString(Charsets.UTF_8)

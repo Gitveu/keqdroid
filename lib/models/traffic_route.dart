@@ -1,18 +1,11 @@
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:uuid/uuid.dart';
 
-/// Что из трафика забирает маршрут.
 enum RouteContent { allTraffic, sites, preset }
 
-/// Куда маршрут отправляет трафик. [vpn] — текущий сервер, тот же, что у
-/// «Всего остального» в положении «Через VPN»; [server] — конкретный другой.
 enum RouteTarget { vpn, server, direct, block }
 
-/// Маршрут: кто (все приложения или выбранные) → что → куда.
-///
-/// Порядок маршрутов не хранится: раздел и место в нём выводятся из самого
-/// маршрута (см. `traffic_routes.dart`), так что порядок на экране и порядок
-/// проверки в ядре не могут разойтись.
+// порядок не хранится, раздел выводится из самого маршрута: порядок на экране и проверки в ядре не разойдутся
 class TrafficRoute {
   const TrafficRoute({
     required this.id,
@@ -48,24 +41,19 @@ class TrafficRoute {
   final String id;
   final bool enabled;
 
-  /// Записи приложений в формате сплита: имя пакета на Android, имя процесса
-  /// или путь к файлу на ПК. Пусто — все приложения.
+  // записи в формате сплита: пакет на Android, имя процесса или путь на ПК. пусто значит все приложения
   final List<String> apps;
 
   final RouteContent content;
 
-  /// Для [RouteContent.sites]: тот же текст, что в прежних полях списков —
-  /// домены, адреса, geo-коды и ссылки на списки.
   final String sites;
 
-  /// Для [RouteContent.preset]: id из `RoutingPresets.all`. Хранится id, а не
-  /// значения, чтобы маршрут подхватывал обновлённый пресет.
+  // id, а не значения: маршрут подхватит обновлённый пресет
   final String presetId;
 
   final RouteTarget target;
 
-  /// Для [RouteTarget.server]: id `ServerItem`. Обновление подписки id
-  /// сохраняет, как и у активного сервера.
+  // обновление подписки id сохраняет
   final String serverId;
 
   bool get allApps => apps.isEmpty;
@@ -93,8 +81,7 @@ class TrafficRoute {
         ),
         sites: json['sites'] as String? ?? '',
         presetId: json['preset'] as String? ?? '',
-        // Неизвестная цель из будущей версии безопаснее всего как «через VPN»:
-        // так ведёт себя и маршрут, чей сервер пропал.
+        // неизвестная цель из будущей версии идёт через VPN, как маршрут с пропавшим сервером
         target: RouteTarget.values.firstWhere(
           (t) => t.name == json['target'],
           orElse: () => RouteTarget.vpn,

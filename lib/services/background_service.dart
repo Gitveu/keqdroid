@@ -1,5 +1,3 @@
-// фоновое обновление подписок через workmanager + локальные нотификации
-
 import 'dart:async';
 import 'dart:ui';
 
@@ -20,42 +18,30 @@ const _kNotifChannelId   = 'keqdis_subscription';
 const _kNotifChannelName = 'Subscription Updates';
 const _kNotifId          = 42;
 
-// @pragma обязателен — иначе tree-shaker выкинет функцию в release
+// без pragma tree-shaker выкинет функцию из релиза
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
     if (taskName != _kTaskName) return true;
 
     try {
-      // в фоновом изоляте нужно поднять биндинги и плагины,
-      // иначе StorageService.init() падает с MissingPluginException
+      // в фоновом изоляте без этого StorageService.init() падает с MissingPluginException
       WidgetsFlutterBinding.ensureInitialized();
       DartPluginRegistrant.ensureInitialized();
-      // Логгер у изолята свой: без этого сбой фонового обновления подписок
-      // в «Журнал приложения» не попадал бы вовсе.
       await AppLogger.instance.enableFileLog();
 
       final storage = await StorageService.init();
 
-      // Состояния туннеля в этом изоляте нет вовсе, поэтому порт живой сессии
-      // читаем с диска — его пишет главный изолят при подключении. Идти мимо
-      // туннеля нельзя: пакет приложения исключён из TUN, и заблокированный
-      // домен подписки при включённом VPN остаётся недоступен.
-      // reload: значение писал другой изолят, снимок SharedPreferences этого
-      // мог устареть.
+      // туннеля в этом изоляте нет: порт сессии читаем с диска, reload потому что писал другой изолят
       await storage.reloadFromDisk();
       final proxyPort = await resolveLocalProxyForBackground(
         storage.getActiveLocalHttpPort(),
       );
-      // Пароль инбаунда — оттуда же: Socks5Credentials у этого изолята свой и
-      // пустой, и без пароля каждое фоновое обновление при включённом VPN
-      // упиралось в 407.
+      // без пароля инбаунда каждое фоновое обновление при включённом VPN упиралось в 407
       final creds = storage.getActiveLocalHttpCredentials();
       Socks5Credentials().init(creds.username, creds.password);
       final service = SubscriptionService(storage, localProxyPort: proxyPort);
 
-      // обновляем только то, у чего вышел интервал.
-      // defaultInterval = 1 ч — фоллбэк, если updateIntervalHours не задан
       final due = await service.getDueForUpdate(
         defaultInterval: const Duration(hours: 1),
       );
@@ -72,8 +58,6 @@ void callbackDispatcher() {
       final failed  = results.length - ok;
       final total   = results.fold(0, (sum, r) => sum + r.serverCount);
 
-      // Пользователь мог оффнуть уведы об обновлении подписки
-      // (настройка в «Разрешениях») — тогда молча обновляем без нотификации.
       final settings = await storage.getSettings();
       if (settings.notifySubscriptionUpdates) {
         await _showUpdateNotification(
@@ -90,7 +74,7 @@ void callbackDispatcher() {
         error: e,
         stackTrace: st,
       );
-      // false → workmanager сделает retry с exponential backoff
+      // false: workmanager повторит с нарастающей паузой
       return false;
     }
   });
@@ -117,7 +101,6 @@ Future<void> _showUpdateNotification({
     title = 'Subscriptions partially updated';
     body  = '$ok updated, $failed failed';
   } else {
-    // всё упало — нотификацию не шлём, чтобы не спамить
     return;
   }
 
@@ -130,7 +113,7 @@ Future<void> _showUpdateNotification({
         _kNotifChannelId,
         _kNotifChannelName,
         channelDescription: 'Background subscription refresh results',
-        importance: Importance.low,      // тихо, без звука
+        importance: Importance.low,
         priority: Priority.low,
         icon: '@mipmap/ic_launcher',
         playSound: false,
@@ -142,23 +125,18 @@ Future<void> _showUpdateNotification({
 
 class BackgroundService {
 
-  /// вызвать один раз в main() до runApp()
   static Future<void> init() async {
     await Workmanager().initialize(
       callbackDispatcher,
     );
 
-    // разрешение на нотификации (android 13+)
     final plugin = FlutterLocalNotificationsPlugin();
     final android = plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await android?.requestNotificationsPermission();
   }
 
-  /// периодическая задача. android даёт минимум 15 мин между запусками,
-  /// реальный интервал — в Subscription.updateIntervalHours (фильтр getDueForUpdate).
-  /// policy=update: пересоздаём на каждом старте, чтобы подхватить параметры
-  /// и вытащить задачу из подвисшего состояния.
+  // update: пересоздаём на каждом старте, чтобы вытащить задачу из подвисшего состояния
   static Future<void> registerPeriodicTask() async {
     await Workmanager().registerPeriodicTask(
       _kTaskUniqueName,
@@ -173,7 +151,6 @@ class BackgroundService {
     );
   }
 
-  /// разовое обновление прямо сейчас (например по кнопке)
   static Future<void> runOnce() async {
     await Workmanager().registerOneOffTask(
       '${_kTaskUniqueName}_manual',
@@ -183,7 +160,6 @@ class BackgroundService {
     );
   }
 
-  /// отменить фоновую задачу (например когда выключили autoUpdate)
   static Future<void> cancel() async {
     await Workmanager().cancelByUniqueName(_kTaskUniqueName);
   }

@@ -1,8 +1,5 @@
 part of '../settings_tab.dart';
 
-/// Настройка хоткеев в стиле Discord: клик по чипу справа переводит строку в
-/// режим записи, следующее нажатое сочетание сохраняется. Esc — отмена,
-/// Backspace — очистить. Все хоткеи по умолчанию не назначены.
 class _HotkeySettingsScreen extends ConsumerStatefulWidget {
   const _HotkeySettingsScreen();
 
@@ -16,16 +13,11 @@ class _HotkeySettingsScreenState extends ConsumerState<_HotkeySettingsScreen> {
   bool _needsModifierHint = false;
   final FocusNode _captureFocus = FocusNode(debugLabel: 'hotkeyCapture');
 
-  // Снимок для dispose(): `ref` там уже нельзя — Riverpod помечает элемент
-  // defunct до State.dispose(), а watch-подписки закрывает после, так что
-  // StateError из ref.read обрывает unmount и оставляет живую подписку на
-  // мёртвом элементе (дальше ассерт markNeedsBuild на каждое изменение
-  // провайдера).
+  // снимок для dispose(): ref там кидает StateError и оставляет живую подписку на мёртвом элементе
   Map<String, String> _lastHotkeys = const {};
 
   @override
   void dispose() {
-    // Уход с экрана посреди записи: вернуть снятую регистрацию хоткеев.
     if (_recording != null) {
       _reapplyBindings();
     }
@@ -43,19 +35,14 @@ class _HotkeySettingsScreenState extends ConsumerState<_HotkeySettingsScreen> {
       _recording = action;
       _needsModifierHint = false;
     });
-    // Пока идёт запись, in-app обработчик (Linux) не должен исполнять действия.
     HotkeyService.captureMode = true;
-    // На Windows зарегистрированное глобальное сочетание съедается системой и
-    // до записи не дойдёт (сработает действие) — на время записи снимаем всё.
+    // на Windows зарегистрированное сочетание съест система, на время записи снимаем все
     unawaited(HotkeyService.apply(const {}));
     _captureFocus.requestFocus();
   }
 
   void _stopRecording() {
     HotkeyService.captureMode = false;
-    // Вернуть регистрацию. При сохранении нового сочетания поверх этого её же
-    // переприменит listener настроек в DesktopHomeScreen — порядок вызовов
-    // канала сохраняется, финальное состояние корректно.
     _reapplyBindings();
     if (_recording != null) {
       setState(() {
@@ -72,7 +59,6 @@ class _HotkeySettingsScreenState extends ConsumerState<_HotkeySettingsScreen> {
     if (binding == null) {
       map.remove(action.id);
     } else {
-      // Одно сочетание — одному действию: забираем его у другого действия.
       map.removeWhere(
         (key, value) => value == binding.toToken() && key != action.id,
       );
@@ -81,8 +67,6 @@ class _HotkeySettingsScreenState extends ConsumerState<_HotkeySettingsScreen> {
     await ref
         .read(settingsNotifierProvider.notifier)
         .save(settings.copyWith(hotkeys: map));
-    // Применяет DesktopHomeScreen через ref.listen на настройках; при
-    // конфликте с чужим приложением он же покажет snackbar.
   }
 
   KeyEventResult _onCaptureKey(FocusNode node, KeyEvent event) {
@@ -103,7 +87,6 @@ class _HotkeySettingsScreenState extends ConsumerState<_HotkeySettingsScreen> {
 
     final token = HotkeyKeys.tokenForPhysical(event.physicalKey);
     if (token == null) {
-      // Модификатор или неподдерживаемая клавиша — ждём основную.
       return KeyEventResult.handled;
     }
     final hk = HardwareKeyboard.instance;
@@ -165,7 +148,6 @@ class _HotkeySettingsScreenState extends ConsumerState<_HotkeySettingsScreen> {
         focusNode: _captureFocus,
         onKeyEvent: _onCaptureKey,
         child: GestureDetector(
-          // Клик мимо чипа отменяет запись (как в Discord).
           behavior: HitTestBehavior.translucent,
           onTap: _recording != null ? _stopRecording : null,
           child: SmoothScroll(
@@ -269,7 +251,6 @@ class _HotkeyRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = AppTheme.accent(context);
 
-    // Обводка только на время записи хоткея — это состояние, а не украшение.
     return ExpressiveCard(
       outline: recording ? accent.withValues(alpha: 0.6) : null,
       child: Column(
@@ -350,7 +331,6 @@ class _HotkeyRow extends StatelessWidget {
       );
     }
 
-    // Назначенное сочетание — «клавиши» по отдельности, как кейкапы.
     final parts = b.label.split(' + ');
     return GestureDetector(
       onTap: onChipTap,

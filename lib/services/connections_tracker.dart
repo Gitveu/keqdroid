@@ -1,19 +1,5 @@
 import '../models/connection_entry.dart';
 
-/// Держит соединения между опросами экрана и сводит одинаковые в одну строку.
-///
-/// На Android список строится по access-логу ядра, а лог — это хвост файла.
-/// Отсюда две беды, обе видны глазом: живое соединение исчезало, как только его
-/// строка уезжала из прочитанного хвоста, и возвращалось, когда ядро о нём
-/// что-нибудь напишет; а к одному хосту браузер держит десяток сокетов, и экран
-/// выглядел спамом копиями.
-///
-/// Поэтому соединения запоминаются и живут, пока ядро не скажет, что они
-/// закрылись, а одинаковые по сети, адресу, порту, владельцу и исходу
-/// показываются одной строкой со счётчиком.
-///
-/// Живой снимок с десктопного clash_api держать не нужно — там список и есть
-/// текущее состояние, ему делается только свёртка.
 class ConnectionsTracker {
   ConnectionsTracker({
     this.closedLinger = const Duration(seconds: 45),
@@ -22,47 +8,27 @@ class ConnectionsTracker {
     this.maxTracked = 600,
   });
 
-  /// Сколько закрывшееся соединение ещё видно в списке. Ноль здесь означал бы,
-  /// что соединение просто исчезает в момент закрытия — не видно, чем кончилось.
   final Duration closedLinger;
 
-  /// Сколько держать соединение, о закрытии которого ядро сообщить не может:
-  /// на уровне логов ниже `info` строк `connection ends` нет вовсе, и «живо»
-  /// от «умерло» неотличимо. Держим недолго — врать про живое хуже, чем
-  /// потерять строку (экран в этом случае и так предлагает включить Info).
   final Duration unreportedTtl;
 
-  /// Предохранитель для случая, когда сообщение о закрытии мы пропустили
-  /// (строка уехала из хвоста между опросами): соединение, о котором лог давно
-  /// молчит, всё-таки выкидываем.
   final Duration silentTtl;
 
-  /// Верхняя граница памяти трекера: при переполнении уходят те, о которых
-  /// дольше всего не было слышно.
   final int maxTracked;
 
   final Map<String, _Tracked> _tracked = {};
   String? _token;
 
-  /// В этой сессии уже был хоть один разбор лога. Отличает «догоняем историю из
-  /// хвоста» от «список просто опустел, все соединения закрылись».
   bool _mergedOnce = false;
 
-  /// Забыть всё: другая сессия ядра — другие соединения.
   void reset() {
     _tracked.clear();
     _token = null;
     _mergedOnce = false;
   }
 
-  /// Только для тестов/диагностики: сколько соединений помнится.
   int get trackedCount => _tracked.length;
 
-  /// Снимок для экрана: свёрнутый и, для лог-источника, дополненный тем, что
-  /// ещё живо, но в прочитанный хвост лога не попало.
-  ///
-  /// [sessionToken] меняется вместе с сессией ядра (порт clash_api, факт
-  /// переподключения) — на другом токене память сбрасывается.
   ConnectionsSnapshot merge(
     ConnectionsSnapshot fresh, {
     required String sessionToken,
@@ -71,7 +37,6 @@ class ConnectionsTracker {
     final at = now ?? DateTime.now();
 
     if (fresh.source == ConnectionsSource.unavailable) {
-      // Сессии нет (или источник отвалился) — помнить её соединения незачем.
       reset();
       return fresh;
     }
@@ -81,15 +46,10 @@ class ConnectionsTracker {
     }
 
     if (fresh.source == ConnectionsSource.coreApi) {
-      // clash_api отдаёт то, что открыто сейчас: дополнять нечем.
       return _snapshotFrom(fresh, _group(fresh.entries));
     }
 
-    // Первый опрос сессии: в хвосте лога лежит история, а не «то, что сейчас».
-    // Закрывшееся в ней мы живым не видели, поэтому момент закрытия берём по
-    // времени самого соединения — давнее отсеется сразу, свежее ещё мелькнёт.
-    // Иначе экран при открытии заваливало закрытыми соединениями за всю сессию
-    // (то, на что это и было похоже — спам копиями из логов).
+    // первый опрос: в хвосте лога история, давнее закрытое отсеется по времени самого соединения
     final catchingUp = !_mergedOnce;
     _mergedOnce = true;
 
@@ -114,9 +74,6 @@ class ConnectionsTracker {
     _evict(at, closureReported: fresh.ruleInfoAvailable);
 
     final entries = _tracked.values.toList()
-      // Живое сверху, закрытое вниз; внутри — по времени начала, свежие
-      // первыми. Сортировка по «последней активности» гоняла бы строки
-      // вверх-вниз на каждом опросе, а список должен стоять на месте.
       ..sort((a, b) {
         if (a.entry.closed != b.entry.closed) return a.entry.closed ? 1 : -1;
         return b.firstSeen.compareTo(a.firstSeen);
@@ -158,8 +115,6 @@ class ConnectionsTracker {
         appNamesAvailable: source.appNamesAvailable,
       );
 
-  /// Сворачивает одинаковые соединения в одну строку, сохраняя порядок первого
-  /// вхождения.
   static List<ConnectionEntry> _group(List<ConnectionEntry> entries) {
     final groups = <String, List<ConnectionEntry>>{};
     for (final entry in entries) {
@@ -192,17 +147,12 @@ class ConnectionsTracker {
       }
       if (rule.isEmpty) rule = member.rule;
       if (inbound.isEmpty) inbound = member.inbound;
-      // Строка считается закрытой, только когда закрылись все её соединения:
-      // одно живое — соединение к этому адресу есть.
       if (!member.closed) closed = false;
     }
 
     final first = members.first;
     return first.copyWith(
-      // Ключ группы стабилен между опросами, в отличие от id отдельного сокета.
       id: 'group:${first.groupKey}',
-      // Источник — конкретный локальный сокет, у группы он не один: показывать
-      // чей-то один значит врать. Их количество и так видно по счётчику.
       source: '',
       rule: rule,
       inbound: inbound,
@@ -215,7 +165,6 @@ class ConnectionsTracker {
   }
 }
 
-/// Одно запомненное соединение: сама запись и то, когда его видели.
 class _Tracked {
   _Tracked({
     required this.entry,
@@ -226,29 +175,23 @@ class _Tracked {
 
   ConnectionEntry entry;
 
-  /// Когда соединение впервые попало в список — по нему стоит порядок строк.
   final DateTime firstSeen;
 
-  /// Последний опрос, в котором лог о нём что-то сказал.
   DateTime lastSeen;
 
-  /// Когда стало известно о закрытии. null — ядро о закрытии не сообщало.
   DateTime? closedAt;
 
-  /// Вливает свежую запись о том же соединении.
   void absorb(ConnectionEntry fresh, DateTime at) {
     lastSeen = at;
     if (fresh.closed) closedAt ??= at;
     entry = fresh.copyWith(
-      // Домен ядро узнаёт сниффингом позже адреса, а имя приложения приходит
-      // от системы и только для живых сокетов — однажды выясненное не теряем.
+      // домен приходит позже сниффингом, имя приложения только у живых сокетов, выясненное не теряем
       host: fresh.host.isEmpty ? entry.host : fresh.host,
       destIp: fresh.destIp.isEmpty ? entry.destIp : fresh.destIp,
       process: fresh.process.isEmpty ? entry.process : fresh.process,
       rule: fresh.rule.isEmpty ? entry.rule : fresh.rule,
       outbound: fresh.outbound.isEmpty ? entry.outbound : fresh.outbound,
       startedAt: entry.startedAt ?? fresh.startedAt,
-      // Закрытие необратимо: строка о нём тоже уезжает из хвоста лога.
       closed: entry.closed || fresh.closed,
     );
   }

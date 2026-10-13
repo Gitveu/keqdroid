@@ -1,6 +1,5 @@
 import 'dart:math';
 
-/// локальные socks5-credentials (windows/desktop)
 class SocksCredentialGenerator {
   static final _rng = Random.secure();
   static const _chars =

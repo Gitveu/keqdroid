@@ -4,13 +4,11 @@ import 'package:path/path.dart' as p;
 
 import 'windows_desktop_service.dart';
 
-/// Portable Windows update: extract release zip and replace files after exit.
 class WindowsZipUpdater {
   WindowsZipUpdater._();
 
   static const exeName = 'keqdroid.exe';
 
-  /// Finds the folder inside an extracted archive that contains [exeName].
   static String? findPayloadRoot(Directory extractDir) {
     final atRoot = File(p.join(extractDir.path, exeName));
     if (atRoot.existsSync()) return extractDir.path;
@@ -35,7 +33,6 @@ class WindowsZipUpdater {
     return null;
   }
 
-  /// Downloads are applied in-place; returns `true` when the app is exiting.
   static Future<bool> applyPortableZipUpdate({
     required String zipPath,
     Future<void> Function()? beforeRestart,
@@ -68,10 +65,7 @@ class WindowsZipUpdater {
       }
 
       final scriptPath = p.join(stagingRoot.path, 'apply_update.ps1');
-      // Prefix a UTF-8 BOM: Windows PowerShell 5.1 otherwise reads .ps1 files in
-      // the system ANSI codepage, which mangles any non-ASCII byte (an em-dash
-      // once turned into a curly quote and broke parsing, so the script never
-      // ran). The BOM forces UTF-8 and keeps the script ASCII-safe regardless.
+      // BOM обязателен: Windows PowerShell 5.1 иначе читает .ps1 в ANSI и ломает не-ASCII
       await File(scriptPath).writeAsString(
         '\u{FEFF}${_updaterScript()}',
         flush: true,
@@ -133,8 +127,7 @@ class WindowsZipUpdater {
   static String _escapePsSingleQuoted(String value) =>
       value.replaceAll("'", "''");
 
-  /// Spawns the updater outside this process tree (`cmd /c start`) so it keeps
-  /// running after the app calls [exit].
+  // вне нашего дерева процессов, чтобы пережил exit
   static Future<void> _launchDetachedUpdater(List<String> psArgs) {
     return Process.start(
       'cmd.exe',

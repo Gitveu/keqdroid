@@ -1,14 +1,6 @@
 import 'dart:convert';
 
-/// VMess-ссылка v2rayN (base64-json) из параметров в том виде, в каком их
-/// несёт ссылка vless: транспорт и TLS запросом.
-///
-/// Нужна переводам чужих форматов, Clash и sing-box: параметры узла там
-/// удобно собирать один раз запросом ссылки, а у vmess-json имена свои. Форма
-/// json, а не ссылка AEAD, потому что у неё есть `aid`.
-///
-/// REALITY у vmess не соберёт ни одно ядро — такой узел вызывающий
-/// отбрасывает сам, до этой функции.
+// json, а не ссылка AEAD: в ней нет aid. REALITY у vmess не соберёт ни одно ядро, такой узел отбрасывают до вызова
 String vmessJsonLink({
   required String name,
   required String host,
@@ -18,17 +10,14 @@ String vmessJsonLink({
   required String cipher,
   required Map<String, String> query,
 }) {
-  // HTTP/2 json v2rayN зовёт `h2`, ссылка — `http`.
+  // HTTP/2 в json v2rayN называется h2, в ссылке http
   final net = switch (query['type']) {
     null || '' => 'tcp',
     'http' => 'h2',
     final String type => type,
   };
-  // Своих полей для имени gRPC-сервиса и ранних данных у json нет: v2rayN
-  // кладёт то и другое в `path`, так их и читают генераторы. Ранние данные из
-  // пути оба ядра шлют в Sec-WebSocket-Protocol, а назвать другой заголовок
-  // json нечем, — при нём их не переносим: сервер примет соединение и без них,
-  // а посланные не туда потеряли бы первый пакет.
+  // имя gRPC-сервиса и ранние данные v2rayN кладёт в path. ранние данные с другим заголовком не переносим:
+  // сервер примет соединение и без них, а посланные не туда съели бы первый пакет
   var path = query['path'] ?? '';
   final ed = query['ed'];
   final eh = (query['eh'] ?? '').toLowerCase();
