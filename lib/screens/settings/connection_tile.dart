@@ -68,7 +68,9 @@ class ConnectionTile extends StatelessWidget {
     // соединение, отданное встроенному движку, до сих пор показывалось как
     // «без правила, ушло в прокси», хотя движок мог увести его в direct.
     final rule = entry.decidedByCore
-        ? l10n.connectionsRuleViaCore
+        ? (ruleInfoAvailable
+            ? l10n.connectionsRuleViaCoreUnseen
+            : l10n.connectionsRuleViaCore)
         : switch (entry.rule) {
             '' => ruleInfoAvailable && entry.outbound.isNotEmpty
                 ? l10n.connectionsRuleDefault

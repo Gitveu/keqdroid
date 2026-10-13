@@ -701,6 +701,7 @@
   "connectionsRuleHintApplied": "سطح گزارش هسته روی Info تنظیم شد؛ برای اعمال، دوباره وصل شوید",
   "connectionsRuleDefault": "بدون قانون (عملکرد پیش‌فرض)",
   "connectionsRuleViaCore": "داخل هسته تصمیم گرفته شد (به گزارش Info نیاز دارد)",
+  "connectionsRuleViaCoreUnseen": "هسته تصمیم می‌گیرد، تصمیمش در گزارش نیست",
   "connectionsVerdictCore": "هسته",
   "connectionsVerdictProxy": "پروکسی",
   "connectionsVerdictDirect": "مستقیم",

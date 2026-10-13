@@ -1114,6 +1114,8 @@
   "connectionsRuleHintApplied": "Core log level set to Info, reconnect to apply",
   "connectionsRuleDefault": "no rule (default action)",
   "connectionsRuleViaCore": "decided inside the core (needs Info logs)",
+  "connectionsRuleViaCoreUnseen": "the core decides, its decision is not in the log",
+  "@connectionsRuleViaCoreUnseen": {},
   "connectionsVerdictCore": "CORE",
   "connectionsVerdictProxy": "PROXY",
   "connectionsVerdictDirect": "DIRECT",

@@ -2217,6 +2217,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get connectionsRuleViaCore => 'داخل هسته تصمیم گرفته شد (به گزارش Info نیاز دارد)';
 
   @override
+  String get connectionsRuleViaCoreUnseen => 'هسته تصمیم می‌گیرد، تصمیمش در گزارش نیست';
+
+  @override
   String get connectionsVerdictCore => 'هسته';
 
   @override

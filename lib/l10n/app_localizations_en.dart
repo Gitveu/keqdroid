@@ -2220,6 +2220,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectionsRuleViaCore => 'decided inside the core (needs Info logs)';
 
   @override
+  String get connectionsRuleViaCoreUnseen => 'the core decides, its decision is not in the log';
+
+  @override
   String get connectionsVerdictCore => 'CORE';
 
   @override

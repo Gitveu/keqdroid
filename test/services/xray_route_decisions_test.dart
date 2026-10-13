@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/models/connection_entry.dart';
 import 'package:keqdroid/services/connections_service.dart';
+import 'package:keqdroid/services/xray_route_decisions.dart';
 
 /// Как ядро печатает решения, когда работает встроенным движком за sing-box:
 /// своих инбаундов у него нет, access-строк («from … accepted …») тоже, но
@@ -122,6 +123,57 @@ void main() {
       expect(next.inbound, 'http/http-in');
       expect(next.upload, 10);
       expect(next.download, 20);
+    });
+  });
+
+  // экран открывают позже, чем браузер открыл соединения: решение, напечатанное
+  // в начале сессии, должно найтись и после тысяч строк debug
+  group('XrayRouteDecisions', () {
+    setUp(XrayRouteDecisions.reset);
+    String key(String host) =>
+        XrayAccessLogParser.targetKeyFor('tcp', host, 443);
+
+    test('решение помнится всю сессию, сколько бы строк ни прошло', () {
+      for (final line in _engineLog.split('\n')) {
+        XrayRouteDecisions.observe(line);
+      }
+      for (var i = 0; i < 5000; i++) {
+        XrayRouteDecisions.observe(
+          '2026/08/05 22:10:00.000000 [Debug] transport/internet: noise $i',
+        );
+      }
+      final direct = XrayRouteDecisions.forTarget(
+        key('cloudcdn-m9-5.cdn.yandex.net'),
+      )!;
+      expect(direct.outbound, 'direct');
+      expect(direct.rule, 'direct-domains');
+      expect(XrayRouteDecisions.isEmpty, isFalse);
+    });
+
+    test('новая сессия начинается с чистого листа', () {
+      XrayRouteDecisions.observe(_engineLog.split('\n').first);
+      XrayRouteDecisions.reset();
+      expect(XrayRouteDecisions.isEmpty, isTrue);
+    });
+
+    test('строка без выхода не затирает известный выход', () {
+      XrayRouteDecisions.observe(
+        '[Info] app/dispatcher: taking detour [proxy] for [tcp:example.org:443]',
+      );
+      XrayRouteDecisions.observe(
+        '[Info] app/dispatcher: default route for tcp:example.org:443',
+      );
+      expect(XrayRouteDecisions.forTarget(key('example.org'))!.outbound, 'proxy');
+    });
+
+    test('память ограничена, старые решения вытесняются', () {
+      for (var i = 0; i < 4100; i++) {
+        XrayRouteDecisions.observe(
+          '[Info] app/dispatcher: taking detour [direct] for [tcp:h$i.example:443]',
+        );
+      }
+      expect(XrayRouteDecisions.forTarget(key('h0.example')), isNull);
+      expect(XrayRouteDecisions.forTarget(key('h4099.example')), isNotNull);
     });
   });
 }

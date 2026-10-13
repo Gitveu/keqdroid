@@ -9,7 +9,11 @@ import 'package:keqdroid/screens/settings/connection_tile.dart';
 /// скруглением, потом в layout на Row со stretch при неограниченной высоте), а
 /// исключение молча гасилось на уровне render object'а. Поэтому проверяем
 /// плитку именно так, как она живёт в приложении — пачкой внутри ListView.
-Widget _screen(List<ConnectionEntry> entries, {bool showProcess = false}) =>
+Widget _screen(
+  List<ConnectionEntry> entries, {
+  bool showProcess = false,
+  bool ruleInfoAvailable = true,
+}) =>
     MaterialApp(
       locale: const Locale('ru'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -32,7 +36,7 @@ Widget _screen(List<ConnectionEntry> entries, {bool showProcess = false}) =>
                 itemBuilder: (_, i) => ConnectionTile(
                   entry: entries[i],
                   showProcess: showProcess,
-                  ruleInfoAvailable: true,
+                  ruleInfoAvailable: ruleInfoAvailable,
                 ),
               ),
             ),
@@ -93,6 +97,21 @@ List<ConnectionEntry> _sevenConnections() => [
 
 void main() {
   group('ConnectionTile in a list', () {
+    // при логах Info просить их включить нечестно: решения просто нет в логе
+    testWidgets('решение ядра не найдено — без просьбы включить Info',
+        (tester) async {
+      final undecided = [
+        _entry(host: 'dns-shop.ru', outbound: 'proxy', decidedByCore: true),
+      ];
+      await tester.pumpWidget(_screen(undecided));
+      expect(find.textContaining('нет в логе'), findsOneWidget);
+      expect(find.textContaining('нужны логи Info'), findsNothing);
+
+      await tester.pumpWidget(_screen(undecided, ruleInfoAvailable: false));
+      await tester.pump();
+      expect(find.textContaining('нужны логи Info'), findsOneWidget);
+    });
+
     testWidgets('renders every connection without throwing', (tester) async {
       final entries = _sevenConnections();
       await tester.pumpWidget(_screen(entries));

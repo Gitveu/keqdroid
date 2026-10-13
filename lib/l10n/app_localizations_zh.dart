@@ -2216,6 +2216,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectionsRuleViaCore => '由内核决定（需要 Info 日志）';
 
   @override
+  String get connectionsRuleViaCoreUnseen => '由内核决定，日志中没有它的决定';
+
+  @override
   String get connectionsVerdictCore => '内核';
 
   @override

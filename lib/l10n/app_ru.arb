@@ -1113,6 +1113,8 @@
   "connectionsRuleHintApplied": "Уровень логов ядра теперь Info. Переподключитесь, чтобы применить",
   "connectionsRuleDefault": "без правила (действие по умолчанию)",
   "connectionsRuleViaCore": "решает ядро (нужны логи Info)",
+  "connectionsRuleViaCoreUnseen": "решает ядро, его решения нет в логе",
+  "@connectionsRuleViaCoreUnseen": {},
   "connectionsVerdictCore": "ЯДРО",
   "connectionsVerdictProxy": "ПРОКСИ",
   "connectionsVerdictDirect": "НАПРЯМУЮ",

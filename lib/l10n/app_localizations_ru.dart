@@ -2230,6 +2230,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get connectionsRuleViaCore => 'решает ядро (нужны логи Info)';
 
   @override
+  String get connectionsRuleViaCoreUnseen => 'решает ядро, его решения нет в логе';
+
+  @override
   String get connectionsVerdictCore => 'ЯДРО';
 
   @override

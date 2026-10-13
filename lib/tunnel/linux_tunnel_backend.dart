@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../core/app_logger.dart';
 import '../core/exceptions.dart';
 import '../services/core_dial_failures.dart';
+import '../services/xray_route_decisions.dart';
 import '../utils/xray_session_log.dart';
 import '../services/ephemeral_xray_ping.dart';
 import '../utils/keqrnel_config.dart';
@@ -204,6 +205,7 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     _activeMode = request.mode;
     _xrayLog.clear();
     _singboxLog.clear();
+    XrayRouteDecisions.reset();
 
     try {
       await _cleanupForRestart();
@@ -1421,6 +1423,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     void append(String line) {
       // Тихая прослушка автовыбора — см. CoreDialFailures.
       CoreDialFailures.observe(line);
+      XrayRouteDecisions.observe(line);
       if (!XraySessionLog.keep(line, _xrayLogThreshold)) return;
       buffer.writeln(line);
       if (buffer.length > 64 * 1024) {

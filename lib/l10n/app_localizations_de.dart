@@ -2220,6 +2220,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get connectionsRuleViaCore => 'entscheidet der Kern (braucht Protokollebene Info)';
 
   @override
+  String get connectionsRuleViaCoreUnseen => 'der Kern entscheidet, die Entscheidung fehlt im Log';
+
+  @override
   String get connectionsVerdictCore => 'KERN';
 
   @override

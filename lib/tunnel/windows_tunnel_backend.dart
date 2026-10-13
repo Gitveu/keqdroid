@@ -9,6 +9,7 @@ import '../core/app_logger.dart';
 import '../core/exceptions.dart';
 import '../models/tun_settings.dart';
 import '../services/core_dial_failures.dart';
+import '../services/xray_route_decisions.dart';
 import '../utils/xray_session_log.dart';
 import '../services/debug_log_service.dart';
 import '../services/ephemeral_xray_ping.dart';
@@ -157,6 +158,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     _activeMode = request.mode;
     _xrayLog.clear();
     _singboxLog.clear();
+    XrayRouteDecisions.reset();
 
     try {
       await _cleanupForRestart();
@@ -926,6 +928,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       // Тихая прослушка автовыбора: отказы дозвона до сервера считаются прямо
       // здесь, где строка уже в руках (см. CoreDialFailures).
       CoreDialFailures.observe(line);
+      XrayRouteDecisions.observe(line);
       if (!XraySessionLog.keep(line, _xrayLogThreshold)) return;
       buffer.writeln(line);
       // keep only the tail so the buffer doesn't grow unbounded

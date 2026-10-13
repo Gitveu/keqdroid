@@ -11,6 +11,7 @@ import '../tunnel/windows_tunnel_backend.dart';
 import '../utils/mihomo_api_session.dart';
 import 'connections_tracker.dart';
 import 'debug_log_service.dart';
+import 'xray_route_decisions.dart';
 
 /// Снимок активных соединений ядра для дебаг-экрана.
 ///
@@ -33,8 +34,6 @@ class ConnectionsService {
   static void resetTracker() {
     _tracker.reset();
     _appNames.clear();
-    _decisions.clear();
-    _decisionsPort = null;
   }
 
   static Future<ConnectionsSnapshot> snapshot() async {
@@ -185,15 +184,15 @@ class ConnectionsService {
       // работает и на десктопе, и там keqrnel с его двухслойным роутингом уже
       // не участвует.
       final needsEngineVerdicts = !MihomoApiSession().isActive;
-      final resolved = needsEngineVerdicts
-          ? await _resolveEngineVerdicts(entries, port)
-          : entries;
+      final resolved =
+          needsEngineVerdicts ? _resolveEngineVerdicts(entries) : entries;
       return ConnectionsSnapshot(
         entries: resolved,
         source: ConnectionsSource.coreApi,
-        // Хотя бы одно соединение осталось без настоящего вердикта — значит
-        // ядро не печатает решения (уровень логов ниже Info).
-        ruleInfoAvailable: !resolved.any((e) => e.decidedByCore),
+        // ни одного решения за сессию при соединениях через движок: ядро их не
+        // печатает, уровень логов ниже Info
+        ruleInfoAvailable: !resolved.any((e) => e.decidedByCore) ||
+            !XrayRouteDecisions.isEmpty,
       );
     } catch (e) {
       _resetHttp();
@@ -213,45 +212,14 @@ class ConnectionsService {
   /// движку, и настоящее решение принимает уже тот.
   static const _engineOutboundTag = 'proxy';
 
-  /// Накопленные решения ядра: буфер лога держит только хвост (64 КиБ), а
-  /// соединение может жить дольше, чем его строка в логе. Ключ — назначение.
-  static final Map<String, XrayRouteDecision> _decisions = {};
-  static int? _decisionsPort;
-  static const _decisionsLimit = 500;
-
   /// Достаёт из лога ядра, куда оно на самом деле отправило соединение.
   ///
   /// clash_api видит только слой sing-box, а он в proxy-режиме отдаёт движку
   /// вообще всё (`route.final: proxy`) — без этого экран рисовал PROXY даже там,
   /// где правило Direct уводило трафик мимо туннеля.
-  static Future<List<ConnectionEntry>> _resolveEngineVerdicts(
+  static List<ConnectionEntry> _resolveEngineVerdicts(
     List<ConnectionEntry> entries,
-    int port,
-  ) async {
-    final viaEngine = entries
-        .where((e) => e.outbound.toLowerCase() == _engineOutboundTag)
-        .toList();
-    if (viaEngine.isEmpty) return entries;
-
-    // Смена сессии = другой набор соединений, старые решения не про них.
-    if (_decisionsPort != port) {
-      _decisions.clear();
-      _decisionsPort = port;
-    }
-
-    try {
-      final log = await DebugLogService.getXrayLogs(maxLines: 400);
-      final fresh = XrayAccessLogParser.parseRouteDecisions(log);
-      if (fresh.isNotEmpty) {
-        _decisions.addAll(fresh);
-        while (_decisions.length > _decisionsLimit) {
-          _decisions.remove(_decisions.keys.first);
-        }
-      }
-    } catch (_) {
-      // Лог недоступен — покажем «решает ядро», это честнее выдумки.
-    }
-
+  ) {
     return [
       for (final entry in entries)
         if (entry.outbound.toLowerCase() != _engineOutboundTag)
@@ -262,11 +230,13 @@ class ConnectionsService {
   }
 
   static ConnectionEntry _applyDecision(ConnectionEntry entry) {
-    final decision = _decisions[XrayAccessLogParser.targetKeyFor(
-      entry.network,
-      entry.host,
-      entry.destPort,
-    )];
+    final decision = XrayRouteDecisions.forTarget(
+      XrayAccessLogParser.targetKeyFor(
+        entry.network,
+        entry.host,
+        entry.destPort,
+      ),
+    );
     if (decision == null || decision.outbound.isEmpty) {
       return entry.withRouting(
         rule: '',

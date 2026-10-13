@@ -1111,6 +1111,8 @@
   "connectionsRuleHintApplied": "Protokollebene des Kerns auf Info gesetzt. Verbinde dich neu, um sie zu übernehmen",
   "connectionsRuleDefault": "keine Regel (Standardaktion)",
   "connectionsRuleViaCore": "entscheidet der Kern (braucht Protokollebene Info)",
+  "connectionsRuleViaCoreUnseen": "der Kern entscheidet, die Entscheidung fehlt im Log",
+  "@connectionsRuleViaCoreUnseen": {},
   "connectionsVerdictCore": "KERN",
   "connectionsVerdictProxy": "PROXY",
   "connectionsVerdictDirect": "DIREKT",

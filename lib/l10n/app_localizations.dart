@@ -4217,6 +4217,12 @@ abstract class AppLocalizations {
   /// **'decided inside the core (needs Info logs)'**
   String get connectionsRuleViaCore;
 
+  /// No description provided for @connectionsRuleViaCoreUnseen.
+  ///
+  /// In en, this message translates to:
+  /// **'the core decides, its decision is not in the log'**
+  String get connectionsRuleViaCoreUnseen;
+
   /// No description provided for @connectionsVerdictCore.
   ///
   /// In en, this message translates to:
