@@ -47,11 +47,7 @@ class KeqrnelConfig {
     for (var i = 0; i < outbounds.length; i++) {
       final ob = outbounds[i] as Map<String, dynamic>;
       if (ob['tag'] == 'proxy') {
-        outbounds[i] = <String, dynamic>{
-          'type': 'xray',
-          'tag': 'proxy',
-          'xray': xray,
-        };
+        outbounds[i] = _xrayOutbound(xray);
         swapped = true;
         break;
       }
@@ -84,16 +80,37 @@ class KeqrnelConfig {
   static String wrapXray(String xrayConfig) {
     final xray = jsonDecode(xrayConfig) as Map<String, dynamic>;
     final inbounds = _singboxInboundsFromXray(xray);
+    final outbound = _xrayOutbound(xray);
     xray.remove('inbounds');
     final box = <String, dynamic>{
       'log': {'level': 'warn'},
       if (inbounds.isNotEmpty) 'inbounds': inbounds,
-      'outbounds': [
-        {'type': 'xray', 'tag': 'proxy', 'xray': xray},
-      ],
+      'outbounds': [outbound],
       'route': {'final': 'proxy'},
     };
     return const JsonEncoder.withIndent('  ').convert(box);
+  }
+
+  // соединения приходят в xray от sing-box, мимо его входов, а под TUN ещё и
+  // адресом вместо домена: без сниффинга в keqrnel правила xray по доменам и
+  // geosite их не видят
+  static Map<String, dynamic> _xrayOutbound(Map<String, dynamic> xray) {
+    final inbounds = xray['inbounds'];
+    Object? sniffing;
+    if (inbounds is List) {
+      for (final inbound in inbounds) {
+        if (inbound is Map && inbound['sniffing'] is Map) {
+          sniffing = inbound['sniffing'];
+          break;
+        }
+      }
+    }
+    return {
+      'type': 'xray',
+      'tag': 'proxy',
+      'xray': xray,
+      'sniffing': ?sniffing,
+    };
   }
 
   static List<Map<String, dynamic>> _singboxInboundsFromXray(
@@ -165,6 +182,7 @@ class KeqrnelConfig {
         .where((i) => !const {'127.0.0.1', '::1', 'localhost'}.contains(i['listen']))
         .toList();
     final lanTags = [for (final i in lanInbounds) i['tag'] as String];
+    final outbound = _xrayOutbound(xray);
     xray.remove('inbounds');
 
     final box = <String, dynamic>{
@@ -188,7 +206,7 @@ class KeqrnelConfig {
         ...lanInbounds,
       ],
       'outbounds': [
-        {'type': 'xray', 'tag': 'proxy', 'xray': xray},
+        outbound,
         {'type': 'direct', 'tag': 'direct'},
       ],
       'route': {

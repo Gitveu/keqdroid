@@ -219,4 +219,75 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+
+  // под TUN sing-box отдаёт xray адрес, а не домен, и правила по geosite
+  // срабатывают только если xray распознаёт домен сам
+  group('сниффинг входов xray доезжает до встроенного движка', () {
+    const sniffing = {
+      'enabled': true,
+      'destOverride': ['http', 'tls', 'quic'],
+      'routeOnly': false,
+    };
+    final xray = jsonEncode({
+      'inbounds': [
+        {
+          'tag': 'socks-in',
+          'protocol': 'socks',
+          'listen': '127.0.0.1',
+          'port': 2080,
+          'sniffing': sniffing,
+        },
+      ],
+      'outbounds': [
+        {'protocol': 'vless', 'tag': 'proxy'},
+      ],
+    });
+    Map<String, dynamic> proxyOf(String merged) =>
+        ((jsonDecode(merged) as Map)['outbounds'] as List)
+            .cast<Map<String, dynamic>>()
+            .firstWhere((o) => o['tag'] == 'proxy');
+
+    test('TUN', () {
+      final singbox = jsonEncode({
+        'outbounds': [
+          {'type': 'socks', 'tag': 'proxy'},
+        ],
+        'route': {'rules': [], 'final': 'proxy'},
+      });
+      final proxy = proxyOf(KeqrnelConfig.fromChain(
+        singboxConfig: singbox,
+        xrayConfig: xray,
+        windows: true,
+      ));
+      expect(proxy['sniffing'], sniffing);
+    });
+
+    test('прокси-режим и обёртка', () {
+      expect(
+        proxyOf(KeqrnelConfig.proxyWithStats(
+          xrayConfig: xray,
+          socksPort: 2080,
+          httpPort: 2081,
+          clashPort: 9090,
+        ))['sniffing'],
+        sniffing,
+      );
+      expect(proxyOf(KeqrnelConfig.wrapXray(xray))['sniffing'], sniffing);
+    });
+
+    test('без сниффинга у входов ключа нет', () {
+      final bare = jsonEncode({
+        'inbounds': [
+          {'tag': 'socks-in', 'protocol': 'socks', 'port': 2080},
+        ],
+        'outbounds': [
+          {'protocol': 'vless', 'tag': 'proxy'},
+        ],
+      });
+      expect(
+        proxyOf(KeqrnelConfig.wrapXray(bare)).containsKey('sniffing'),
+        isFalse,
+      );
+    });
+  });
 }
