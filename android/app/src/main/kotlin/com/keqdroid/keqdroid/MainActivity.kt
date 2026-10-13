@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import android.content.Context
 import android.content.Intent
@@ -229,12 +230,13 @@ class MainActivity : FlutterFragmentActivity() {
 
     private fun registerVpnStatusReceiver() {
         if (vpnStatusReceiverRegistered) return
-        val filter = IntentFilter(KeqdisVpnService.BROADCAST_VPN_STATUS_CHANGED)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(vpnStatusReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(vpnStatusReceiver, filter)
-        }
+        // статус берётся из самого сообщения: до Android 13 без ContextCompat его подделывало любое приложение
+        ContextCompat.registerReceiver(
+            this,
+            vpnStatusReceiver,
+            IntentFilter(KeqdisVpnService.BROADCAST_VPN_STATUS_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         vpnStatusReceiverRegistered = true
     }
 
@@ -318,6 +320,7 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun stopWallpaperColorsWatch() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return
         val listener = wallpaperColorsListener ?: return
         wallpaperColorsListener = null
         runCatching {

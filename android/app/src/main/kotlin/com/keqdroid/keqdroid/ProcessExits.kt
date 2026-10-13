@@ -20,8 +20,9 @@ object ProcessExits {
         }
     }
 
-    fun recent(context: Context, max: Int = 10): List<Map<String, Any?>> =
-        records(context, max).map { info ->
+    fun recent(context: Context, max: Int = 10): List<Map<String, Any?>> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return emptyList()
+        return records(context, max).map { info ->
             mapOf(
                 "timestamp" to info.timestamp,
                 "reason" to info.reason,
@@ -32,8 +33,10 @@ object ProcessExits {
                 "vpnStatus" to vpnStatusOf(info),
             )
         }
+    }
 
     fun describeLast(context: Context): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
         val info = records(context, 1).firstOrNull() ?: return null
         val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(info.timestamp))
         val vpn = vpnStatusOf(info)?.let { ", VPN $it" } ?: ""

@@ -16,6 +16,7 @@ import android.net.VpnService
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 
 class VpnQuickTileService : TileService() {
 
@@ -92,12 +93,13 @@ class VpnQuickTileService : TileService() {
         }
 
         try {
-            val filter = IntentFilter(KeqdisVpnService.BROADCAST_VPN_STATUS_CHANGED)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(statusReceiver, filter, RECEIVER_NOT_EXPORTED)
-            } else {
-                registerReceiver(statusReceiver, filter)
-            }
+            // до Android 13 без ContextCompat плитке мог прислать статус кто угодно
+            ContextCompat.registerReceiver(
+                this,
+                statusReceiver,
+                IntentFilter(KeqdisVpnService.BROADCAST_VPN_STATUS_CHANGED),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
         } catch (e: Exception) {
             NativeLog.e("KEQDIS", "Failed to register broadcast receiver: ${e.message}")
         }
@@ -254,11 +256,9 @@ class VpnQuickTileService : TileService() {
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                     )
                     startActivityAndCollapse(pendingIntent)
-                } else if (Build.VERSION.SDK_INT >= 24) {
-                    @Suppress("DEPRECATION")
-                    startActivityAndCollapse(launchIntent)
                 } else {
-                    startActivity(launchIntent)
+                    @Suppress("DEPRECATION", "StartActivityAndCollapseDeprecated")
+                    startActivityAndCollapse(launchIntent)
                 }
             } catch (e: Exception) {
                 // MIUI и родня режут запуск из шторки: пробуем напрямую, иначе говорим вслух
@@ -273,7 +273,7 @@ class VpnQuickTileService : TileService() {
         }
 
         // на заблокированном экране активность не покажется, сперва снять блокировку
-        if (Build.VERSION.SDK_INT >= 24 && isLocked) unlockAndRun(open) else open.run()
+        if (isLocked) unlockAndRun(open) else open.run()
     }
 
     private fun toast(resId: Int) {
@@ -281,8 +281,6 @@ class VpnQuickTileService : TileService() {
     }
 
     private fun updateTileFromPrefs() {
-        if (Build.VERSION.SDK_INT < 24) return
-
         val persisted = getSharedPreferences(KeqdisVpnService.PREFS_QS, MODE_PRIVATE)
             .getString(KeqdisVpnService.KEY_QS_STATUS, "disconnected")
             ?.lowercase()

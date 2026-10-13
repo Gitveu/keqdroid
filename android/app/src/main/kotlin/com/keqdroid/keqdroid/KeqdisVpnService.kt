@@ -18,6 +18,7 @@ import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -70,7 +71,6 @@ class KeqdisVpnService : VpnService() {
         const val MIHOMO_TUN_READY     = "[TUN] Tun adapter listening at:"
         const val MIHOMO_TUN_FAILED    = "Start TUN listening error:"
         const val NOTIFICATION_ID      = 1337
-        const val CHANNEL_ID           = "keqdis_vpn"
         const val CHANNEL_ID_CONTROL   = "keqdis_vpn_control"
         const val TUN_ADDRESS          = "172.19.0.1"
         const val TUN_PREFIX           = 30
@@ -79,7 +79,6 @@ class KeqdisVpnService : VpnService() {
         // держать в паре с _androidTunDns в Dart
         const val TUN_DNS_ADDRESS      = "172.19.0.2"
 
-        const val BROADCAST_ACTION_CONNECT    = "com.keqdis.vpn.NOTIF_CONNECT"
         const val BROADCAST_ACTION_DISCONNECT = "com.keqdis.vpn.NOTIF_DISCONNECT"
 
         const val BROADCAST_VPN_STATUS_CHANGED = "com.keqdis.vpn.STATUS_CHANGED"
@@ -459,7 +458,7 @@ class KeqdisVpnService : VpnService() {
                 isConnected = false,
                 isTransitioning = false,
             )
-            stopForeground(true)
+            stopForeground(STOP_FOREGROUND_REMOVE)
             unregisterNotificationReceiver()
             stopSelf(startId)
         }
@@ -603,7 +602,7 @@ class KeqdisVpnService : VpnService() {
             setStatus(VpnRunStatus.ERROR, e.message)
             cleanup()
             showControlNotification(e.message ?: "Error", isConnected = false, isTransitioning = false)
-            stopForeground(true)
+            stopForeground(STOP_FOREGROUND_REMOVE)
             unregisterNotificationReceiver()
             stopSelf(startId)
         }
@@ -1396,40 +1395,16 @@ class KeqdisVpnService : VpnService() {
         }
     }
 
-    private fun buildNotification(text: String): Notification {
-        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "VPN Status", NotificationManager.IMPORTANCE_LOW)
-            )
-        }
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("KEQDIS VPN")
-            .setContentText(text)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentIntent(
-                PendingIntent.getActivity(
-                    this, 0,
-                    Intent(this, MainActivity::class.java),
-                    PendingIntent.FLAG_IMMUTABLE
-                )
-            )
-            .setOngoing(true)
-            .build()
-    }
-
-    private fun updateNotification(text: String) {
-        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(NOTIFICATION_ID, buildNotification(text))
-    }
-
     private fun buildControlNotification(
         text: String,
         isConnected: Boolean,
         isTransitioning: Boolean
     ): Notification {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_ID_CONTROL) == null) {
+        // каналов до Android 8 нет, и вызов ронял службу на первом же уведомлении
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            nm.getNotificationChannel(CHANNEL_ID_CONTROL) == null
+        ) {
             nm.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ID_CONTROL,
@@ -1540,27 +1515,19 @@ class KeqdisVpnService : VpnService() {
 
         notificationActionReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                when (intent?.action) {
-                    BROADCAST_ACTION_CONNECT -> {
-                        NativeLog.i("KEQDIS", "[notification] Connect pressed")
-                        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-                        launchIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        launchIntent?.putExtra("action", "connect_from_notification")
-                        startActivity(launchIntent)
-                    }
-                    BROADCAST_ACTION_DISCONNECT -> {
-                        NativeLog.i("KEQDIS", "[notification] Disconnect pressed")
-                        serviceScope.launch { stopVpn() }
-                    }
-                }
+                if (intent?.action != BROADCAST_ACTION_DISCONNECT) return
+                NativeLog.i("KEQDIS", "[notification] Disconnect pressed")
+                serviceScope.launch { stopVpn() }
             }
         }
 
-        val filter = IntentFilter().apply {
-            addAction(BROADCAST_ACTION_CONNECT)
-            addAction(BROADCAST_ACTION_DISCONNECT)
-        }
-        registerReceiver(notificationActionReceiver, filter, RECEIVER_NOT_EXPORTED)
+        // до Android 13 флаг понимает только ContextCompat, иначе отключить VPN могло любое приложение
+        ContextCompat.registerReceiver(
+            this,
+            notificationActionReceiver,
+            IntentFilter(BROADCAST_ACTION_DISCONNECT),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     private fun unregisterNotificationReceiver() {

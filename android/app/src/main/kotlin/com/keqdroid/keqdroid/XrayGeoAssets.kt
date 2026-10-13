@@ -1,6 +1,7 @@
 package com.keqdroid.keqdroid
 
 import android.content.Context
+import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 
 // распаковка повторяется при каждой смене вшитой базы: прежняя проверка есть файл оставляла первую копию навсегда,
@@ -99,8 +100,8 @@ object XrayGeoAssets {
 
     private fun appVersionCode(context: Context): Long =
         runCatching {
-            context.packageManager
-                .getPackageInfo(context.packageName, 0)
-                .longVersionCode
+            PackageInfoCompat.getLongVersionCode(
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            )
         }.getOrDefault(0L)
 }
