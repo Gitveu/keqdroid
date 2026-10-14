@@ -510,10 +510,6 @@ class _ProfileSheetState extends ConsumerState<_ProfileSheet> {
                           onTap: () => _toggle(sub.id, !_subs.contains(sub.id)),
                           child: Row(
                             children: [
-                              const ExpressiveIconBadge(
-                                icon: Icons.language_rounded,
-                              ),
-                              const SizedBox(width: ExpressiveSpacing.large),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
