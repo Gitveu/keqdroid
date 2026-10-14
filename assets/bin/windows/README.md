@@ -17,11 +17,10 @@ keqrnel with a local SOCKS/HTTP inbound and points the Windows system proxy at
 it; TUN mode runs keqrnel with a TUN inbound and needs the app as administrator
 (plus `wintun.dll` next to keqrnel.exe).
 
-Build `keqrnel.exe` from [Lemonochka/keqrnel](https://github.com/Lemonochka/keqrnel):
-
-```sh
-go build -trimpath -buildvcs=false -tags with_gvisor -ldflags=-w -o keqrnel.exe ./cmd/keqrnel
-```
+Build `keqrnel.exe` with `tool/build_xray_cores.ps1 -Target windows`, from a checkout of
+[Lemonochka/keqrnel](https://github.com/Lemonochka/keqrnel) next to this repository. The
+script builds against keqrnel's patched xray-core (`tools/patchxray`); a plain
+`go build` in keqrnel gives an unpatched core that drops bursts of incoming UDP.
 
 `with_gvisor` is not optional — the TUN stack is a user setting, and `gvisor` /
 `mixed` (plus full-cone NAT) are missing from a build without that tag.

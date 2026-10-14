@@ -109,43 +109,35 @@ The prebuilt cores are already in `assets/bin/` and `jniLibs/`. To update a core
 | Script | What it builds |
 |--------|----------------|
 | `tool/build_mihomo.ps1` | mihomo with the patches from `tool/patches/`: `libmihomo.so` (arm64-v8a and armeabi-v7a), `mihomo.exe`, `mihomo` |
+| `tool/build_xray_cores.ps1` | patched xray from keqrnel's `tools/patchxray`: `keqrnel.exe`, `keqrnel`, `libxray.so` (arm64-v8a and armeabi-v7a) |
 | `tool/build_linux_native.sh` | the Linux bundle + cores on native Linux |
 | `tool/fetch_xray_geo.ps1` | fresh `geoip.dat` / `geosite.dat` |
 
-`keqrnel` is built from [its own repository](https://github.com/Lemonochka/keqrnel) with
-`go build`, into `assets/bin/windows/` and `assets/bin/linux/`:
+`keqrnel` (`assets/bin/windows/keqrnel.exe`, `assets/bin/linux/keqrnel`) and `libxray.so`
+for Android (arm64-v8a and armeabi-v7a) are built with one script, from a checkout of
+[keqrnel](https://github.com/Lemonochka/keqrnel) next to this repository:
 
-```bash
-go build -trimpath -buildvcs=false -tags with_gvisor -o keqrnel.exe ./cmd/keqrnel
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -tags with_gvisor \
-  -ldflags="-s -w" -o keqrnel ./cmd/keqrnel
+```powershell
+powershell -File tool/build_xray_cores.ps1                   # all three
+powershell -File tool/build_xray_cores.ps1 -Target windows   # or android, linux
 ```
 
-**`with_gvisor` is required**: without it the core has no `gvisor` and `mixed` TUN stacks
-and no full-cone NAT. A build without the tag is about 3 MB smaller.
+The xray-core revision and every dependency come from keqrnel's `go.mod`, so every
+platform runs the same Xray. The patched xray belongs to keqrnel: its `tools/patchxray`
+applies keqrnel's `patches/xray-*.patch` and writes a module file pointing the build at
+that tree, and stops if a patch does not apply. keqrnel's
+`patches/xray-udp-dial-queue.patch` keeps a burst of incoming UDP that `core.DialUDP`
+dropped past 16 packets: without it calls, screen shares and games lost up to 39% of
+incoming packets on PC.
 
-`libxray.so` for Android is built from the xray-core revision pinned in keqrnel's `go.mod`,
-so every platform runs the same Xray. Build it inside a keqrnel checkout, with the NDK:
+The Android build adds this repository's `tool/patches/xray-*.patch` on top, in a tree of
+its own: `xray-android-uid-owner.patch` makes xray ask the VPN service which app opened a
+connection, and look it up by the address before sniffing.
 
-```bash
-CGO_ENABLED=1 GOOS=android GOARCH=arm64 GOARM64=v8.0 \
-  CC=$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android21-clang.cmd \
-  go build -trimpath -buildvcs=false -gcflags=all=-l=4 \
-  -ldflags="-s -w -checklinkname=0" -o libxray.so github.com/xtls/xray-core/main
-```
-
-For the 32-bit APK (`jniLibs/armeabi-v7a/`) only the target changes. Rebuild both ABIs
-on every update:
-
-```bash
-CGO_ENABLED=1 GOOS=android GOARCH=arm GOARM=7 \
-  CC=$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/armv7a-linux-androideabi21-clang.cmd \
-  go build -trimpath -buildvcs=false -gcflags=all=-l=4 \
-  -ldflags="-s -w -checklinkname=0" -o libxray.so github.com/xtls/xray-core/main
-```
-
-`-checklinkname=0` is required: the `anet` dependency links into `net.zoneCache` in the
-standard library, which Go 1.26+ rejects without the flag.
+**`with_gvisor` is required** for keqrnel: without it the core has no `gvisor` and `mixed`
+TUN stacks and no full-cone NAT. `-checklinkname=0` is required for `libxray.so`: the
+`anet` dependency links into `net.zoneCache` in the standard library, which Go 1.26+
+rejects without the flag.
 
 Windows binaries (`keqrnel.exe`, `mihomo.exe`) are built unstripped and must not be run
 from `%TEMP%`, otherwise Defender flags them. Android and Linux binaries are stripped with
@@ -166,6 +158,8 @@ patch header says what it fixes and what to keep in sync on update:
   share that servers on Xray 26.9.9+ require;
 - `mihomo-android-package-manager.patch`: the Android TUN listener reads
   `/data/system/packages.xml`, which SELinux blocks for apps, only when something needs it.
+- `mihomo-android-uid-owner.patch`: on Android mihomo asks the VPN service which app
+  opened a connection, since SELinux hides other apps' sockets from it.
 
 AmneziaWG runs on mihomo: amneziawg-go is built in, and a `.conf` profile runs as
 `type: wireguard` with `amnezia-wg-option`. There is nothing separate to build.
@@ -323,43 +317,35 @@ storage/подписки/апдейтер/пинг, `test/models/`, `test/tunnel
 | Скрипт | Что собирает |
 |--------|--------------|
 | `tool/build_mihomo.ps1` | mihomo с патчами из `tool/patches/`: `libmihomo.so` (arm64-v8a и armeabi-v7a), `mihomo.exe`, `mihomo` |
+| `tool/build_xray_cores.ps1` | пропатченный xray из `tools/patchxray` keqrnel: `keqrnel.exe`, `keqrnel`, `libxray.so` (arm64-v8a и armeabi-v7a) |
 | `tool/build_linux_native.sh` | Linux-бандл + ядра на нативном Linux |
 | `tool/fetch_xray_geo.ps1` | свежие `geoip.dat` / `geosite.dat` |
 
-`keqrnel` собирается из [своего репозитория](https://github.com/Lemonochka/keqrnel)
-через `go build` в `assets/bin/windows/` и `assets/bin/linux/`:
+`keqrnel` (`assets/bin/windows/keqrnel.exe`, `assets/bin/linux/keqrnel`) и `libxray.so`
+для Android (arm64-v8a и armeabi-v7a) собираются одним скриптом из checkout'а
+[keqrnel](https://github.com/Lemonochka/keqrnel), лежащего рядом с этим репозиторием:
 
-```bash
-go build -trimpath -buildvcs=false -tags with_gvisor -o keqrnel.exe ./cmd/keqrnel
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -tags with_gvisor \
-  -ldflags="-s -w" -o keqrnel ./cmd/keqrnel
+```powershell
+powershell -File tool/build_xray_cores.ps1                   # все три
+powershell -File tool/build_xray_cores.ps1 -Target windows   # или android, linux
 ```
 
-**`with_gvisor` обязателен**: без него в ядре нет стеков TUN `gvisor` и `mixed`, а с ними
-и full-cone NAT. Сборка без тега примерно на 3 МБ меньше.
+Ревизия xray-core и все зависимости берутся из `go.mod` keqrnel, поэтому на всех
+платформах один и тот же Xray. Пропатченный xray принадлежит keqrnel: его
+`tools/patchxray` накатывает `patches/xray-*.patch` keqrnel, пишет файл модуля, который
+направляет сборку на это дерево, и останавливается, если патч не лёг. Патч keqrnel
+`patches/xray-udp-dial-queue.patch` держит всплеск входящего UDP, который `core.DialUDP`
+выбрасывал сверх 16 пакетов: без него звонки, демонстрация экрана и игры на ПК теряли до
+39% входящих пакетов.
 
-`libxray.so` для Android собирается из ревизии xray-core, закреплённой в `go.mod` keqrnel,
-поэтому на всех платформах один и тот же Xray. Собирать внутри checkout'а keqrnel, с NDK:
+Сборка для Android добавляет сверху `tool/patches/xray-*.patch` этого репозитория, в
+своём отдельном дереве: `xray-android-uid-owner.patch` заставляет xray спрашивать у
+VPN-сервиса, какое приложение открыло соединение, и искать его по адресу до сниффинга.
 
-```bash
-CGO_ENABLED=1 GOOS=android GOARCH=arm64 GOARM64=v8.0 \
-  CC=$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android21-clang.cmd \
-  go build -trimpath -buildvcs=false -gcflags=all=-l=4 \
-  -ldflags="-s -w -checklinkname=0" -o libxray.so github.com/xtls/xray-core/main
-```
-
-Для 32-битного APK (`jniLibs/armeabi-v7a/`) меняется только цель. При каждом обновлении
-пересобираются обе ABI:
-
-```bash
-CGO_ENABLED=1 GOOS=android GOARCH=arm GOARM=7 \
-  CC=$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/armv7a-linux-androideabi21-clang.cmd \
-  go build -trimpath -buildvcs=false -gcflags=all=-l=4 \
-  -ldflags="-s -w -checklinkname=0" -o libxray.so github.com/xtls/xray-core/main
-```
-
-`-checklinkname=0` обязателен: зависимость `anet` ссылается на `net.zoneCache` из
-стандартной библиотеки, а Go 1.26+ без флага такое не линкует.
+**`with_gvisor` обязателен** для keqrnel: без него в ядре нет стеков TUN `gvisor` и
+`mixed`, а с ними и full-cone NAT. `-checklinkname=0` обязателен для `libxray.so`:
+зависимость `anet` ссылается на `net.zoneCache` из стандартной библиотеки, а Go 1.26+ без
+флага такое не линкует.
 
 Windows-бинари (`keqrnel.exe`, `mihomo.exe`) собираются без стрипа, и запускать их из
 `%TEMP%` нельзя: иначе их блокирует Defender. Android- и Linux-бинари стрипаются
@@ -381,6 +367,8 @@ powershell -File tool/build_mihomo.ps1
 - `mihomo-android-package-manager.patch`: TUN-листенер на Android читает
   `/data/system/packages.xml`, который SELinux закрывает от приложений, только когда он
   действительно нужен.
+- `mihomo-android-uid-owner.patch`: на Android mihomo спрашивает у VPN-сервиса, какое
+  приложение открыло соединение: чужие сокеты SELinux от него прячет.
 
 AmneziaWG работает на mihomo: amneziawg-go встроен, профиль `.conf` исполняется как
 `type: wireguard` с `amnezia-wg-option`. Отдельно собирать нечего.

@@ -32,13 +32,10 @@ if any of them no longer applies.
 
 ## Building keqrnel
 
-Source: [Lemonochka/keqrnel](https://github.com/Lemonochka/keqrnel). From a checkout
-of that repository:
-
-```sh
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -tags with_gvisor \
-  -ldflags="-s -w" -o keqrnel ./cmd/keqrnel
-```
+Source: [Lemonochka/keqrnel](https://github.com/Lemonochka/keqrnel), checked out next to
+this repository. Build with `tool/build_xray_cores.ps1 -Target linux`: it builds
+against keqrnel's patched xray-core (`tools/patchxray`), and a plain `go build` in
+keqrnel gives an unpatched core that drops bursts of incoming UDP.
 
 `with_gvisor` is required: the TUN stack is a user setting, and `gvisor` / `mixed`
 (and with them full-cone NAT) do not exist in a build without that tag.
