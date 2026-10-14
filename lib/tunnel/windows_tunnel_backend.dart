@@ -919,6 +919,15 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         'third-party firewall blocking it) is the first suspect. The gVisor '
         'stack does not depend on it.',
       );
+    } else if (result.config.contains('"stack": "${TunSettings.stackMixed}"')) {
+      AppLogger.instance.warn(
+        'TUN stack is "mixed": on Windows its TCP goes through the system stack, '
+        'a listener on the TUN interface address that needs an inbound Windows '
+        'Firewall rule; only UDP goes through gVisor. sing-tun adds the rule '
+        'itself but ignores the result — if games and calls work but websites '
+        'and launchers do not, that rule (or a third-party firewall blocking '
+        'it) is the first suspect. The gVisor stack does not depend on it.',
+      );
     }
     return result.config;
   }

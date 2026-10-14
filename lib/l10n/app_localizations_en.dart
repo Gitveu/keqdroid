@@ -752,7 +752,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTunStackGvisorHint => 'Userspace stack: no listener, no firewall rules, slightly slower. Needs a core built with gVisor.';
 
   @override
-  String get settingsTunStackMixedHint => 'gVisor for TCP, system for UDP. Needs a core built with gVisor.';
+  String get settingsTunStackMixedHint => 'system for TCP, gVisor for UDP. Like system, needs a firewall rule on Windows. Needs a core built with gVisor.';
 
   @override
   String get settingsTunStackMipsHint => 'Mihomo\'s own userspace stack instead of gVisor: lighter, with selectable TCP congestion control. Only on the mihomo core.';

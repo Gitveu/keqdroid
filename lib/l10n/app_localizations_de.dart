@@ -752,7 +752,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsTunStackGvisorHint => 'Userspace-Stack: kein Listener, keine Firewall-Regeln, etwas langsamer. Braucht einen Kern mit gVisor.';
 
   @override
-  String get settingsTunStackMixedHint => 'gVisor für TCP, system für UDP. Braucht einen Kern mit gVisor.';
+  String get settingsTunStackMixedHint => 'system für TCP, gVisor für UDP. Wie system braucht er unter Windows eine Firewall-Regel. Braucht einen Kern mit gVisor.';
 
   @override
   String get settingsTunStackMipsHint => 'Der eigene Userspace-Stack von mihomo statt gVisor: leichter, mit wählbarer TCP-Staukontrolle. Nur mit dem mihomo-Kern.';

@@ -1418,7 +1418,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsTunStackMixedHint.
   ///
   /// In en, this message translates to:
-  /// **'gVisor for TCP, system for UDP. Needs a core built with gVisor.'**
+  /// **'system for TCP, gVisor for UDP. Like system, needs a firewall rule on Windows. Needs a core built with gVisor.'**
   String get settingsTunStackMixedHint;
 
   /// No description provided for @settingsTunStackMipsHint.

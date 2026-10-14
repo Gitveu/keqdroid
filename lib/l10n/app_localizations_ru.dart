@@ -760,7 +760,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsTunStackGvisorHint => 'Userspace-стек: ни листенера, ни правил фаервола, чуть медленнее. Нужно ядро с gVisor.';
 
   @override
-  String get settingsTunStackMixedHint => 'gVisor для TCP, system для UDP. Нужно ядро с gVisor.';
+  String get settingsTunStackMixedHint => 'system для TCP, gVisor для UDP. Как и system, на Windows требует правило фаервола. Нужно ядро с gVisor.';
 
   @override
   String get settingsTunStackMipsHint => 'Свой userspace-стек mihomo вместо gVisor: легче, со своим контролем перегрузки TCP. Только на ядре mihomo.';
