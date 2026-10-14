@@ -1468,6 +1468,8 @@ class MihomoConfigGen {
       // резолвер профиля обычно внутри туннеля (10.8.0.1), снаружи он не отвечает
       if (dns.isNotEmpty) ...{'dns': dns, 'remote-dns-resolve': true},
       'amnezia-wg-option': ?awg,
+      // mihomo 1.19.32 перевёл умолчание на свой новый стек mips, AWG у нас ездил на gVisor
+      'ip-stack': {'mode': 'gvisor'},
     };
   }
 

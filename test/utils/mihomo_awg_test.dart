@@ -61,6 +61,12 @@ void main() {
     expect(peer['allowed-ips'], ['0.0.0.0/0', '::/0']);
   });
 
+  test('стек туннеля gVisor, а не умолчание ядра', () {
+    // С 1.19.32 «auto» у mihomo значит его новый стек mips; WireGuard и AWG у
+    // нас проверены на gVisor, на нём и остаются.
+    expect(_proxy(_conf())['ip-stack'], {'mode': 'gvisor'});
+  });
+
   test('параметры AWG — полями и типами ядра, реализация v3', () {
     final p = _proxy(_conf(
       iface: 'Jc = 4\nJmin = 40\nJmax = 70\nS1 = 86\nS2 = 574\nS3 = 20\n'
