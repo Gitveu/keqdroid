@@ -2224,6 +2224,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsRoutingPresetRefilterTitle => 'Заблокировано в РФ (Re-filter)';
 
   @override
+  String get settingsRoutingPresetWhitelistTitle => 'Белые списки мобильной связи';
+
+  @override
   String get settingsRoutingGeoUnknownTitle => 'Нет в гео-базах, будет проигнорировано';
 
   @override

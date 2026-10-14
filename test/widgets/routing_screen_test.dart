@@ -313,6 +313,47 @@ void main() {
       expect((await _storage.getRoutes()).single.target, RouteTarget.vpn);
     });
 
+    testWidgets('белые списки: напрямую, рунет напрямую выключен, остальное в VPN',
+        (tester) async {
+      const ruPreset = TrafficRoute(
+        id: 'ru-preset',
+        content: RouteContent.preset,
+        presetId: 'ru',
+        target: RouteTarget.direct,
+      );
+      const own = TrafficRoute(
+        id: 'own',
+        sites: 'work.example, 192.168.0.0/16',
+        target: RouteTarget.direct,
+      );
+      final c = await _pump(
+        tester,
+        settings: const AppSettings(
+          finalOutbound: AppSettings.finalOutboundDirect,
+        ),
+        routes: const [_direct, ruPreset, own, _block],
+      );
+      await openNew(tester);
+      await tester.tap(find.text('Что'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Белые списки мобильной связи'));
+      await tester.pumpAndSettle();
+
+      final saved = {for (final r in await _storage.getRoutes()) r.id: r};
+      final added = saved.values
+          .singleWhere((r) => r.presetId == 'whitelist');
+      expect(added.target, RouteTarget.direct);
+      expect(saved['direct']!.enabled, isFalse);
+      expect(saved['ru-preset']!.enabled, isFalse);
+      expect(saved['own']!.enabled, isTrue);
+      expect(saved['block']!.enabled, isTrue);
+      expect(
+        c.read(settingsNotifierProvider).value!.finalOutbound,
+        AppSettings.finalOutboundProxy,
+      );
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
     testWidgets('«куда» меняется в шторке', (tester) async {
       await _pump(tester, routes: const [_direct]);
       await tester.tap(find.text('ru, yandex.ru, vk.com'));
@@ -1023,6 +1064,33 @@ void main() {
         c.read(settingsNotifierProvider).value!.finalOutbound,
         AppSettings.finalOutboundProxy,
       );
+    });
+
+    testWidgets('белые списки в профиле выключают рунет только в профиле',
+        (tester) async {
+      await _pump(
+        tester,
+        routes: const [_direct],
+        profiles: const [
+          RoutingProfile(id: 'p', name: 'Профиль', routes: [_direct]),
+        ],
+        subs: subs,
+      );
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tapInCard(tester, 'p', 'Новый маршрут');
+      await tester.tap(find.text('Что'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Белые списки мобильной связи'));
+      await tester.pumpAndSettle();
+
+      final profile = (await _storage.getRoutingProfiles()).single;
+      expect(
+        profile.routes.singleWhere((r) => r.id == 'direct').enabled,
+        isFalse,
+      );
+      expect(profile.routes.any((r) => r.presetId == 'whitelist'), isTrue);
+      expect((await _storage.getRoutes()).single.enabled, isTrue);
     });
 
     testWidgets('меню: переименовать, подписки, удалить', (tester) async {

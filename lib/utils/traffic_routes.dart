@@ -56,6 +56,20 @@ String routeEntriesText(TrafficRoute route) => switch (route.content) {
       RouteContent.allTraffic => '',
     };
 
+const _runetZones = {'ru', 'su', 'рф', 'xn--p1ai'};
+
+bool routeSendsRunetDirect(TrafficRoute route) {
+  if (route.target != RouteTarget.direct) return false;
+  for (final entry in routingEntries(routeEntriesText(route))) {
+    var v = entry.toLowerCase();
+    if (v == 'geosite:category-ru' || v == 'geoip:ru') return true;
+    if (v.startsWith('domain:')) v = v.substring('domain:'.length);
+    if (v.startsWith('.')) v = v.substring(1);
+    if (_runetZones.contains(v)) return true;
+  }
+  return false;
+}
+
 bool routeIsEmpty(TrafficRoute route) =>
     route.content != RouteContent.allTraffic &&
     routingEntries(routeEntriesText(route)).isEmpty;

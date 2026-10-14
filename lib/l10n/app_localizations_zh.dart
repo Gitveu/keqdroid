@@ -2210,6 +2210,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRoutingPresetRefilterTitle => '俄罗斯封锁的网站（Re-filter）';
 
   @override
+  String get settingsRoutingPresetWhitelistTitle => '俄罗斯移动网络白名单';
+
+  @override
   String get settingsRoutingGeoUnknownTitle => '地理数据库中不存在，将被忽略';
 
   @override

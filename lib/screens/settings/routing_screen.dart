@@ -33,6 +33,7 @@ String _presetName(AppLocalizations l10n, String id) => switch (id) {
       'ru' => l10n.settingsRoutingPresetRuTitle,
       'ads' => l10n.settingsRoutingPresetAdsTitle,
       'refilter' => l10n.settingsRoutingPresetRefilterTitle,
+      'whitelist' => l10n.settingsRoutingPresetWhitelistTitle,
       _ => id,
     };
 
@@ -40,7 +41,8 @@ IconData _presetIcon(String id) => switch (id) {
       'ru' => Icons.flag_rounded,
       'ads' => Icons.block_rounded,
       'refilter' => Icons.shield_rounded,
-      _ => Icons.playlist_add_check_rounded,
+      'whitelist' => Icons.signal_cellular_alt_rounded,
+      _ =>Icons.playlist_add_check_rounded,
     };
 
 IconData _contentIcon(TrafficRoute route) => switch (route.content) {

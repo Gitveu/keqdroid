@@ -8,6 +8,7 @@ class RoutingPreset {
     required this.field,
     required this.values,
     this.unmatched,
+    this.offRunetDirect = false,
   });
 
   final String id;
@@ -18,6 +19,9 @@ class RoutingPreset {
 
   // через VPN сам по себе ничего не меняет, пока остальное и так идёт в VPN
   final RoutingField? unmatched;
+
+  // выключает маршруты, которые пускают напрямую весь рунет: с ними русский сайт не из списка ушёл бы мимо VPN
+  final bool offRunetDirect;
 }
 
 class RoutingPresets {
@@ -49,6 +53,10 @@ class RoutingPresets {
     'geoip:refilter',
   ];
 
+  // hxehex/russia-mobile-internet-whitelist, домержен тем же скриптом. подсети оттуда не берём:
+  // под TUN правило по подсети пустит напрямую любой сайт в диапазоне, а на net4people в октябре 2026 их списки ошибались в обе стороны
+  static const List<String> whitelist = ['geosite:ru-whitelist'];
+
   static const List<RoutingPreset> all = [
     RoutingPreset(
       id: 'ru',
@@ -65,6 +73,13 @@ class RoutingPresets {
       field: RoutingField.proxy,
       values: reFilter,
       unmatched: RoutingField.direct,
+    ),
+    RoutingPreset(
+      id: 'whitelist',
+      field: RoutingField.direct,
+      values: whitelist,
+      unmatched: RoutingField.proxy,
+      offRunetDirect: true,
     ),
   ];
 

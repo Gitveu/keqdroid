@@ -2214,6 +2214,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsRoutingPresetRefilterTitle => 'Blocked in Russia (Re-filter)';
 
   @override
+  String get settingsRoutingPresetWhitelistTitle => 'Russian mobile whitelists';
+
+  @override
   String get settingsRoutingGeoUnknownTitle => 'Missing from the geo databases, will be ignored';
 
   @override

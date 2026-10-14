@@ -294,6 +294,44 @@ void main() {
     );
   });
 
+  group('весь рунет напрямую', () {
+    bool runet(String sites, [RouteTarget target = RouteTarget.direct]) =>
+        routeSendsRunetDirect(_route('a', sites: sites, target: target));
+
+    test('зоны в любом написании и geo-коды всей страны', () {
+      for (final sites in [
+        'ru, yandex.ru, vk.com',
+        '.su',
+        'domain:xn--p1ai',
+        'РФ',
+        'geoip:ru',
+        'GeoSite:Category-RU',
+      ]) {
+        expect(runet(sites), isTrue, reason: sites);
+      }
+      expect(
+        routeSendsRunetDirect(_route('a',
+            content: RouteContent.preset,
+            preset: 'ru',
+            target: RouteTarget.direct)),
+        isTrue,
+      );
+    });
+
+    test('отдельные сайты, части страны и не «напрямую» не в счёт', () {
+      for (final sites in [
+        'yandex.ru, gosuslugi.ru',
+        'geosite:category-gov-ru',
+        'geoip:!ru',
+        'full:ru.example',
+      ]) {
+        expect(runet(sites), isFalse, reason: sites);
+      }
+      expect(runet('ru', RouteTarget.vpn), isFalse);
+      expect(runet('ru', RouteTarget.server), isFalse);
+    });
+  });
+
   test('маршрут переживает сохранение', () {
     final r = _route('a', apps: ['chrome'], sites: 'yt.example',
         target: RouteTarget.server, server: 'de', enabled: false);

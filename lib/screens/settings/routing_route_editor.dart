@@ -296,16 +296,31 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
       case _ContentKind(:final content):
         _change(_route.copyWith(content: content));
       case _ContentPreset(:final preset):
-        _change(_route.copyWith(
-          content: RouteContent.preset,
-          presetId: preset.id,
-          target: switch (preset.field) {
-            RoutingField.direct => RouteTarget.direct,
-            RoutingField.proxy => RouteTarget.vpn,
-            RoutingField.blocked => RouteTarget.block,
-          },
-        ));
+        setState(() => _route = _route.copyWith(
+              content: RouteContent.preset,
+              presetId: preset.id,
+              target: switch (preset.field) {
+                RoutingField.direct => RouteTarget.direct,
+                RoutingField.proxy => RouteTarget.vpn,
+                RoutingField.blocked => RouteTarget.block,
+              },
+            ));
+        // дождаться записи: соседние маршруты ниже перезаписали бы список, прочитанный до неё
+        await _persist();
+        if (!mounted) return;
+        if (preset.offRunetDirect) await _offRunetDirect();
+        if (!mounted) return;
         await _applyPresetUnmatched(l10n, preset);
+    }
+  }
+
+  Future<void> _offRunetDirect() async {
+    for (final r in await _routesFor(ref, widget.profileId)) {
+      if (!mounted) return;
+      if (r.id == _route.id || !r.enabled || !routeSendsRunetDirect(r)) {
+        continue;
+      }
+      await _upsertRoute(ref, widget.profileId, r.copyWith(enabled: false));
     }
   }
 
@@ -323,7 +338,7 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     };
     if (_finalOutboundFor(ref, widget.profileId) == value) return;
     await _saveFinalOutbound(ref, widget.profileId, value);
-    if (!mounted) return;
+    if (!mounted || unmatched != RoutingField.direct) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(l10n.routeRefilterUnmatched)),
     );

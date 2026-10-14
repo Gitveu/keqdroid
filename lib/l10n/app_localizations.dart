@@ -4193,6 +4193,12 @@ abstract class AppLocalizations {
   /// **'Blocked in Russia (Re-filter)'**
   String get settingsRoutingPresetRefilterTitle;
 
+  /// No description provided for @settingsRoutingPresetWhitelistTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Russian mobile whitelists'**
+  String get settingsRoutingPresetWhitelistTitle;
+
   /// No description provided for @settingsRoutingGeoUnknownTitle.
   ///
   /// In en, this message translates to:

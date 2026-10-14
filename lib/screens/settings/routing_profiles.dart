@@ -19,6 +19,13 @@ Future<void> _removeRoute(WidgetRef ref, String? profileId, String routeId) =>
             .read(routingProfilesProvider.notifier)
             .removeRoute(profileId, routeId);
 
+Future<List<TrafficRoute>> _routesFor(WidgetRef ref, String? profileId) async {
+  if (profileId == null) return ref.read(routesProvider.future);
+  final profiles = await ref.read(routingProfilesProvider.future);
+  return profiles.where((p) => p.id == profileId).firstOrNull?.routes ??
+      const [];
+}
+
 String _finalOutboundFor(WidgetRef ref, String? profileId) {
   if (profileId == null) {
     return ref.read(settingsNotifierProvider).value?.finalOutbound ??

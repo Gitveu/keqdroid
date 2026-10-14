@@ -2210,6 +2210,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsRoutingPresetRefilterTitle => 'مسدودشده‌ها در روسیه (Re-filter)';
 
   @override
+  String get settingsRoutingPresetWhitelistTitle => 'لیست سفید اینترنت موبایل روسیه';
+
+  @override
   String get settingsRoutingGeoUnknownTitle => 'در پایگاه دادهٔ جغرافیایی نیست — نادیده گرفته می‌شود';
 
   @override
