@@ -310,9 +310,11 @@ class _RoutingScreen extends ConsumerWidget {
         _ProfileCard(
           key: const ValueKey('routing-profile-main'),
           title: l10n.routingProfileMain,
+          // счёт своей строкой: «Все» и «Остальные» разной длины, и переключатель
+          // чужого профиля перекидывал хвост строки туда-обратно
           summary: mainExpanded
               ? mainScope
-              : '$mainScope · ${l10n.routingProfileRouteCount(routes.length)}',
+              : '$mainScope\n${l10n.routingProfileRouteCount(routes.length)}',
           expanded: mainExpanded,
           onToggle: () => _toggleProfile(ref, _mainProfileKey),
           body: routeRows(null, routes, mainFinal),

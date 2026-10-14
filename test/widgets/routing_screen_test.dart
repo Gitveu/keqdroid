@@ -817,8 +817,28 @@ void main() {
       expect(_texts(tester), isNot(contains('ru, yandex.ru, vk.com')));
       expect(
         _texts(tester),
-        contains('Остальные подписки и свои серверы · 1 маршрут'),
+        contains('Остальные подписки и свои серверы\n1 маршрут'),
       );
+    });
+
+    testWidgets('переключатель профиля не меняет высоту свёрнутого «Основного»',
+        (tester) async {
+      await _pump(
+        tester,
+        routes: const [_direct],
+        profiles: const [games],
+        subs: subs,
+      );
+      // ширина, на которой «Все… · 1 маршрут» влезал в строку, а «Остальные…» уже нет
+      tester.view.physicalSize = const Size(660 * 2.625, 2400);
+      await tester.tap(find.text('Основной'));
+      await tester.pumpAndSettle();
+      final main = find.byKey(const ValueKey('routing-profile-main'));
+      final before = tester.getSize(main).height;
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(_texts(tester), contains('Все подписки и свои серверы\n1 маршрут'));
+      expect(tester.getSize(main).height, before);
     });
 
     testWidgets('выключатель сохраняется, выключенный подписан',
