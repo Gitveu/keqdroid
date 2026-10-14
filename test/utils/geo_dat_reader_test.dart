@@ -141,11 +141,22 @@ void main() {
       expect(ipCodes, containsAll(['telegram', 'refilter', 'ru', 'private']));
 
       final siteCodes = await GeoDatReader.codes(geosite);
-      expect(siteCodes, containsAll(['telegram', 'refilter', 'category-ru']));
+      expect(
+        siteCodes,
+        containsAll(['telegram', 'refilter', 'category-ru', 'ru-whitelist']),
+      );
 
       // Тело домерженной записи должно читаться, а не только её заголовок.
       expect(await GeoDatReader.cidrs(geoip, 'telegram'), isNotEmpty);
       expect(await GeoDatReader.domains(geosite, 'refilter'), isNotEmpty);
+    });
+
+    test('белый список собран из текста: домены вместе с поддоменами', () async {
+      if (!geosite.existsSync()) return;
+      final domains = await GeoDatReader.domains(geosite, 'ru-whitelist');
+      expect(domains, isNotEmpty);
+      expect(domains.every((d) => d.type == GeoDomainType.domain), isTrue);
+      expect(domains.map((d) => d.value), contains('gosuslugi.ru'));
     });
   });
 }

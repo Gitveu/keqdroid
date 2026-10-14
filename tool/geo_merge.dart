@@ -14,8 +14,12 @@
 // Использование:
 //   dart run tool/geo_merge.dart --base assets/bin/windows/geoip.dat \
 //       --source /tmp/loyal_geoip.dat --codes telegram,google,netflix
+//   dart run tool/geo_merge.dart --base assets/bin/windows/geosite.dat //       --list /tmp/whitelist.txt --codes ru-whitelist
 //   dart run tool/geo_merge.dart ... --dry-run   # только отчёт по весу
+//
+// --list собирает geosite-код из текста: домен на строку, каждый вместе с поддоменами
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -26,25 +30,35 @@ Future<int> main(List<String> args) async {
   if (opts == null) {
     stderr.writeln(
       'usage: dart run tool/geo_merge.dart --base <base.dat> '
-      '--source <source.dat> --codes a,b,c [--dry-run]',
+      '(--source <source.dat> --codes a,b,c | --list <domains.txt> --codes a) '
+      '[--dry-run]',
     );
     return 64;
   }
 
   final base = File(opts.base);
-  final source = File(opts.source);
+  final source = File(opts.source ?? opts.list!);
   if (!base.existsSync()) {
     stderr.writeln('base not found: ${opts.base}');
     return 66;
   }
   if (!source.existsSync()) {
-    stderr.writeln('source not found: ${opts.source}');
+    stderr.writeln('source not found: ${source.path}');
     return 66;
   }
 
   final existing = await GeoDatReader.codes(base);
-  final sourceRecords = await GeoDatReader.records(source);
-  final sourceCodes = {for (final r in sourceRecords) r.code};
+  final Set<String> sourceCodes;
+  Uint8List? listBody;
+  if (opts.list != null) {
+    final code = opts.codes.single.trim().toLowerCase();
+    final domains = _listDomains(await source.readAsLines());
+    if (domains == null) return 65;
+    listBody = _geositeBody(code, domains);
+    sourceCodes = {code};
+  } else {
+    sourceCodes = {for (final r in await GeoDatReader.records(source)) r.code};
+  }
 
   // geoip-записи несут CIDR'ы, geosite — домены; в отчёт печатаем и то и то,
   // чтобы сразу видеть, что перенеслась настоящая запись, а не пустышка.
@@ -68,7 +82,7 @@ Future<int> main(List<String> args) async {
       missing.add(code);
       continue;
     }
-    final body = await GeoDatReader.entryBody(source, code);
+    final body = listBody ?? await GeoDatReader.entryBody(source, code);
     if (body == null) {
       missing.add(code);
       continue;
@@ -87,7 +101,7 @@ Future<int> main(List<String> args) async {
   final baseSize = base.lengthSync();
   stdout.writeln('base:   ${opts.base} (${_kib(baseSize)}, '
       '${existing.length - added.length} codes)');
-  stdout.writeln('source: ${opts.source} (${_kib(source.lengthSync())}, '
+  stdout.writeln('source: ${source.path} (${_kib(source.lengthSync())}, '
       '${sourceCodes.length} codes)');
   for (final e in added.entries) {
     stdout.writeln(
@@ -131,27 +145,59 @@ Future<int> main(List<String> args) async {
 }
 
 /// Одна запись верхнего уровня: `entry = 1` (тег 0x0a) + varint-длина + тело.
-List<int> _encodeRecord(Uint8List body) {
-  final out = <int>[0x0a];
-  var len = body.length;
+List<int> _encodeRecord(Uint8List body) => _lengthField(1, body);
+
+List<int> _lengthField(int field, List<int> bytes) {
+  final out = <int>[(field << 3) | 2];
+  var len = bytes.length;
   while (len >= 0x80) {
     out.add((len & 0x7f) | 0x80);
     len >>= 7;
   }
   out.add(len);
-  out.addAll(body);
+  out.addAll(bytes);
   return out;
 }
+
+final _domainLine = RegExp(r'^[a-z0-9-]+(\.[a-z0-9-]+)+$');
+
+// незнакомая строка роняет сборку: формат списка поменялся, и молча собрать половину хуже
+List<String>? _listDomains(List<String> lines) {
+  final domains = <String>{};
+  final bad = <String>[];
+  for (final raw in lines) {
+    final line = raw.trim().toLowerCase();
+    if (line.isEmpty || line.startsWith('#')) continue;
+    if (_domainLine.hasMatch(line)) {
+      domains.add(line);
+    } else {
+      bad.add(raw);
+    }
+  }
+  if (bad.isNotEmpty) {
+    stderr.writeln('not a domain: ${bad.join(', ')}');
+    return null;
+  }
+  return domains.toList();
+}
+
+// GeoSite { code = 1; repeated Domain domain = 2 }, Domain { type = 1; value = 2 }, тип 2 это домен с поддоменами.
+// код заглавными: xray ищет запись побайтно по коду в верхнем регистре
+Uint8List _geositeBody(String code, List<String> domains) => Uint8List.fromList([
+      ..._lengthField(1, utf8.encode(code.toUpperCase())),
+      for (final d in domains)
+        ..._lengthField(2, [0x08, 2, ..._lengthField(2, utf8.encode(d))]),
+    ]);
 
 String _kib(int bytes) => bytes >= 1024 * 1024
     ? '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MiB'
     : '${(bytes / 1024).toStringAsFixed(1)} KiB';
 
-({String base, String source, List<String> codes, bool dryRun})? _parseArgs(
-  List<String> args,
-) {
+({String base, String? source, String? list, List<String> codes, bool dryRun})?
+    _parseArgs(List<String> args) {
   String? base;
   String? source;
+  String? list;
   var codes = <String>[];
   var dryRun = false;
 
@@ -161,6 +207,8 @@ String _kib(int bytes) => bytes >= 1024 * 1024
         base = i + 1 < args.length ? args[++i] : null;
       case '--source':
         source = i + 1 < args.length ? args[++i] : null;
+      case '--list':
+        list = i + 1 < args.length ? args[++i] : null;
       case '--codes':
         codes = i + 1 < args.length ? args[++i].split(',') : const [];
       case '--dry-run':
@@ -170,6 +218,15 @@ String _kib(int bytes) => bytes >= 1024 * 1024
         return null;
     }
   }
-  if (base == null || source == null || codes.isEmpty) return null;
-  return (base: base, source: source, codes: codes, dryRun: dryRun);
+  if (base == null || codes.isEmpty || (source == null) == (list == null)) {
+    return null;
+  }
+  if (list != null && codes.length != 1) return null;
+  return (
+    base: base,
+    source: source,
+    list: list,
+    codes: codes,
+    dryRun: dryRun,
+  );
 }

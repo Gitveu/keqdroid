@@ -6,6 +6,8 @@
 #           cloudfront, fastly, tor   (from Loyalsoldier/v2ray-rules-dat)
 #   geoip:  refilter                  (from 1andrevich/Re-filter-lists)
 #   geosite: refilter                 (from 1andrevich/Re-filter-lists)
+#   geosite: ru-whitelist             (from hxehex/russia-mobile-internet-whitelist,
+#                                      whitelist.txt, each line with its subdomains)
 #
 # Appending works because both files are protobuf `repeated entry = 1`, so a
 # concatenation of records is still a valid message. Base codes win on conflict
@@ -38,10 +40,10 @@ function Get-File([string]$Url, [string]$Path) {
     Write-Host ("    {0} KiB -> {1}" -f $kib, $Path)
 }
 
-function Merge-Codes([string]$Base, [string]$Source, [string]$Codes) {
+function Merge-Codes([string]$Base, [string]$Source, [string]$Codes, [string]$Mode = '--source') {
     Push-Location $root
     try {
-        & dart run tool/geo_merge.dart --base $Base --source $Source --codes $Codes
+        & dart run tool/geo_merge.dart --base $Base $Mode $Source --codes $Codes
         if ($LASTEXITCODE -ne 0) { throw "geo_merge failed for $Source (exit $LASTEXITCODE)" }
     } finally {
         Pop-Location
@@ -60,11 +62,14 @@ try {
     Get-File 'https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat' $loyalGeoip
     Get-File 'https://github.com/1andrevich/Re-filter-lists/releases/latest/download/geoip.dat' $refilterGeoip
     Get-File 'https://github.com/1andrevich/Re-filter-lists/releases/latest/download/geosite.dat' $refilterGeosite
+    $whitelist = Join-Path $tmpDir 'ru_whitelist.txt'
+    Get-File 'https://raw.githubusercontent.com/hxehex/russia-mobile-internet-whitelist/main/whitelist.txt' $whitelist
 
     # 3. merge the extra codes into the bundled databases
     Merge-Codes $geoip $loyalGeoip 'telegram,google,netflix,twitter,facebook,cloudflare,cloudfront,fastly,tor'
     Merge-Codes $geoip $refilterGeoip 'refilter'
     Merge-Codes $geosite $refilterGeosite 'refilter'
+    Merge-Codes $geosite $whitelist 'ru-whitelist' '--list'
 
     # 4. mirror into the Linux asset dir (installed wholesale by linux/CMakeLists.txt)
     $linuxDir = Join-Path $root 'assets\bin\linux'
