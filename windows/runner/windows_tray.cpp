@@ -68,7 +68,6 @@ bool WindowsTrayToggleMainWindow() {
 }
 
 void WindowsTrayExitApplication(HWND hwnd) {
-  // последний шанс сохранить границы: снятие разворота кнопкой и сразу выход из трея
   KeqdroidSaveWindowPlacement(hwnd);
   if (hwnd != nullptr && ::IsWindow(hwnd)) {
     ::DestroyWindow(hwnd);

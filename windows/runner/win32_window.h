@@ -99,6 +99,8 @@ class Win32Window {
 
   int preferred_show_command_ = SW_SHOWNORMAL;
 
+  WPARAM last_size_type_ = SIZE_RESTORED;
+
   // window handle for top level window.
   HWND window_handle_ = nullptr;
 

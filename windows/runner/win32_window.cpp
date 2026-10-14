@@ -237,10 +237,13 @@ Win32Window::MessageHandler(HWND hwnd,
         MoveWindow(child_content_, rect.left, rect.top, rect.right - rect.left,
                    rect.bottom - rect.top, TRUE);
       }
-      // у разворачивания кнопкой нет WM_EXITSIZEMOVE, сохраняем здесь
-      if (wparam == SIZE_MAXIMIZED) {
+      // у разворота и возврата из него кнопкой нет WM_EXITSIZEMOVE. без записи возврата
+      // реестр помнил разворот, и автозапуск после перезагрузки открывал окно на весь экран
+      if (wparam == SIZE_MAXIMIZED ||
+          (wparam == SIZE_RESTORED && last_size_type_ == SIZE_MAXIMIZED)) {
         KeqdroidSaveWindowPlacement(hwnd);
       }
+      last_size_type_ = wparam;
       return 0;
     }
 
