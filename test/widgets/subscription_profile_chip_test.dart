@@ -45,12 +45,17 @@ RoutingProfile _games({bool enabled = true}) => RoutingProfile(
       routes: const [TrafficRoute(id: 'r', sites: 'twitch.tv')],
     );
 
-Future<void> _pump(WidgetTester tester, List<RoutingProfile> profiles) async {
+Future<void> _pump(
+  WidgetTester tester,
+  List<RoutingProfile> profiles, {
+  List<TrafficRoute> mainRoutes = const [],
+}) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 2.625;
   addTearDown(tester.view.reset);
   final storage = await buildStorageService();
   await storage.saveRoutingProfiles(profiles);
+  await storage.saveRoutes(mainRoutes);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -95,5 +100,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Маршрутизация'), findsWidgets);
     expect(find.text('twitch.tv'), findsOneWidget);
+  });
+
+  testWidgets('под длинным «Основным» экран открывается на карточке профиля',
+      (tester) async {
+    // столько строк, что карточка профиля в первом кадре ещё не построена
+    await _pump(tester, [_games()], mainRoutes: [
+      for (var i = 0; i < 30; i++)
+        TrafficRoute(id: 'm$i', sites: 'site$i.example'),
+    ]);
+    await tester.tap(find.text('Игры'));
+    await tester.pumpAndSettle();
+    expect(find.text('Игры').hitTestable(), findsOneWidget);
+    expect(find.text('twitch.tv').hitTestable(), findsOneWidget);
+    expect(find.text('Основной').hitTestable(), findsNothing);
+  });
+
+  testWidgets('влезающую карточку экран поднимает только до кнопки внизу',
+      (tester) async {
+    await _pump(tester, [
+      _games(),
+      const RoutingProfile(id: 'work', name: 'Работа'),
+    ]);
+    await tester.tap(find.text('Игры'));
+    await tester.pumpAndSettle();
+    final card =
+        tester.getRect(find.byKey(const ValueKey('routing-profile-games')));
+    final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
+    // 96 под кнопкой «Новый профиль»
+    expect(card.bottom, lessThanOrEqualTo(screen.height - 96 + 0.5));
+    expect(card.top, greaterThan(200), reason: 'не к верху: сдвиг минимальный');
   });
 }

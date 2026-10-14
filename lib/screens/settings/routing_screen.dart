@@ -1,6 +1,7 @@
 part of '../settings_tab.dart';
 
-Widget routingScreen() => const _RoutingScreen();
+Widget routingScreen({String? focusProfileId}) =>
+    _RoutingScreen(focusProfileId: focusProfileId);
 
 Color _targetColor(BuildContext context, RouteTarget target) =>
     switch (target) {
@@ -159,11 +160,52 @@ extension on String {
   String nonEmptyOr(String fallback) => isEmpty ? fallback : this;
 }
 
-class _RoutingScreen extends ConsumerWidget {
-  const _RoutingScreen();
+// под кнопкой «Новый профиль» не должна прятаться последняя строка
+const _fabClearance = 96.0;
+
+class _RoutingScreen extends ConsumerStatefulWidget {
+  const _RoutingScreen({this.focusProfileId});
+
+  final String? focusProfileId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_RoutingScreen> createState() => _RoutingScreenState();
+}
+
+class _RoutingScreenState extends ConsumerState<_RoutingScreen> {
+  final _mainKey = GlobalKey();
+  final _focusKey = GlobalKey();
+  late var _focusPending = widget.focusProfileId != null;
+
+  // строки ленивые: под длинным «Основным» карточки ещё нет, до неё листаем экранами
+  Future<void> _revealFocused() async {
+    final mainContext = _mainKey.currentContext;
+    if (mainContext == null) return;
+    final position = Scrollable.of(mainContext).position;
+    for (var i = 0; i < 20 && _focusKey.currentContext == null; i++) {
+      if (position.pixels >= position.maxScrollExtent) return;
+      position.jumpTo(math.min(
+        position.pixels + position.viewportDimension,
+        position.maxScrollExtent,
+      ));
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+    }
+    final card = _focusKey.currentContext?.findRenderObject();
+    if (card == null) return;
+    final viewport = RenderAbstractViewport.of(card);
+    final top = viewport.getOffsetToReveal(card, 0).offset;
+    final bottom = viewport.getOffsetToReveal(card, 1).offset + _fabClearance;
+    if (position.pixels >= bottom && position.pixels <= top) return;
+    // сдвиг поменьше: влезающую карточку поднимаем только до кнопки внизу, а не к верху
+    final target = position.pixels < bottom && bottom <= top ? bottom : top;
+    position.jumpTo(
+      target.clamp(position.minScrollExtent, position.maxScrollExtent),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     // маршруты читаются только в connect(), при живом туннеле правка вступит после переподключения
     final vpnStatus = ref.watch(
@@ -171,9 +213,20 @@ class _RoutingScreen extends ConsumerWidget {
     );
     final tunnelActive = vpnStatus == VpnStatus.connected ||
         vpnStatus == VpnStatus.connecting;
-    final routes = ref.watch(routesProvider).value ?? const <TrafficRoute>[];
-    final profiles =
-        ref.watch(routingProfilesProvider).value ?? const <RoutingProfile>[];
+    final routesAsync = ref.watch(routesProvider);
+    final profilesAsync = ref.watch(routingProfilesProvider);
+    // до загрузки карточек нет: «Основной» вырастал из пустого анимацией, и прокрутка к профилю промахивалась
+    final loaded = routesAsync.hasValue && profilesAsync.hasValue;
+    final routes = routesAsync.value ?? const <TrafficRoute>[];
+    final profiles = profilesAsync.value ?? const <RoutingProfile>[];
+    if (_focusPending &&
+        loaded &&
+        profiles.any((p) => p.id == widget.focusProfileId)) {
+      _focusPending = false;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_revealFocused()),
+      );
+    }
     final subs = ref.watch(subscriptionsProvider).value ?? const [];
     final expanded = ref.watch(expandedRoutingProfilesProvider);
     final hint = ref.watch(routesHintProvider);
@@ -255,15 +308,42 @@ class _RoutingScreen extends ConsumerWidget {
         ? l10n.routingProfileScopeRest
         : l10n.routingProfileScopeAll;
 
+    Widget profileCard(RoutingProfile p) => _ProfileCard(
+          key: ValueKey('routing-profile-${p.id}'),
+          title: p.name,
+          summary: !p.enabled
+              ? l10n.routingProfileOff
+              : !p.subscriptionIds.any(subNames.containsKey)
+                  ? l10n.routingProfileNoSubscriptions
+                  : '${l10n.routingProfileRouteCount(p.routes.length)} · '
+                      '${l10n.routingProfileFinal(_finalLabel(l10n, p.finalOutbound))}',
+          chips: [for (final id in p.subscriptionIds) ?subNames[id]],
+          enabled: p.enabled,
+          onEnabled: (v) => unawaited(
+            ref.read(routingProfilesProvider.notifier).setEnabled(p.id, v),
+          ),
+          menu: IconButton(
+            tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+            icon: Icon(
+              Icons.more_vert_rounded,
+              size: 20,
+              color: AppTheme.textLight(context),
+            ),
+            onPressed: () => _showProfileMenu(context, ref, p),
+          ),
+          expanded: _profileExpanded(expanded, p.id),
+          onToggle: () => _toggleProfile(ref, p.id),
+          body: routeRows(p.id, p.routes, p.finalOutbound),
+        );
+
     return ExpressivePage(
       title: l10n.settingsRoutingTitle,
       physics: const ClampingScrollPhysics(),
-      // под кнопкой «Новый профиль» не должна прятаться последняя строка
       padding: const EdgeInsets.fromLTRB(
         ExpressiveSpacing.large,
         ExpressiveSpacing.none,
         ExpressiveSpacing.large,
-        96,
+        _fabClearance,
       ),
       floatingActionButton: TvFocus.fab(
         (_) => FloatingActionButton.extended(
@@ -307,46 +387,28 @@ class _RoutingScreen extends ConsumerWidget {
           ),
         if (tunnelActive || hint)
           const SizedBox(height: ExpressiveSpacing.large),
-        _ProfileCard(
-          key: const ValueKey('routing-profile-main'),
-          title: l10n.routingProfileMain,
-          // счёт своей строкой: «Все» и «Остальные» разной длины, и переключатель
-          // чужого профиля перекидывал хвост строки туда-обратно
-          summary: mainExpanded
-              ? mainScope
-              : '$mainScope\n${l10n.routingProfileRouteCount(routes.length)}',
-          expanded: mainExpanded,
-          onToggle: () => _toggleProfile(ref, _mainProfileKey),
-          body: routeRows(null, routes, mainFinal),
-        ),
-        for (final p in profiles)
-          _ProfileCard(
-            key: ValueKey('routing-profile-${p.id}'),
-            title: p.name,
-            summary: !p.enabled
-                ? l10n.routingProfileOff
-                : !p.subscriptionIds.any(subNames.containsKey)
-                    ? l10n.routingProfileNoSubscriptions
-                    : '${l10n.routingProfileRouteCount(p.routes.length)} · '
-                        '${l10n.routingProfileFinal(_finalLabel(l10n, p.finalOutbound))}',
-            chips: [for (final id in p.subscriptionIds) ?subNames[id]],
-            enabled: p.enabled,
-            onEnabled: (v) => unawaited(
-              ref.read(routingProfilesProvider.notifier).setEnabled(p.id, v),
+        if (loaded) ...[
+          KeyedSubtree(
+            key: _mainKey,
+            child: _ProfileCard(
+              key: const ValueKey('routing-profile-main'),
+              title: l10n.routingProfileMain,
+              // счёт своей строкой: «Все» и «Остальные» разной длины, и переключатель
+              // чужого профиля перекидывал хвост строки туда-обратно
+              summary: mainExpanded
+                  ? mainScope
+                  : '$mainScope\n${l10n.routingProfileRouteCount(routes.length)}',
+              expanded: mainExpanded,
+              onToggle: () => _toggleProfile(ref, _mainProfileKey),
+              body: routeRows(null, routes, mainFinal),
             ),
-            menu: IconButton(
-              tooltip: MaterialLocalizations.of(context).showMenuTooltip,
-              icon: Icon(
-                Icons.more_vert_rounded,
-                size: 20,
-                color: AppTheme.textLight(context),
-              ),
-              onPressed: () => _showProfileMenu(context, ref, p),
-            ),
-            expanded: _profileExpanded(expanded, p.id),
-            onToggle: () => _toggleProfile(ref, p.id),
-            body: routeRows(p.id, p.routes, p.finalOutbound),
           ),
+          for (final p in profiles)
+            if (p.id == widget.focusProfileId)
+              KeyedSubtree(key: _focusKey, child: profileCard(p))
+            else
+              profileCard(p),
+        ],
       ],
     );
   }

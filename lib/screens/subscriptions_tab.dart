@@ -868,7 +868,10 @@ class _SubCardDetails extends ConsumerWidget {
                             .update((m) => {...m, profile.id: true});
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => routingScreen()),
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                routingScreen(focusProfileId: profile.id),
+                          ),
                         );
                       },
                     ),
