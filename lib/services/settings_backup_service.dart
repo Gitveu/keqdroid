@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../core/app_logger.dart';
 import '../models/app_settings.dart';
+import '../models/routing_profile.dart';
 import '../models/server_item.dart';
 import '../models/subscription.dart';
 import '../models/traffic_route.dart';
@@ -197,6 +198,9 @@ class SettingsBackupService {
           if (json.containsKey(key)) key: json[key],
       };
       data['routes'] = [for (final r in await storage.getRoutes()) r.toJson()];
+      data['routingProfiles'] = [
+        for (final p in await storage.getRoutingProfiles()) p.toJson(),
+      ];
     }
 
     return KeqdisBackup(
@@ -282,6 +286,14 @@ class SettingsBackupService {
       }
       await storage.saveSettings(AppSettings.fromJson(merged));
       await _applyRoutes(storage, backup.data['routes'], raw);
+      // копии до профилей их не несут, и заведённые на этой машине остаются
+      final profiles = backup.data['routingProfiles'];
+      if (profiles is List) {
+        await storage.saveRoutingProfiles([
+          for (final p in profiles)
+            if (p is Map) RoutingProfile.fromJson(p.cast<String, dynamic>()),
+        ]);
+      }
     }
   }
 

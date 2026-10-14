@@ -10,23 +10,10 @@ class RoutesNotifier extends AsyncNotifier<List<TrafficRoute>> {
     await ref.read(storageProvider).saveRoutes(routes);
   }
 
-  Future<void> upsert(TrafficRoute route) async {
-    final current = await future;
-    final exists = current.any((r) => r.id == route.id);
-    await _save([
-      if (exists)
-        for (final r in current) r.id == route.id ? route : r
-      else ...[...current, route],
-    ]);
-  }
+  Future<void> upsert(TrafficRoute route) async =>
+      _save(withRoute(await future, route));
 
-  Future<void> remove(String id) async {
-    final current = await future;
-    await _save([
-      for (final r in current)
-        if (r.id != id) r,
-    ]);
-  }
+  Future<void> remove(String id) async => _save(withoutRoute(await future, id));
 
   Future<void> replaceAll(List<TrafficRoute> routes) => _save(routes);
 }
@@ -34,6 +21,57 @@ class RoutesNotifier extends AsyncNotifier<List<TrafficRoute>> {
 final routesProvider =
     AsyncNotifierProvider<RoutesNotifier, List<TrafficRoute>>(
   RoutesNotifier.new,
+);
+
+class RoutingProfilesNotifier extends AsyncNotifier<List<RoutingProfile>> {
+  @override
+  Future<List<RoutingProfile>> build() =>
+      ref.read(storageProvider).getRoutingProfiles();
+
+  Future<void> _save(List<RoutingProfile> profiles) async {
+    state = AsyncData(profiles);
+    await ref.read(storageProvider).saveRoutingProfiles(profiles);
+  }
+
+  Future<void> _update(
+    String id,
+    RoutingProfile Function(RoutingProfile p) change,
+  ) async =>
+      _save([for (final p in await future) p.id == id ? change(p) : p]);
+
+  Future<void> add(RoutingProfile profile) async => _save(
+        withSubscriptions(
+          [...await future, profile],
+          profile.id,
+          profile.subscriptionIds,
+        ),
+      );
+
+  Future<void> remove(String id) async =>
+      _save([for (final p in await future) if (p.id != id) p]);
+
+  Future<void> rename(String id, String name) =>
+      _update(id, (p) => p.copyWith(name: name));
+
+  Future<void> setEnabled(String id, bool enabled) =>
+      _update(id, (p) => p.copyWith(enabled: enabled));
+
+  Future<void> setSubscriptions(String id, List<String> subscriptionIds) async =>
+      _save(withSubscriptions(await future, id, subscriptionIds));
+
+  Future<void> setFinalOutbound(String id, String value) =>
+      _update(id, (p) => p.copyWith(finalOutbound: value));
+
+  Future<void> upsertRoute(String id, TrafficRoute route) =>
+      _update(id, (p) => p.copyWith(routes: withRoute(p.routes, route)));
+
+  Future<void> removeRoute(String id, String routeId) =>
+      _update(id, (p) => p.copyWith(routes: withoutRoute(p.routes, routeId)));
+}
+
+final routingProfilesProvider =
+    AsyncNotifierProvider<RoutingProfilesNotifier, List<RoutingProfile>>(
+  RoutingProfilesNotifier.new,
 );
 
 // чего ядро не умеет, того в шторках нет, а заведённый маршрут с этим показывает причину на карточке

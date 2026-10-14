@@ -38,10 +38,7 @@ class RuleListsNotifier extends Notifier<Map<String, RuleListStatus>> {
 
     // поле сохраняется на паузе в наборе, без ожидания ушла бы недопечатанная ссылка
     ref.listen<String?>(
-      routesProvider.select((a) {
-        final routes = a.value;
-        return routes == null ? null : routeListUrls(routes).join('\n');
-      }),
+      _routeListUrlsProvider,
       (_, urls) {
         _syncDebounce?.cancel();
         if (urls == null) return;
@@ -60,8 +57,9 @@ class RuleListsNotifier extends Notifier<Map<String, RuleListStatus>> {
 
   Future<void> _sync() async {
     final routes = await ref.read(routesProvider.future);
+    final profiles = await ref.read(routingProfilesProvider.future);
     if (!ref.mounted) return;
-    final urls = routeListUrls(routes);
+    final urls = routeListUrls(_allRoutes(routes, profiles));
     final service = ref.read(ruleListServiceProvider);
     final next = <String, RuleListStatus>{};
     for (final url in urls) {
@@ -123,3 +121,17 @@ final ruleListsProvider =
     NotifierProvider<RuleListsNotifier, Map<String, RuleListStatus>>(
   RuleListsNotifier.new,
 );
+
+// списки профилей тоже: prune стёр бы скачанное для них при первой синхронизации
+List<TrafficRoute> _allRoutes(
+  List<TrafficRoute> main,
+  List<RoutingProfile> profiles,
+) =>
+    [...main, for (final p in profiles) ...p.routes];
+
+final _routeListUrlsProvider = Provider<String?>((ref) {
+  final main = ref.watch(routesProvider).value;
+  final profiles = ref.watch(routingProfilesProvider).value;
+  if (main == null || profiles == null) return null;
+  return routeListUrls(_allRoutes(main, profiles)).join('\n');
+});

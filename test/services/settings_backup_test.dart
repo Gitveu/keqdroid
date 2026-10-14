@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/models/app_settings.dart';
+import 'package:keqdroid/models/routing_profile.dart';
 import 'package:keqdroid/models/subscription.dart';
 import 'package:keqdroid/models/subscription_card_layout.dart';
 import 'package:keqdroid/models/subscription_card_theme.dart';
@@ -63,6 +64,7 @@ void main() {
     registerFallbackValue(const AppSettings());
     registerFallbackValue(<Subscription>[]);
     registerFallbackValue(<TrafficRoute>[]);
+    registerFallbackValue(<RoutingProfile>[]);
   });
 
   group('раздел «Настройки приложения»', () {
@@ -106,6 +108,7 @@ void main() {
       final from = _MockStorageService();
       when(() => from.getSettings()).thenAnswer((_) async => source);
       when(() => from.getRoutes()).thenAnswer((_) async => const []);
+      when(() => from.getRoutingProfiles()).thenAnswer((_) async => const []);
       final built = await SettingsBackupService.buildBackup(
         from,
         sections: {BackupSection.appSettings},
@@ -140,6 +143,7 @@ void main() {
       });
       when(() => to.getRoutes()).thenAnswer((_) async => const []);
       when(() => to.saveRoutes(any())).thenAnswer((_) async {});
+      when(() => to.saveRoutingProfiles(any())).thenAnswer((_) async {});
 
       await SettingsBackupService.applyBackup(
         to,
@@ -166,6 +170,7 @@ void main() {
       when(() => from.getSettings())
           .thenAnswer((_) async => const AppSettings(fakeIp: true));
       when(() => from.getRoutes()).thenAnswer((_) async => const []);
+      when(() => from.getRoutingProfiles()).thenAnswer((_) async => const []);
       final built = await SettingsBackupService.buildBackup(
         from,
         sections: {BackupSection.appSettings},
@@ -182,6 +187,7 @@ void main() {
         saved = inv.positionalArguments.single as AppSettings;
       });
       when(() => to.saveRoutes(any())).thenAnswer((_) async {});
+      when(() => to.saveRoutingProfiles(any())).thenAnswer((_) async {});
       await SettingsBackupService.applyBackup(
         to,
         backup: KeqdisBackup.fromJson(json),

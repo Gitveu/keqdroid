@@ -109,6 +109,7 @@ class _BackupRestoreScreenState extends ConsumerState<_BackupRestoreScreen> {
       // без сброса импортированное доехало бы до диска, а на экране осталось прежнее до перезапуска
       ref.invalidate(settingsNotifierProvider);
       ref.invalidate(routesProvider);
+      ref.invalidate(routingProfilesProvider);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

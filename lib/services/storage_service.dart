@@ -5,6 +5,7 @@ import '../core/app_logger.dart';
 import '../core/exceptions.dart';
 import '../models/app_settings.dart';
 import '../models/ping_sample.dart';
+import '../models/routing_profile.dart';
 import '../models/routing_rule.dart';
 import '../models/server_item.dart';
 import '../models/subscription.dart';
@@ -17,6 +18,7 @@ class StorageService {
   static const _kRules         = 'keqdis_rules';
   static const _kRoutes        = 'keqdis_routes';
   static const _kRoutesHint    = 'keqdis_routes_hint';
+  static const _kRoutingProfiles = 'keqdis_routing_profiles';
   static const _kActiveId      = 'keqdis_active_server';
   static const _kExcludePkgs   = 'keqdis_exclude_packages';
   static const _kIncludePkgs   = 'keqdis_include_packages';
@@ -257,6 +259,23 @@ class StorageService {
 
   Future<void> saveRoutes(List<TrafficRoute> routes) =>
       _serial(() => _prefs.setString(_kRoutes, _encodeRoutes(routes)));
+
+  Future<List<RoutingProfile>> getRoutingProfiles() async {
+    final raw = _prefs.getString(_kRoutingProfiles);
+    if (raw == null) return const [];
+    try {
+      return _decodeListResilient(raw, RoutingProfile.fromJson, 'routing profile');
+    } catch (e) {
+      throw StorageException('Failed to load routing profiles', cause: e);
+    }
+  }
+
+  Future<void> saveRoutingProfiles(List<RoutingProfile> profiles) => _serial(
+        () => _prefs.setString(
+          _kRoutingProfiles,
+          jsonEncode([for (final p in profiles) p.toJson()]),
+        ),
+      );
 
   bool get routesHintPending => _prefs.getBool(_kRoutesHint) ?? false;
 
