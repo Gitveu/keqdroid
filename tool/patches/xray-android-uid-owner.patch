@@ -21,8 +21,8 @@ then went out with no destination and failed for every site xray sniffed. The
 matcher now passes the address the connection was opened to,
 Outbound.OriginalTarget, the same field app/router/webhook.go reads.
 
-Built by tool/build_xray_cores.ps1. Checked against xray-core main of
-2026-10-12: neither file changed upstream.
+Built by tool/build_xray_cores.ps1. Checked against xray-core v26.10.10:
+neither file changed upstream.
 
 diff --git a/app/router/condition.go b/app/router/condition.go
 index 4375a8f..99ab6eb 100644

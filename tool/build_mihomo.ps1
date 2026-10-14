@@ -47,10 +47,10 @@
 # Examples:
 #   powershell -File tool/build_mihomo.ps1
 #   powershell -File tool/build_mihomo.ps1 -Target windows
-#   powershell -File tool/build_mihomo.ps1 -Version v1.19.32
+#   powershell -File tool/build_mihomo.ps1 -Version v1.19.33
 
 param(
-    [string]$Version = "v1.19.31",
+    [string]$Version = "v1.19.32",
     [ValidateSet("all", "android", "windows", "linux")]
     [string]$Target = "all",
     [string]$BuildDir = (Join-Path $PSScriptRoot "..\..\mihomo-build")

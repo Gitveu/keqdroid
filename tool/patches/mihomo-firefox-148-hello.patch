@@ -16,7 +16,7 @@ once, while the very same links keep working through the Xray we ship beside
 this core.
 
 mihomo resolves fp=firefox to HelloFirefox_Auto, which in metacubex/utls
-v1.8.7 (still the latest release) is Firefox 120 -- a profile from before that
+v1.8.8 (still the latest release) is Firefox 120 -- a profile from before that
 key existed. `support-x25519mlkem768: true` does not help: it only stops the
 core from stripping the key out of the hello, and there is nothing to strip.
 Of the profiles in this fork only the chrome ones carry it, and chrome is the
@@ -65,7 +65,7 @@ index 0000000..b460493
 +// short id and SNI are all correct.
 +//
 +// mihomo resolves fp=firefox to HelloFirefox_Auto, which in metacubex/utls
-+// v1.8.7 is still Firefox 120 - a profile from before that key existed. Only
++// v1.8.8 is still Firefox 120 - a profile from before that key existed. Only
 +// the chrome profiles carry it, and chrome is the fingerprint the censor here
 +// filters (0 connections out of 30 against 30 out of 30 for firefox), so
 +// changing browsers is not a way out.
