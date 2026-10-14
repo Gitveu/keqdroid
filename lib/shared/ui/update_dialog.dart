@@ -206,12 +206,12 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
             backgroundColor: accent,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ExpressiveShape.medium)),
           ),
+          // процент живёт под полосой: в кнопке он менял её ширину, и при крупном
+          // шрифте ряд кнопок прыгал в столбик и обратно
           child: Text(
-            _downloading
-                ? _statusLabel(context)
-                : widget.info.openInBrowser
-                    ? context.l10n.updateOpenDownload
-                    : context.l10n.updateActionNow,
+            widget.info.openInBrowser
+                ? context.l10n.updateOpenDownload
+                : context.l10n.updateActionNow,
           ),
         ),
       ],
