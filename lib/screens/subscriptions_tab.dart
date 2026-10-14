@@ -31,6 +31,7 @@ import '../services/file_dialog_service.dart';
 import '../platform/platform_bootstrap.dart';
 import '../providers/providers.dart';
 import 'qr_scan_screen.dart';
+import 'settings_tab.dart' show routingScreen;
 import 'tv_receive_screen.dart';
 import 'tv_send_dialog.dart';
 import '../services/tv_handoff.dart';
@@ -39,6 +40,7 @@ import '../utils/bidi.dart';
 import '../utils/error_messages.dart';
 import '../utils/external_link.dart';
 import '../utils/identity_presets.dart';
+import '../utils/routing_profiles.dart';
 import '../utils/time_ago.dart';
 
 part 'subscriptions/card_look_sheet.dart';
@@ -669,6 +671,10 @@ class _SubCardDetails extends ConsumerWidget {
       subscriptionRefreshErrorsProvider.select((m) => m[sub.id]),
     );
     final hasRefreshError = refreshError != null;
+    final profile = profileForSubscription(
+      ref.watch(routingProfilesProvider).value ?? const [],
+      sub.id,
+    );
     final pct = sub.usagePercent;
     final showsUsage = sub.showsCard(SubscriptionCardElement.usage);
     final textColor = AppTheme.text(context);
@@ -852,6 +858,20 @@ class _SubCardDetails extends ConsumerWidget {
                     muted: !sub.autoUpdate,
                     onTap: () => showUpdateIntervalSheet(context, ref, sub),
                   ),
+                  if (profile != null)
+                    _CardChip(
+                      icon: Icons.alt_route_rounded,
+                      label: profile.name,
+                      onTap: () {
+                        ref
+                            .read(expandedRoutingProfilesProvider.notifier)
+                            .update((m) => {...m, profile.id: true});
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => routingScreen()),
+                        );
+                      },
+                    ),
                   if (sub.webPageUrl != null)
                     _CardChip(
                       icon: Icons.open_in_new_rounded,

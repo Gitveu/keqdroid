@@ -6,11 +6,16 @@ import '../models/traffic_route.dart';
 RoutingProfile? profileForServer(
   List<RoutingProfile> profiles,
   ServerItem server,
+) =>
+    profileForSubscription(profiles, server.subscriptionId);
+
+RoutingProfile? profileForSubscription(
+  List<RoutingProfile> profiles,
+  String? subscriptionId,
 ) {
-  final sub = server.subscriptionId;
-  if (sub == null) return null;
+  if (subscriptionId == null) return null;
   for (final p in profiles) {
-    if (p.enabled && p.subscriptionIds.contains(sub)) return p;
+    if (p.enabled && p.subscriptionIds.contains(subscriptionId)) return p;
   }
   return null;
 }
