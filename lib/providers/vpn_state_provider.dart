@@ -407,8 +407,18 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       } else {
         state = const AsyncData(VpnState(status: VpnStatus.connecting));
       }
-      final stored = await ref.read(storageProvider).getSettings();
-      final routes = await ref.read(storageProvider).getRoutes();
+      final storage = ref.read(storageProvider);
+      final profile =
+          profileForServer(await storage.getRoutingProfiles(), server);
+      final saved = await storage.getSettings();
+      // «Всё остальное» профиля только в эту сессию: на диск настройки пишет лишь _saveDuringConnect
+      final stored = profile == null
+          ? saved
+          : saved.copyWith(finalOutbound: profile.finalOutbound);
+      final routes = profile?.routes ?? await storage.getRoutes();
+      if (profile != null) {
+        AppLogger.instance.info('Routing profile: ${profile.name}');
+      }
 
       // готовый конфиг исполняет ядро его языка, настройка решает только для обычной ссылки.
       // выбираем до свёртки маршрутов: от ядра зависит, какие другие серверы встанут в конфиг
