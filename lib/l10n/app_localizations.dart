@@ -4661,18 +4661,6 @@ abstract class AppLocalizations {
   /// **'Proxy mode runs SOCKS and HTTP on 127.0.0.1, so point an app or Wi-Fi at them. The proxy is open to every app on the device. Per-app routing and DNS interception need VPN mode.'**
   String get settingsTunnelModeHint;
 
-  /// No description provided for @settingsCoreAuto.
-  ///
-  /// In en, this message translates to:
-  /// **'Automatic'**
-  String get settingsCoreAuto;
-
-  /// No description provided for @settingsCoreAutoSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Links go to Xray, ready-made configs to their own core'**
-  String get settingsCoreAutoSubtitle;
-
   /// No description provided for @settingsCoreSkipClash.
   ///
   /// In en, this message translates to:

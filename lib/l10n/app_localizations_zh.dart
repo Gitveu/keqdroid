@@ -2468,12 +2468,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTunnelModeHint => '代理模式在 127.0.0.1 上启动 SOCKS 和 HTTP，把应用或 Wi-Fi 指过去即可。该代理对设备上任何应用开放。分应用路由和 DNS 拦截仅在 VPN 模式下可用。';
 
   @override
-  String get settingsCoreAuto => '自动';
-
-  @override
-  String get settingsCoreAutoSubtitle => '链接交给 Xray，现成配置交给各自的内核';
-
-  @override
   String get settingsCoreSkipClash => '当前服务器是现成的 Clash 配置，无论选择哪个内核，都只能由 mihomo 运行。';
 
   @override

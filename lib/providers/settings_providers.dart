@@ -160,7 +160,7 @@ AsyncNotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
 final activeVpnBackendProvider = Provider<VpnBackend>((ref) {
   final preference = ref.watch(
     settingsNotifierProvider.select(
-      (a) => a.value?.vpnCore ?? AppSettings.vpnCoreAuto,
+      (a) => a.value?.vpnCore ?? AppSettings.vpnCoreXray,
     ),
   );
   final server = ref.watch(serversProvider).activeServer;

@@ -100,7 +100,7 @@ Two cores run servers on every platform: **Xray** and **mihomo**. On Windows and
 | Proxy chain | Xray |
 | WireGuard / AmneziaWG profile | mihomo |
 
-For links both cores support, pick the core in **Settings → About**; **Automatic** means Xray. If a server can't run on the selected core, the app shows an error.
+For links both cores support, pick the core in **Settings → About**; Xray is the default. A server only one core can run goes to that core whichever is picked, and **About** says so.
 
 ---
 

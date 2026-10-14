@@ -193,7 +193,7 @@ VpnBackendChoice resolveVpnBackend({
     return (backend: only, format: format, skip: skip);
   }
 
-  // auto это xray: он исполняет любой формат, на нём отлажен путь по умолчанию
+  // всё, кроме mihomo, это xray: он исполняет любой формат, на нём отлажен путь по умолчанию
   final wantsMihomo = preference == 'mihomo';
   if (wantsMihomo && !mihomoAvailable) {
     return (

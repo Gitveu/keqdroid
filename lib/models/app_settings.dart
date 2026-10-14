@@ -124,7 +124,7 @@ class AppSettings {
     this.launchAtStartupElevated = false,
     this.serverIconThemeColors = true,
     this.coreEngine = coreEngineKeqrnel,
-    this.vpnCore = vpnCoreAuto,
+    this.vpnCore = vpnCoreXray,
     this.fakeIp = false,
     this.hotkeys = const {},
     this.serversTwoColumns = false,
@@ -318,14 +318,14 @@ class AppSettings {
     return finalOutbounds.contains(v) ? v! : finalOutboundProxy;
   }
 
-  static const vpnCoreAuto = 'auto';
   static const vpnCoreXray = 'xray';
   static const vpnCoreMihomo = 'mihomo';
-  static const vpnCores = [vpnCoreAuto, vpnCoreXray, vpnCoreMihomo];
+  static const vpnCores = [vpnCoreXray, vpnCoreMihomo];
 
+  // прежнее auto выбирало то же, что xray, и в сохранённых настройках становится им
   static String normalizeVpnCore(String? raw) {
     final v = raw?.trim().toLowerCase();
-    return vpnCores.contains(v) ? v! : vpnCoreAuto;
+    return vpnCores.contains(v) ? v! : vpnCoreXray;
   }
 
   static const coreEngineChain = 'chain';

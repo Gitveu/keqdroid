@@ -2488,12 +2488,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsTunnelModeHint => '«Прокси» поднимает SOCKS и HTTP на 127.0.0.1, направьте на них приложение или Wi-Fi. Прокси открыт любому приложению на устройстве. Маршрутизация по приложениям и перехват DNS работают только в VPN.';
 
   @override
-  String get settingsCoreAuto => 'Автоматически';
-
-  @override
-  String get settingsCoreAutoSubtitle => 'Ссылки идут на Xray, а готовые конфиги на своё ядро';
-
-  @override
   String get settingsCoreSkipClash => 'У активного сервера готовый конфиг Clash: его исполняет только mihomo, при любом выборе ядра.';
 
   @override

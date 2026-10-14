@@ -30,16 +30,10 @@ void main() {
       );
     });
 
-    test('«само» на ссылке — это xray, как и на подключении', () {
+    test('по умолчанию на ссылке xray, как и на подключении', () {
       // Не «замер решает сам»: он повторяет решение подключения, иначе снова
       // мерил бы не то ядро.
-      expect(
-        PingService.pingCoreFor(
-          link,
-          const AppSettings(vpnCore: AppSettings.vpnCoreAuto),
-        ),
-        VpnBackend.xray,
-      );
+      expect(PingService.pingCoreFor(link, const AppSettings()), VpnBackend.xray);
     });
 
     test('формат ядра перебивает выбор', () {

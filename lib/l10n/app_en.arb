@@ -1273,8 +1273,6 @@
   "settingsTunnelModeProxy": "Proxy",
   "settingsTunnelModeProxySubtitle": "Local proxy only, no system VPN",
   "settingsTunnelModeHint": "Proxy mode runs SOCKS and HTTP on 127.0.0.1, so point an app or Wi-Fi at them. The proxy is open to every app on the device. Per-app routing and DNS interception need VPN mode.",
-  "settingsCoreAuto": "Automatic",
-  "settingsCoreAutoSubtitle": "Links go to Xray, ready-made configs to their own core",
   "settingsCoreSkipClash": "The active server is a ready-made Clash config, and only mihomo can run it, no matter which core is selected.",
   "settingsCoreSkipCustom": "The active server is a ready-made Xray JSON config, so it runs on libxray whatever core you pick. mihomo needs a subscription with plain links.",
   "settingsCoreSkipChain": "The active server is a proxy chain: its hops are linked by Xray's dialerProxy, so it runs on libxray no matter which core is selected.",

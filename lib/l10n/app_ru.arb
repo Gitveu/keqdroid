@@ -1226,8 +1226,6 @@
   "settingsTunnelModeProxy": "Прокси",
   "settingsTunnelModeProxySubtitle": "Только локальный прокси, системный VPN не включается",
   "settingsTunnelModeHint": "«Прокси» поднимает SOCKS и HTTP на 127.0.0.1, направьте на них приложение или Wi-Fi. Прокси открыт любому приложению на устройстве. Маршрутизация по приложениям и перехват DNS работают только в VPN.",
-  "settingsCoreAuto": "Автоматически",
-  "settingsCoreAutoSubtitle": "Ссылки идут на Xray, а готовые конфиги на своё ядро",
   "settingsCoreSkipClash": "У активного сервера готовый конфиг Clash: его исполняет только mihomo, при любом выборе ядра.",
   "settingsCoreSkipCustom": "У активного сервера готовый JSON-конфиг Xray: он идёт через libxray при любом выборе ядра. Для mihomo нужна подписка с обычными ссылками.",
   "settingsCoreSkipChain": "У активного сервера цепочка: её узлы связаны через dialerProxy Xray, поэтому она идёт через libxray при любом выборе ядра.",

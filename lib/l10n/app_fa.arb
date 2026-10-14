@@ -775,8 +775,6 @@
   "settingsTunnelModeProxy": "پروکسی",
   "settingsTunnelModeProxySubtitle": "فقط پروکسی محلی، بدون VPN سیستمی",
   "settingsTunnelModeHint": "حالت پروکسی، SOCKS و HTTP را روی 127.0.0.1 راه‌اندازی می‌کند؛ برنامه یا وای‌فای را روی آن‌ها تنظیم کنید. این پروکسی برای همهٔ برنامه‌های دستگاه باز است. مسیریابی به تفکیک برنامه و رهگیری DNS فقط در حالت VPN کار می‌کنند.",
-  "settingsCoreAuto": "خودکار",
-  "settingsCoreAutoSubtitle": "لینک‌ها به Xray می‌روند و کانفیگ‌های آماده به هستهٔ خودشان",
   "settingsCoreSkipClash": "سرور فعال یک کانفیگ آمادهٔ Clash است — صرف‌نظر از هستهٔ انتخاب‌شده تنها mihomo آن را اجرا می‌کند.",
   "settingsCoreSkipCustom": "سرور فعال یک کانفیگ آمادهٔ JSON برای Xray است، پس صرف‌نظر از هستهٔ انتخابی با libxray اجرا می‌شود. mihomo به اشتراکی با لینک‌های معمولی نیاز دارد.",
   "settingsCoreSkipChain": "سرور فعال یک زنجیره است: گره‌های آن با dialerProxy در Xray به هم وصل شده‌اند، پس صرف‌نظر از هستهٔ انتخاب‌شده با libxray اجرا می‌شود.",

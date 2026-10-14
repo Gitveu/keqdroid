@@ -113,7 +113,7 @@ rules:
       expect(
         resolveVpnBackend(
           config: providersJson,
-          preference: AppSettings.vpnCoreAuto,
+          preference: AppSettings.vpnCoreXray,
           mihomoAvailable: true,
         ).backend,
         VpnBackend.mihomo,
@@ -141,7 +141,7 @@ rules:
   group('выбор ядра', () {
     VpnBackendChoice choose(
       String config, {
-      String preference = AppSettings.vpnCoreAuto,
+      String preference = AppSettings.vpnCoreXray,
       bool mihomo = true,
     }) =>
         resolveVpnBackend(
@@ -150,14 +150,13 @@ rules:
           mihomoAvailable: mihomo,
         );
 
-    test('auto: ссылку берёт xray, готовый конфиг — своё ядро', () {
+    test('по умолчанию xray: ссылку берёт он, готовый конфиг — своё ядро', () {
       expect(choose(link).backend, VpnBackend.xray);
       expect(choose(xrayJson).backend, VpnBackend.xray);
       expect(choose(clashYaml).backend, VpnBackend.mihomo);
       expect(choose(awg).backend, VpnBackend.mihomo);
       expect(choose(chain).backend, VpnBackend.xray);
-      // auto ничего не «пропускает»: пользователь ядро и не выбирал.
-      for (final config in [link, xrayJson, clashYaml, awg, chain]) {
+      for (final config in [link, xrayJson, chain]) {
         expect(choose(config).skip, isNull, reason: config);
       }
     });
@@ -344,16 +343,6 @@ rules:
       );
       expect(onMihomo.backend, VpnBackend.xray);
       expect(onMihomo.skip, VpnCoreSkip.linkXrayOnly);
-
-      // auto ничего не «пропускает» и здесь: ядро выбирал не пользователь.
-      expect(
-        resolveVpnBackend(
-          config: kcp,
-          preference: AppSettings.vpnCoreAuto,
-          mihomoAvailable: true,
-        ).skip,
-        isNull,
-      );
     });
   });
 }

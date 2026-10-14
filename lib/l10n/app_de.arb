@@ -1224,8 +1224,6 @@
   "settingsTunnelModeProxy": "Proxy",
   "settingsTunnelModeProxySubtitle": "Nur lokaler Proxy, kein System-VPN",
   "settingsTunnelModeHint": "Der Proxy-Modus startet SOCKS und HTTP auf 127.0.0.1, richte eine App oder das WLAN darauf. Der Proxy steht jeder App auf dem Gerät offen. Routing pro App und das Abfangen von DNS gibt es nur im VPN-Modus.",
-  "settingsCoreAuto": "Automatisch",
-  "settingsCoreAutoSubtitle": "Links gehen an Xray, fertige Konfigurationen an ihren eigenen Kern",
   "settingsCoreSkipClash": "Der aktive Server ist eine fertige Clash-Konfiguration – sie läuft unabhängig von der Kernauswahl nur auf mihomo.",
   "settingsCoreSkipCustom": "Der aktive Server ist eine fertige Xray-JSON-Konfiguration und läuft daher unabhängig vom gewählten Kern über libxray. mihomo braucht ein Abonnement mit normalen Links.",
   "settingsCoreSkipChain": "Der aktive Server ist eine Proxy-Kette, deren Knoten über Xrays dialerProxy verbunden sind. Deshalb läuft sie unabhängig von der Kernauswahl über libxray.",

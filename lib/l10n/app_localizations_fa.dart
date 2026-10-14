@@ -2470,12 +2470,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsTunnelModeHint => 'حالت پروکسی، SOCKS و HTTP را روی 127.0.0.1 راه‌اندازی می‌کند؛ برنامه یا وای‌فای را روی آن‌ها تنظیم کنید. این پروکسی برای همهٔ برنامه‌های دستگاه باز است. مسیریابی به تفکیک برنامه و رهگیری DNS فقط در حالت VPN کار می‌کنند.';
 
   @override
-  String get settingsCoreAuto => 'خودکار';
-
-  @override
-  String get settingsCoreAutoSubtitle => 'لینک‌ها به Xray می‌روند و کانفیگ‌های آماده به هستهٔ خودشان';
-
-  @override
   String get settingsCoreSkipClash => 'سرور فعال یک کانفیگ آمادهٔ Clash است — صرف‌نظر از هستهٔ انتخاب‌شده تنها mihomo آن را اجرا می‌کند.';
 
   @override

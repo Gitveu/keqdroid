@@ -2474,12 +2474,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTunnelModeHint => 'Proxy mode runs SOCKS and HTTP on 127.0.0.1, so point an app or Wi-Fi at them. The proxy is open to every app on the device. Per-app routing and DNS interception need VPN mode.';
 
   @override
-  String get settingsCoreAuto => 'Automatic';
-
-  @override
-  String get settingsCoreAutoSubtitle => 'Links go to Xray, ready-made configs to their own core';
-
-  @override
   String get settingsCoreSkipClash => 'The active server is a ready-made Clash config, and only mihomo can run it, no matter which core is selected.';
 
   @override
