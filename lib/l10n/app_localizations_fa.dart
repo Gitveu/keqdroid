@@ -389,9 +389,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get routingProfileForSubscriptions => 'برای اشتراک‌ها';
 
   @override
-  String get routingProfileSubOnMain => 'اکنون با پروفایل اصلی';
-
-  @override
   String routingProfileSubOnOther(String name) {
     return 'اکنون با پروفایل «$name»';
   }

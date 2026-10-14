@@ -444,14 +444,13 @@ class _ProfileSheetState extends ConsumerState<_ProfileSheet> {
     final profiles =
         ref.watch(routingProfilesProvider).value ?? const <RoutingProfile>[];
 
-    String owner(String subId) {
+    // подпись только у занятой другим профилем: отметка здесь заберёт её оттуда
+    String? owner(String subId) {
       final other = profiles
           .where((p) =>
               p.id != widget.editing?.id && p.subscriptionIds.contains(subId))
           .firstOrNull;
-      return other == null
-          ? l10n.routingProfileSubOnMain
-          : l10n.routingProfileSubOnOther(other.name);
+      return other == null ? null : l10n.routingProfileSubOnOther(other.name);
     }
 
     final canSubmit = !_creating || _name.text.trim().isNotEmpty;
@@ -528,11 +527,12 @@ class _ProfileSheetState extends ConsumerState<_ProfileSheet> {
                                         color: AppTheme.text(context),
                                       ),
                                     ),
-                                    Text(
-                                      owner(sub.id),
-                                      style: theme.textTheme.bodyMedium
-                                          ?.copyWith(color: light),
-                                    ),
+                                    if (owner(sub.id) case final note?)
+                                      Text(
+                                        note,
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(color: light),
+                                      ),
                                   ],
                                 ),
                               ),

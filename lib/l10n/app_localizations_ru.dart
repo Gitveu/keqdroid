@@ -397,9 +397,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get routingProfileForSubscriptions => 'Для подписок';
 
   @override
-  String get routingProfileSubOnMain => 'сейчас по «Основному»';
-
-  @override
   String routingProfileSubOnOther(String name) {
     return 'сейчас по профилю «$name»';
   }

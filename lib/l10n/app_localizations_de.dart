@@ -391,9 +391,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get routingProfileForSubscriptions => 'Für Abonnements';
 
   @override
-  String get routingProfileSubOnMain => 'jetzt im Hauptprofil';
-
-  @override
   String routingProfileSubOnOther(String name) {
     return 'jetzt im Profil „$name“';
   }

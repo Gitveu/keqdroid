@@ -767,12 +767,6 @@ abstract class AppLocalizations {
   /// **'For subscriptions'**
   String get routingProfileForSubscriptions;
 
-  /// No description provided for @routingProfileSubOnMain.
-  ///
-  /// In en, this message translates to:
-  /// **'now on the main profile'**
-  String get routingProfileSubOnMain;
-
   /// No description provided for @routingProfileSubOnOther.
   ///
   /// In en, this message translates to:

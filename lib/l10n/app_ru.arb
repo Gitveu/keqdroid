@@ -220,7 +220,6 @@
   "routingProfileNew": "Новый профиль",
   "routingProfileName": "Название",
   "routingProfileForSubscriptions": "Для подписок",
-  "routingProfileSubOnMain": "сейчас по «Основному»",
   "routingProfileSubOnOther": "сейчас по профилю «{name}»",
   "routingProfileStartFrom": "Начать с",
   "routingProfileStartCopy": "Копии «Основного»",

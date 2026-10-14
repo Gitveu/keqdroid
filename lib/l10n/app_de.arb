@@ -220,7 +220,6 @@
   "routingProfileNew": "Neues Profil",
   "routingProfileName": "Name",
   "routingProfileForSubscriptions": "Für Abonnements",
-  "routingProfileSubOnMain": "jetzt im Hauptprofil",
   "routingProfileSubOnOther": "jetzt im Profil „{name}“",
   "routingProfileStartFrom": "Beginnen mit",
   "routingProfileStartCopy": "Kopie des Hauptprofils",

@@ -220,7 +220,6 @@
   "routingProfileNew": "新建方案",
   "routingProfileName": "名称",
   "routingProfileForSubscriptions": "用于订阅",
-  "routingProfileSubOnMain": "当前使用主方案",
   "routingProfileSubOnOther": "当前使用方案“{name}”",
   "routingProfileStartFrom": "起始内容",
   "routingProfileStartCopy": "主方案的副本",

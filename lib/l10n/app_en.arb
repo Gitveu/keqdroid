@@ -242,8 +242,6 @@
   "@routingProfileName": {},
   "routingProfileForSubscriptions": "For subscriptions",
   "@routingProfileForSubscriptions": {},
-  "routingProfileSubOnMain": "now on the main profile",
-  "@routingProfileSubOnMain": {},
   "routingProfileSubOnOther": "now on profile “{name}”",
   "@routingProfileSubOnOther": {
     "placeholders": {

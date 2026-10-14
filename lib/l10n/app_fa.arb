@@ -111,7 +111,6 @@
   "routingProfileNew": "پروفایل جدید",
   "routingProfileName": "نام",
   "routingProfileForSubscriptions": "برای اشتراک‌ها",
-  "routingProfileSubOnMain": "اکنون با پروفایل اصلی",
   "routingProfileSubOnOther": "اکنون با پروفایل «{name}»",
   "routingProfileStartFrom": "شروع از",
   "routingProfileStartCopy": "رونوشت پروفایل اصلی",

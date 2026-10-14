@@ -389,9 +389,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get routingProfileForSubscriptions => '用于订阅';
 
   @override
-  String get routingProfileSubOnMain => '当前使用主方案';
-
-  @override
   String routingProfileSubOnOther(String name) {
     return '当前使用方案“$name”';
   }

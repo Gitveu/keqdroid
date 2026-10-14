@@ -880,8 +880,16 @@ void main() {
       );
       await tester.tap(find.text('Новый профиль'));
       await tester.pumpAndSettle();
-      expect(find.text('сейчас по «Основному»'), findsOneWidget);
       expect(find.text('сейчас по профилю «Работа»'), findsOneWidget);
+      final freeRow = find.ancestor(
+        of: find.text('Gaming VPN').last,
+        matching: find.byType(ExpressiveGroupTile),
+      );
+      expect(
+        find.descendant(of: freeRow, matching: find.byType(Text)),
+        findsOneWidget,
+        reason: 'у свободной подписки только имя, без подписи',
+      );
       final create = find.widgetWithText(FilledButton, 'Создать');
       expect(tester.widget<FilledButton>(create).onPressed, isNull,
           reason: 'без названия создавать нечего');
