@@ -350,6 +350,87 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routeAppsNeedVpn => 'works only in VPN mode';
 
   @override
+  String get routingProfileMain => 'Main';
+
+  @override
+  String get routingProfileScopeAll => 'All subscriptions and your own servers';
+
+  @override
+  String get routingProfileScopeRest => 'Other subscriptions and your own servers';
+
+  @override
+  String routingProfileRouteCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count routes',
+      one: '1 route',
+      zero: 'no routes',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String routingProfileFinal(String target) {
+    return 'everything else → $target';
+  }
+
+  @override
+  String get routingProfileOff => 'Off: the main profile applies';
+
+  @override
+  String get routingProfileNoSubscriptions => 'Not linked to any subscription';
+
+  @override
+  String get routingProfileNew => 'New profile';
+
+  @override
+  String get routingProfileName => 'Name';
+
+  @override
+  String get routingProfileForSubscriptions => 'For subscriptions';
+
+  @override
+  String get routingProfileSubOnMain => 'now on the main profile';
+
+  @override
+  String routingProfileSubOnOther(String name) {
+    return 'now on profile “$name”';
+  }
+
+  @override
+  String get routingProfileStartFrom => 'Start from';
+
+  @override
+  String get routingProfileStartCopy => 'A copy of the main profile';
+
+  @override
+  String get routingProfileStartCopyHint => 'The same routes, then adjust them for the subscription';
+
+  @override
+  String get routingProfileStartEmpty => 'An empty profile';
+
+  @override
+  String get routingProfileStartEmptyHint => 'Only everything else through the VPN';
+
+  @override
+  String get routingProfileCreate => 'Create';
+
+  @override
+  String get routingProfileNoSubscriptionsYet => 'No subscriptions yet: a profile applies to the servers of subscriptions';
+
+  @override
+  String get routingProfileRenameTitle => 'Rename profile';
+
+  @override
+  String get routingProfileSubscriptions => 'Subscriptions';
+
+  @override
+  String routingProfileDeleteConfirm(String name) {
+    return 'Delete the profile “$name”? Its subscriptions go back to the main profile.';
+  }
+
+  @override
   String routeSplitExcluded(String apps) {
     return 'split tunneling sends $apps around the VPN';
   }

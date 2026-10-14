@@ -210,6 +210,74 @@
   "@routeAppsUnsupported": {},
   "routeAppsNeedTun": "works only in TUN mode",
   "routeAppsNeedVpn": "works only in VPN mode",
+  "routingProfileMain": "Main",
+  "@routingProfileMain": {},
+  "routingProfileScopeAll": "All subscriptions and your own servers",
+  "@routingProfileScopeAll": {},
+  "routingProfileScopeRest": "Other subscriptions and your own servers",
+  "@routingProfileScopeRest": {},
+  "routingProfileRouteCount": "{count, plural, =0{no routes} =1{1 route} other{{count} routes}}",
+  "@routingProfileRouteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "routingProfileFinal": "everything else → {target}",
+  "@routingProfileFinal": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "routingProfileOff": "Off: the main profile applies",
+  "@routingProfileOff": {},
+  "routingProfileNoSubscriptions": "Not linked to any subscription",
+  "@routingProfileNoSubscriptions": {},
+  "routingProfileNew": "New profile",
+  "@routingProfileNew": {},
+  "routingProfileName": "Name",
+  "@routingProfileName": {},
+  "routingProfileForSubscriptions": "For subscriptions",
+  "@routingProfileForSubscriptions": {},
+  "routingProfileSubOnMain": "now on the main profile",
+  "@routingProfileSubOnMain": {},
+  "routingProfileSubOnOther": "now on profile “{name}”",
+  "@routingProfileSubOnOther": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "routingProfileStartFrom": "Start from",
+  "@routingProfileStartFrom": {},
+  "routingProfileStartCopy": "A copy of the main profile",
+  "@routingProfileStartCopy": {},
+  "routingProfileStartCopyHint": "The same routes, then adjust them for the subscription",
+  "@routingProfileStartCopyHint": {},
+  "routingProfileStartEmpty": "An empty profile",
+  "@routingProfileStartEmpty": {},
+  "routingProfileStartEmptyHint": "Only everything else through the VPN",
+  "@routingProfileStartEmptyHint": {},
+  "routingProfileCreate": "Create",
+  "@routingProfileCreate": {},
+  "routingProfileNoSubscriptionsYet": "No subscriptions yet: a profile applies to the servers of subscriptions",
+  "@routingProfileNoSubscriptionsYet": {},
+  "routingProfileRenameTitle": "Rename profile",
+  "@routingProfileRenameTitle": {},
+  "routingProfileSubscriptions": "Subscriptions",
+  "@routingProfileSubscriptions": {},
+  "routingProfileDeleteConfirm": "Delete the profile “{name}”? Its subscriptions go back to the main profile.",
+  "@routingProfileDeleteConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "@routeAppsNeedTun": {},
   "routeSplitExcluded": "split tunneling sends {apps} around the VPN",
   "@routeSplitExcluded": {

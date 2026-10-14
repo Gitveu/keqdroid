@@ -1,7 +1,6 @@
 part of '../settings_tab.dart';
 
-@visibleForTesting
-Widget routingScreenForTest() => const _RoutingScreen();
+Widget routingScreen() => const _RoutingScreen();
 
 Color _targetColor(BuildContext context, RouteTarget target) =>
     switch (target) {
@@ -173,41 +172,105 @@ class _RoutingScreen extends ConsumerWidget {
     final tunnelActive = vpnStatus == VpnStatus.connected ||
         vpnStatus == VpnStatus.connecting;
     final routes = ref.watch(routesProvider).value ?? const <TrafficRoute>[];
+    final profiles =
+        ref.watch(routingProfilesProvider).value ?? const <RoutingProfile>[];
+    final subs = ref.watch(subscriptionsProvider).value ?? const [];
+    final expanded = ref.watch(expandedRoutingProfilesProvider);
     final hint = ref.watch(routesHintProvider);
     final caps = ref.watch(routeCapabilitiesProvider);
     final servers = ref.watch(serversProvider.select((s) => s.servers));
     final split = ref.watch(splitTunnelingProvider);
     final iconCache = ref.read(appIconCacheProvider);
-    final installed = _installedForLabels(ref, routes);
-    final finalTarget = _finalTarget(
-      ref.watch(
-        settingsNotifierProvider.select(
-          (a) => a.value?.finalOutbound ?? AppSettings.finalOutboundProxy,
-        ),
+    final installed = _installedForLabels(
+      ref,
+      [...routes, for (final p in profiles) ...p.routes],
+    );
+    final mainFinal = ref.watch(
+      settingsNotifierProvider.select(
+        (a) => a.value?.finalOutbound ?? AppSettings.finalOutboundProxy,
       ),
     );
+    final rowColor = Theme.of(context).colorScheme.surfaceContainer;
 
-    Widget tile(TrafficRoute route) => _RouteTile(
-          route: route,
-          servers: servers,
-          iconCache: iconCache,
-          installed: installed,
-          issue: _routeIssue(l10n, route, caps, servers, split, installed),
-          onTap: () => _openRouteEditor(context, route),
-        );
+    List<Widget> routeRows(
+      String? profileId,
+      List<TrafficRoute> list,
+      String finalOutbound,
+    ) {
+      Widget tile(TrafficRoute route) => _RouteTile(
+            route: route,
+            servers: servers,
+            iconCache: iconCache,
+            installed: installed,
+            background: rowColor,
+            issue: _routeIssue(l10n, route, caps, servers, split, installed),
+            onTap: () => _openRouteEditor(context, route, profileId),
+          );
+      final block = routesIn(RouteSection.block, list);
+      final apps = routesIn(RouteSection.apps, list);
+      final allApps = routesIn(RouteSection.allApps, list);
+      final target = _finalTarget(finalOutbound);
+      return [
+        if (block.isNotEmpty) ...[
+          _ProfileSectionLabel(l10n.routesSectionBlock),
+          ExpressiveGroup(children: [for (final r in block) tile(r)]),
+        ],
+        if (apps.isNotEmpty) ...[
+          _ProfileSectionLabel(l10n.routesSectionApps),
+          ExpressiveGroup(children: [for (final r in apps) tile(r)]),
+        ],
+        _ProfileSectionLabel(l10n.routesSectionAllApps),
+        ExpressiveGroup(
+          children: [
+            for (final r in allApps) tile(r),
+            _FinalRouteTile(
+              target: target,
+              background: rowColor,
+              onTap: () => _pickFinalTarget(context, ref, profileId, target),
+            ),
+            ExpressiveGroupTile(
+              onTap: () => _openRouteEditor(context, null, profileId),
+              color: rowColor,
+              child: _RouteRowContent(
+                badge: const ExpressiveIconBadge(icon: Icons.add_rounded),
+                title: Text(l10n.routeNew),
+                subtitle: Text(
+                  caps.appsOffered
+                      ? l10n.routeNewSubtitle
+                      : l10n.routeNewSubtitleSites,
+                ),
+                chevron: false,
+              ),
+            ),
+          ],
+        ),
+      ];
+    }
 
-    final block = routesIn(RouteSection.block, routes);
-    final apps = routesIn(RouteSection.apps, routes);
-    final allApps = routesIn(RouteSection.allApps, routes);
+    final subNames = {for (final s in subs) s.id: s.name};
+    final mainExpanded = _profileExpanded(expanded, _mainProfileKey);
+    final mainScope = profiles.any(
+      (p) => p.enabled && p.subscriptionIds.any(subNames.containsKey),
+    )
+        ? l10n.routingProfileScopeRest
+        : l10n.routingProfileScopeAll;
 
     return ExpressivePage(
       title: l10n.settingsRoutingTitle,
       physics: const ClampingScrollPhysics(),
+      // под кнопкой «Новый профиль» не должна прятаться последняя строка
       padding: const EdgeInsets.fromLTRB(
         ExpressiveSpacing.large,
         ExpressiveSpacing.none,
         ExpressiveSpacing.large,
-        ExpressiveSpacing.extraLargeIncreased,
+        96,
+      ),
+      floatingActionButton: TvFocus.fab(
+        (_) => FloatingActionButton.extended(
+          onPressed: () => unawaited(_showProfileSheet(context, ref)),
+          icon: const Icon(Icons.add_rounded),
+          label: Text(l10n.routingProfileNew),
+        ),
       ),
       actions: [
         IconButton(
@@ -242,42 +305,46 @@ class _RoutingScreen extends ConsumerWidget {
               child: Text(l10n.routesHintDismiss),
             ),
           ),
-        if (block.isNotEmpty) ...[
-          ExpressiveSectionHeader(l10n.routesSectionBlock),
-          ExpressiveGroup(children: [for (final r in block) tile(r)]),
-        ],
-        if (apps.isNotEmpty) ...[
-          ExpressiveSectionHeader(l10n.routesSectionApps),
-          ExpressiveGroup(children: [for (final r in apps) tile(r)]),
-        ],
-        ExpressiveSectionHeader(l10n.routesSectionAllApps),
-        ExpressiveGroup(
-          children: [
-            for (final r in allApps) tile(r),
-            _FinalRouteTile(
-              target: finalTarget,
-              onTap: () => _pickFinalTarget(context, ref, finalTarget),
-            ),
-          ],
+        if (tunnelActive || hint)
+          const SizedBox(height: ExpressiveSpacing.large),
+        _ProfileCard(
+          key: const ValueKey('routing-profile-main'),
+          title: l10n.routingProfileMain,
+          summary: mainExpanded
+              ? mainScope
+              : '$mainScope · ${l10n.routingProfileRouteCount(routes.length)}',
+          expanded: mainExpanded,
+          onToggle: () => _toggleProfile(ref, _mainProfileKey),
+          body: routeRows(null, routes, mainFinal),
         ),
-        const SizedBox(height: ExpressiveSpacing.large),
-        ExpressiveGroup(
-          children: [
-            ExpressiveGroupTile(
-              onTap: () => _openRouteEditor(context, null),
-              child: _RouteRowContent(
-                badge: const ExpressiveIconBadge(icon: Icons.add_rounded),
-                title: Text(l10n.routeNew),
-                subtitle: Text(
-                  caps.appsOffered
-                      ? l10n.routeNewSubtitle
-                      : l10n.routeNewSubtitleSites,
-                ),
-                chevron: false,
+        for (final p in profiles)
+          _ProfileCard(
+            key: ValueKey('routing-profile-${p.id}'),
+            title: p.name,
+            summary: !p.enabled
+                ? l10n.routingProfileOff
+                : !p.subscriptionIds.any(subNames.containsKey)
+                    ? l10n.routingProfileNoSubscriptions
+                    : '${l10n.routingProfileRouteCount(p.routes.length)} · '
+                        '${l10n.routingProfileFinal(_finalLabel(l10n, p.finalOutbound))}',
+            chips: [for (final id in p.subscriptionIds) ?subNames[id]],
+            enabled: p.enabled,
+            onEnabled: (v) => unawaited(
+              ref.read(routingProfilesProvider.notifier).setEnabled(p.id, v),
+            ),
+            menu: IconButton(
+              tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+              icon: Icon(
+                Icons.more_vert_rounded,
+                size: 20,
+                color: AppTheme.textLight(context),
               ),
+              onPressed: () => _showProfileMenu(context, ref, p),
             ),
-          ],
-        ),
+            expanded: _profileExpanded(expanded, p.id),
+            onToggle: () => _toggleProfile(ref, p.id),
+            body: routeRows(p.id, p.routes, p.finalOutbound),
+          ),
       ],
     );
   }
@@ -288,16 +355,23 @@ class _RoutingScreen extends ConsumerWidget {
     } catch (_) {}
   }
 
-  static void _openRouteEditor(BuildContext context, TrafficRoute? route) {
+  static void _openRouteEditor(
+    BuildContext context,
+    TrafficRoute? route,
+    String? profileId,
+  ) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => _RouteEditorScreen(initial: route)),
+      MaterialPageRoute(
+        builder: (_) => _RouteEditorScreen(initial: route, profileId: profileId),
+      ),
     );
   }
 
   static Future<void> _pickFinalTarget(
     BuildContext context,
     WidgetRef ref,
+    String? profileId,
     RouteTarget current,
   ) async {
     final l10n = AppLocalizations.of(context)!;
@@ -307,11 +381,7 @@ class _RoutingScreen extends ConsumerWidget {
       current: current,
     );
     if (picked == null) return;
-    final settings = ref.read(settingsNotifierProvider).value;
-    if (settings == null) return;
-    await ref
-        .read(settingsNotifierProvider.notifier)
-        .save(settings.copyWith(finalOutbound: _finalOutboundOf(picked)));
+    await _saveFinalOutbound(ref, profileId, _finalOutboundOf(picked));
   }
 }
 
@@ -390,6 +460,7 @@ class _RouteTile extends StatelessWidget {
     required this.installed,
     required this.issue,
     required this.onTap,
+    this.background,
   });
 
   final TrafficRoute route;
@@ -398,6 +469,7 @@ class _RouteTile extends StatelessWidget {
   final List<AppInfo> installed;
   final String? issue;
   final VoidCallback onTap;
+  final Color? background;
 
   @override
   Widget build(BuildContext context) {
@@ -412,6 +484,7 @@ class _RouteTile extends StatelessWidget {
     ];
     return ExpressiveGroupTile(
       onTap: onTap,
+      color: background,
       child: _RouteRowContent(
         dimmed: !route.enabled,
         badge: route.allApps
@@ -450,10 +523,15 @@ class _RouteTile extends StatelessWidget {
 }
 
 class _FinalRouteTile extends StatelessWidget {
-  const _FinalRouteTile({required this.target, required this.onTap});
+  const _FinalRouteTile({
+    required this.target,
+    required this.onTap,
+    this.background,
+  });
 
   final RouteTarget target;
   final VoidCallback onTap;
+  final Color? background;
 
   @override
   Widget build(BuildContext context) {
@@ -461,6 +539,7 @@ class _FinalRouteTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return ExpressiveGroupTile(
       onTap: onTap,
+      color: background,
       child: _RouteRowContent(
         badge: ExpressiveIconBadge(
           icon: Icons.alt_route_rounded,

@@ -354,6 +354,89 @@ class AppLocalizationsRu extends AppLocalizations {
   String get routeAppsNeedVpn => 'работает только в режиме VPN';
 
   @override
+  String get routingProfileMain => 'Основной';
+
+  @override
+  String get routingProfileScopeAll => 'Все подписки и свои серверы';
+
+  @override
+  String get routingProfileScopeRest => 'Остальные подписки и свои серверы';
+
+  @override
+  String routingProfileRouteCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count маршрута',
+      many: '$count маршрутов',
+      few: '$count маршрута',
+      one: '$count маршрут',
+      zero: 'нет маршрутов',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String routingProfileFinal(String target) {
+    return 'всё остальное → $target';
+  }
+
+  @override
+  String get routingProfileOff => 'Выключен: работает «Основной»';
+
+  @override
+  String get routingProfileNoSubscriptions => 'Не привязан ни к одной подписке';
+
+  @override
+  String get routingProfileNew => 'Новый профиль';
+
+  @override
+  String get routingProfileName => 'Название';
+
+  @override
+  String get routingProfileForSubscriptions => 'Для подписок';
+
+  @override
+  String get routingProfileSubOnMain => 'сейчас по «Основному»';
+
+  @override
+  String routingProfileSubOnOther(String name) {
+    return 'сейчас по профилю «$name»';
+  }
+
+  @override
+  String get routingProfileStartFrom => 'Начать с';
+
+  @override
+  String get routingProfileStartCopy => 'Копии «Основного»';
+
+  @override
+  String get routingProfileStartCopyHint => 'Те же маршруты, дальше правите под подписку';
+
+  @override
+  String get routingProfileStartEmpty => 'Пустого профиля';
+
+  @override
+  String get routingProfileStartEmptyHint => 'Только «Всё остальное через VPN»';
+
+  @override
+  String get routingProfileCreate => 'Создать';
+
+  @override
+  String get routingProfileNoSubscriptionsYet => 'Подписок пока нет: профиль действует на серверы подписок';
+
+  @override
+  String get routingProfileRenameTitle => 'Переименовать профиль';
+
+  @override
+  String get routingProfileSubscriptions => 'Подписки';
+
+  @override
+  String routingProfileDeleteConfirm(String name) {
+    return 'Удалить профиль «$name»? Его подписки перейдут на «Основной».';
+  }
+
+  @override
   String routeSplitExcluded(String apps) {
     return 'раздельное туннелирование ведёт мимо VPN: $apps';
   }

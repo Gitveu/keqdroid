@@ -16,9 +16,10 @@ class _ContentPreset extends _ContentChoice {
 
 // сохраняет сам, без кнопки. новый маршрут появляется в списке, только когда начал что-то забирать
 class _RouteEditorScreen extends ConsumerStatefulWidget {
-  const _RouteEditorScreen({this.initial});
+  const _RouteEditorScreen({this.initial, this.profileId});
 
   final TrafficRoute? initial;
+  final String? profileId;
 
   @override
   ConsumerState<_RouteEditorScreen> createState() => _RouteEditorScreenState();
@@ -65,7 +66,7 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     _debounce?.cancel();
     if (!_savable) return;
     _stored = true;
-    await ref.read(routesProvider.notifier).upsert(_route);
+    await _upsertRoute(ref, widget.profileId, _route);
   }
 
   Future<void> _delete() async {
@@ -89,7 +90,7 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
     if (ok != true || !mounted) return;
     _debounce?.cancel();
     _stored = false;
-    await ref.read(routesProvider.notifier).remove(_route.id);
+    await _removeRoute(ref, widget.profileId, _route.id);
     if (mounted) Navigator.pop(context);
   }
 
@@ -315,17 +316,13 @@ class _RouteEditorScreenState extends ConsumerState<_RouteEditorScreen> {
   ) async {
     final unmatched = preset.unmatched;
     if (unmatched == null) return;
-    final settings = ref.read(settingsNotifierProvider).value;
-    if (settings == null) return;
     final value = switch (unmatched) {
       RoutingField.direct => AppSettings.finalOutboundDirect,
       RoutingField.proxy => AppSettings.finalOutboundProxy,
       RoutingField.blocked => AppSettings.finalOutboundBlock,
     };
-    if (settings.finalOutbound == value) return;
-    await ref
-        .read(settingsNotifierProvider.notifier)
-        .save(settings.copyWith(finalOutbound: value));
+    if (_finalOutboundFor(ref, widget.profileId) == value) return;
+    await _saveFinalOutbound(ref, widget.profileId, value);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(l10n.routeRefilterUnmatched)),

@@ -350,6 +350,87 @@ class AppLocalizationsDe extends AppLocalizations {
   String get routeAppsNeedVpn => 'wirkt nur im VPN-Modus';
 
   @override
+  String get routingProfileMain => 'Hauptprofil';
+
+  @override
+  String get routingProfileScopeAll => 'Alle Abonnements und eigene Server';
+
+  @override
+  String get routingProfileScopeRest => 'Übrige Abonnements und eigene Server';
+
+  @override
+  String routingProfileRouteCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Routen',
+      one: '1 Route',
+      zero: 'keine Routen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String routingProfileFinal(String target) {
+    return 'alles andere → $target';
+  }
+
+  @override
+  String get routingProfileOff => 'Aus: es gilt das Hauptprofil';
+
+  @override
+  String get routingProfileNoSubscriptions => 'Mit keinem Abonnement verknüpft';
+
+  @override
+  String get routingProfileNew => 'Neues Profil';
+
+  @override
+  String get routingProfileName => 'Name';
+
+  @override
+  String get routingProfileForSubscriptions => 'Für Abonnements';
+
+  @override
+  String get routingProfileSubOnMain => 'jetzt im Hauptprofil';
+
+  @override
+  String routingProfileSubOnOther(String name) {
+    return 'jetzt im Profil „$name“';
+  }
+
+  @override
+  String get routingProfileStartFrom => 'Beginnen mit';
+
+  @override
+  String get routingProfileStartCopy => 'Kopie des Hauptprofils';
+
+  @override
+  String get routingProfileStartCopyHint => 'Dieselben Routen, danach passt du sie an das Abonnement an';
+
+  @override
+  String get routingProfileStartEmpty => 'Leeres Profil';
+
+  @override
+  String get routingProfileStartEmptyHint => 'Nur alles andere über das VPN';
+
+  @override
+  String get routingProfileCreate => 'Erstellen';
+
+  @override
+  String get routingProfileNoSubscriptionsYet => 'Noch keine Abonnements: ein Profil gilt für die Server von Abonnements';
+
+  @override
+  String get routingProfileRenameTitle => 'Profil umbenennen';
+
+  @override
+  String get routingProfileSubscriptions => 'Abonnements';
+
+  @override
+  String routingProfileDeleteConfirm(String name) {
+    return 'Profil „$name“ löschen? Seine Abonnements kehren zum Hauptprofil zurück.';
+  }
+
+  @override
   String routeSplitExcluded(String apps) {
     return 'Split-Tunneling leitet $apps am VPN vorbei';
   }

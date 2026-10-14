@@ -707,6 +707,138 @@ abstract class AppLocalizations {
   /// **'works only in VPN mode'**
   String get routeAppsNeedVpn;
 
+  /// No description provided for @routingProfileMain.
+  ///
+  /// In en, this message translates to:
+  /// **'Main'**
+  String get routingProfileMain;
+
+  /// No description provided for @routingProfileScopeAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All subscriptions and your own servers'**
+  String get routingProfileScopeAll;
+
+  /// No description provided for @routingProfileScopeRest.
+  ///
+  /// In en, this message translates to:
+  /// **'Other subscriptions and your own servers'**
+  String get routingProfileScopeRest;
+
+  /// No description provided for @routingProfileRouteCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{no routes} =1{1 route} other{{count} routes}}'**
+  String routingProfileRouteCount(int count);
+
+  /// No description provided for @routingProfileFinal.
+  ///
+  /// In en, this message translates to:
+  /// **'everything else → {target}'**
+  String routingProfileFinal(String target);
+
+  /// No description provided for @routingProfileOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off: the main profile applies'**
+  String get routingProfileOff;
+
+  /// No description provided for @routingProfileNoSubscriptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Not linked to any subscription'**
+  String get routingProfileNoSubscriptions;
+
+  /// No description provided for @routingProfileNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New profile'**
+  String get routingProfileNew;
+
+  /// No description provided for @routingProfileName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get routingProfileName;
+
+  /// No description provided for @routingProfileForSubscriptions.
+  ///
+  /// In en, this message translates to:
+  /// **'For subscriptions'**
+  String get routingProfileForSubscriptions;
+
+  /// No description provided for @routingProfileSubOnMain.
+  ///
+  /// In en, this message translates to:
+  /// **'now on the main profile'**
+  String get routingProfileSubOnMain;
+
+  /// No description provided for @routingProfileSubOnOther.
+  ///
+  /// In en, this message translates to:
+  /// **'now on profile “{name}”'**
+  String routingProfileSubOnOther(String name);
+
+  /// No description provided for @routingProfileStartFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'Start from'**
+  String get routingProfileStartFrom;
+
+  /// No description provided for @routingProfileStartCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'A copy of the main profile'**
+  String get routingProfileStartCopy;
+
+  /// No description provided for @routingProfileStartCopyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The same routes, then adjust them for the subscription'**
+  String get routingProfileStartCopyHint;
+
+  /// No description provided for @routingProfileStartEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'An empty profile'**
+  String get routingProfileStartEmpty;
+
+  /// No description provided for @routingProfileStartEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Only everything else through the VPN'**
+  String get routingProfileStartEmptyHint;
+
+  /// No description provided for @routingProfileCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get routingProfileCreate;
+
+  /// No description provided for @routingProfileNoSubscriptionsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No subscriptions yet: a profile applies to the servers of subscriptions'**
+  String get routingProfileNoSubscriptionsYet;
+
+  /// No description provided for @routingProfileRenameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename profile'**
+  String get routingProfileRenameTitle;
+
+  /// No description provided for @routingProfileSubscriptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscriptions'**
+  String get routingProfileSubscriptions;
+
+  /// No description provided for @routingProfileDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the profile “{name}”? Its subscriptions go back to the main profile.'**
+  String routingProfileDeleteConfirm(String name);
+
   /// No description provided for @routeSplitExcluded.
   ///
   /// In en, this message translates to:

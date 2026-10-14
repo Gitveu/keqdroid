@@ -5,6 +5,7 @@ import 'package:keqdroid/app/app.dart';
 import 'package:keqdroid/l10n/app_localizations.dart';
 import 'package:keqdroid/models/app_info.dart';
 import 'package:keqdroid/models/app_settings.dart';
+import 'package:keqdroid/models/routing_profile.dart';
 import 'package:keqdroid/models/server_item.dart';
 import 'package:keqdroid/models/subscription.dart';
 import 'package:keqdroid/models/traffic_route.dart';
@@ -15,6 +16,7 @@ import 'package:keqdroid/services/storage_service.dart';
 import 'package:keqdroid/services/vpn_engine.dart';
 import 'package:keqdroid/shared/ui/expressive.dart';
 import 'package:keqdroid/shared/ui/expressive_elements.dart';
+import 'package:keqdroid/shared/ui/expressive_group.dart';
 import 'package:keqdroid/tunnel/vpn_backend.dart';
 
 import '../helpers/fake_tunnel_backend.dart';
@@ -55,8 +57,11 @@ class _FakeRuleLists extends RuleListsNotifier {
 /// Подписки без таймера синхронизации: шторка серверов читает их ради
 /// заголовков групп.
 class _FakeSubs extends SubscriptionsNotifier {
+  _FakeSubs([this._subs = const []]);
+  final List<Subscription> _subs;
+
   @override
-  Future<List<Subscription>> build() async => const [];
+  Future<List<Subscription>> build() async => _subs;
 }
 
 late _FakeVpn _vpn;
@@ -75,6 +80,8 @@ Future<ProviderContainer> _pump(
   List<AppInfo> systemApps = const [],
   List<String> splitExclude = const [],
   List<String> splitInclude = const [],
+  List<RoutingProfile> profiles = const [],
+  List<Subscription> subs = const [],
 }) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 2.625;
@@ -84,6 +91,7 @@ Future<ProviderContainer> _pump(
     initialValues: {if (hint) 'keqdis_routes_hint': true},
   );
   if (routes != null) await _storage.saveRoutes(routes);
+  if (profiles.isNotEmpty) await _storage.saveRoutingProfiles(profiles);
   if (splitExclude.isNotEmpty) await _storage.setExcludePackages(splitExclude);
   if (splitInclude.isNotEmpty) await _storage.setIncludePackages(splitInclude);
   if (servers.isNotEmpty) {
@@ -97,7 +105,7 @@ Future<ProviderContainer> _pump(
       settingsNotifierProvider.overrideWith(() => _FakeSettings(settings)),
       vpnStateProvider.overrideWith(() => _vpn),
       ruleListsProvider.overrideWith(() => _FakeRuleLists(ruleLists)),
-      subscriptionsProvider.overrideWith(_FakeSubs.new),
+      subscriptionsProvider.overrideWith(() => _FakeSubs(subs)),
       vpnEngineProvider.overrideWithValue(
         VpnEngine.withBackend(FakeTunnelBackend()),
       ),
@@ -121,7 +129,7 @@ Future<ProviderContainer> _pump(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         locale: const Locale('ru'),
-        home: routingScreenForTest(),
+        home: routingScreen(),
       ),
     ),
   );
@@ -727,6 +735,309 @@ void main() {
         ),
         isTrue,
       );
+    });
+  });
+
+  group('профили', () {
+    const subs = [
+      Subscription(id: 'sub-games', name: 'Gaming VPN', url: 'https://a.example'),
+      Subscription(id: 'sub-work', name: 'Office VPN', url: 'https://b.example'),
+    ];
+    const games = RoutingProfile(
+      id: 'games',
+      name: 'Игры',
+      subscriptionIds: ['sub-games'],
+      finalOutbound: AppSettings.finalOutboundDirect,
+      routes: [
+        TrafficRoute(
+          id: 'steam',
+          sites: 'steampowered.com',
+          target: RouteTarget.direct,
+        ),
+      ],
+    );
+
+    Finder inCard(String id, Finder f) => find.descendant(
+          of: find.byKey(ValueKey('routing-profile-$id')),
+          matching: f,
+        );
+
+    // карточка профиля ниже раскрытого «Основного» и уходит за край экрана
+    Future<void> tapInCard(WidgetTester tester, String id, String text) async {
+      final f = inCard(id, find.text(text));
+      await tester.ensureVisible(f);
+      await tester.pumpAndSettle();
+      await tester.tap(f);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('без профилей «Основной» раскрыт и действует на всё',
+        (tester) async {
+      await _pump(tester, routes: const [_direct]);
+      final texts = _texts(tester);
+      expect(texts, contains('Основной'));
+      expect(texts, contains('Все подписки и свои серверы'));
+      expect(find.byType(Switch), findsNothing,
+          reason: '«Основной» не выключается');
+      expect(find.byIcon(Icons.more_vert_rounded), findsNothing);
+      expect(find.text('Новый профиль'), findsOneWidget);
+    });
+
+    testWidgets('профиль свёрнут: подписки плашками, сводка без маршрутов',
+        (tester) async {
+      await _pump(
+        tester,
+        routes: const [_direct],
+        profiles: const [games],
+        subs: subs,
+      );
+      final texts = _texts(tester);
+      expect(texts, contains('Остальные подписки и свои серверы'));
+      expect(texts, contains('1 маршрут · всё остальное → напрямую'));
+      expect(texts, contains('Gaming VPN'));
+      expect(texts, isNot(contains('Office VPN')));
+      expect(texts, isNot(contains('steampowered.com')));
+
+      await tester.tap(find.text('Игры'));
+      await tester.pumpAndSettle();
+      expect(_texts(tester), contains('steampowered.com'));
+      final row = find.text('steampowered.com');
+      expect(
+        tester
+            .widget<ExpressiveGroupTile>(
+              find.ancestor(of: row, matching: find.byType(ExpressiveGroupTile)),
+            )
+            .color,
+        Theme.of(tester.element(row)).colorScheme.surfaceContainer,
+        reason: 'строка темнее карточки, а не цвета своего «куда»',
+      );
+
+      await tester.tap(find.text('Основной'));
+      await tester.pumpAndSettle();
+      expect(_texts(tester), isNot(contains('ru, yandex.ru, vk.com')));
+      expect(
+        _texts(tester),
+        contains('Остальные подписки и свои серверы · 1 маршрут'),
+      );
+    });
+
+    testWidgets('выключатель сохраняется, выключенный подписан',
+        (tester) async {
+      await _pump(tester, profiles: const [games], subs: subs);
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect((await _storage.getRoutingProfiles()).single.enabled, isFalse);
+      expect(_texts(tester), contains('Выключен: работает «Основной»'));
+      expect(_texts(tester), contains('Все подписки и свои серверы'),
+          reason: 'выключенный профиль ничего у «Основного» не забирает');
+    });
+
+    testWidgets('профиль без подписок так и подписан', (tester) async {
+      await _pump(
+        tester,
+        profiles: const [RoutingProfile(id: 'p', name: 'Пустой')],
+        subs: subs,
+      );
+      expect(_texts(tester), contains('Не привязан ни к одной подписке'));
+    });
+
+    testWidgets('новый профиль копией «Основного» забирает подписку',
+        (tester) async {
+      await _pump(
+        tester,
+        routes: const [_direct],
+        settings: const AppSettings(
+          finalOutbound: AppSettings.finalOutboundBlock,
+        ),
+        profiles: const [
+          RoutingProfile(
+            id: 'work',
+            name: 'Работа',
+            subscriptionIds: ['sub-work'],
+          ),
+        ],
+        subs: subs,
+      );
+      await tester.tap(find.text('Новый профиль'));
+      await tester.pumpAndSettle();
+      expect(find.text('сейчас по «Основному»'), findsOneWidget);
+      expect(find.text('сейчас по профилю «Работа»'), findsOneWidget);
+      final create = find.widgetWithText(FilledButton, 'Создать');
+      expect(tester.widget<FilledButton>(create).onPressed, isNull,
+          reason: 'без названия создавать нечего');
+
+      await tester.enterText(find.byType(TextField), 'Игры');
+      await tester.tap(find.text('Gaming VPN').last);
+      await tester.tap(find.text('Office VPN').last);
+      await tester.pump();
+      await tester.tap(create);
+      await tester.pumpAndSettle();
+
+      final saved = await _storage.getRoutingProfiles();
+      expect(saved.map((p) => p.name), ['Работа', 'Игры']);
+      expect(saved.first.subscriptionIds, isEmpty,
+          reason: 'у подписки один профиль');
+      expect(saved.last.subscriptionIds, ['sub-games', 'sub-work']);
+      expect(saved.last.routes, const [_direct]);
+      expect(saved.last.finalOutbound, AppSettings.finalOutboundBlock);
+      expect(
+        inCard(saved.last.id, find.text('ru, yandex.ru, vk.com')),
+        findsOneWidget,
+        reason: 'только что созданный профиль раскрыт',
+      );
+    });
+
+    testWidgets('пустой профиль: без маршрутов, остальное через VPN',
+        (tester) async {
+      await _pump(
+        tester,
+        routes: const [_direct],
+        settings: const AppSettings(
+          finalOutbound: AppSettings.finalOutboundDirect,
+        ),
+        subs: subs,
+      );
+      await tester.tap(find.text('Новый профиль'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Чистый');
+      await tester.tap(find.text('Пустого профиля'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Создать'));
+      await tester.pumpAndSettle();
+      final saved = (await _storage.getRoutingProfiles()).single;
+      expect(saved.routes, isEmpty);
+      expect(saved.finalOutbound, AppSettings.finalOutboundProxy);
+    });
+
+    testWidgets('маршрут из карточки профиля пишется в профиль',
+        (tester) async {
+      await _pump(
+        tester,
+        routes: const [_direct],
+        profiles: const [games],
+        subs: subs,
+      );
+      await tester.tap(find.text('Игры'));
+      await tester.pumpAndSettle();
+      await tapInCard(tester, 'games', 'Новый маршрут');
+      await tester.enterText(find.byType(TextField), 'twitch.tv');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(await _storage.getRoutes(), const [_direct]);
+      final profile = (await _storage.getRoutingProfiles()).single;
+      expect(
+        profile.routes.map((r) => r.sites),
+        ['steampowered.com', 'twitch.tv'],
+      );
+    });
+
+    testWidgets('удаление маршрута профиля не трогает основные',
+        (tester) async {
+      await _pump(
+        tester,
+        routes: const [_direct],
+        profiles: const [games],
+        subs: subs,
+      );
+      await tester.tap(find.text('Игры'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('steampowered.com'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Удалить'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Удалить'));
+      await tester.pumpAndSettle();
+
+      expect(await _storage.getRoutes(), const [_direct]);
+      expect((await _storage.getRoutingProfiles()).single.routes, isEmpty);
+    });
+
+    testWidgets('«Всё остальное» профиля пишется в профиль, не в настройки',
+        (tester) async {
+      final c = await _pump(tester, profiles: const [games], subs: subs);
+      await tester.tap(find.text('Игры'));
+      await tester.pumpAndSettle();
+      await tapInCard(tester, 'games', 'Всё остальное');
+      await tester.tap(find.text('Блокировать'));
+      await tester.pumpAndSettle();
+
+      expect(
+        (await _storage.getRoutingProfiles()).single.finalOutbound,
+        AppSettings.finalOutboundBlock,
+      );
+      expect(
+        c.read(settingsNotifierProvider).value!.finalOutbound,
+        AppSettings.finalOutboundProxy,
+      );
+    });
+
+    testWidgets('Re-filter в профиле ставит напрямую «Всё остальное» профиля',
+        (tester) async {
+      final c = await _pump(
+        tester,
+        profiles: const [RoutingProfile(id: 'p', name: 'Профиль')],
+        subs: subs,
+      );
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tapInCard(tester, 'p', 'Новый маршрут');
+      await tester.tap(find.text('Что'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Заблокировано в РФ (Re-filter)'));
+      await tester.pumpAndSettle();
+
+      expect(
+        (await _storage.getRoutingProfiles()).single.finalOutbound,
+        AppSettings.finalOutboundDirect,
+      );
+      expect(
+        c.read(settingsNotifierProvider).value!.finalOutbound,
+        AppSettings.finalOutboundProxy,
+      );
+    });
+
+    testWidgets('меню: переименовать, подписки, удалить', (tester) async {
+      await _pump(tester, profiles: const [games], subs: subs);
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Переименовать'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Стрим');
+      await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+      await tester.pumpAndSettle();
+      expect((await _storage.getRoutingProfiles()).single.name, 'Стрим');
+      expect(find.text('Стрим'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подписки'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Gaming VPN').last);
+      await tester.tap(find.text('Office VPN'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+      await tester.pumpAndSettle();
+      expect(
+        (await _storage.getRoutingProfiles()).single.subscriptionIds,
+        ['sub-work'],
+      );
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Удалить'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Удалить профиль «Стрим»? Его подписки перейдут на «Основной».',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Удалить'));
+      await tester.pumpAndSettle();
+      expect(await _storage.getRoutingProfiles(), isEmpty);
+      expect(find.text('Стрим'), findsNothing);
     });
   });
 }

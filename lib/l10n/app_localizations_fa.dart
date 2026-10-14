@@ -349,6 +349,86 @@ class AppLocalizationsFa extends AppLocalizations {
   String get routeAppsNeedVpn => 'فقط در حالت VPN کار می‌کند';
 
   @override
+  String get routingProfileMain => 'اصلی';
+
+  @override
+  String get routingProfileScopeAll => 'همهٔ اشتراک‌ها و سرورهای خودتان';
+
+  @override
+  String get routingProfileScopeRest => 'بقیهٔ اشتراک‌ها و سرورهای خودتان';
+
+  @override
+  String routingProfileRouteCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مسیر',
+      zero: 'بدون مسیر',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String routingProfileFinal(String target) {
+    return 'بقیهٔ ترافیک → $target';
+  }
+
+  @override
+  String get routingProfileOff => 'خاموش: پروفایل اصلی اعمال می‌شود';
+
+  @override
+  String get routingProfileNoSubscriptions => 'به هیچ اشتراکی متصل نیست';
+
+  @override
+  String get routingProfileNew => 'پروفایل جدید';
+
+  @override
+  String get routingProfileName => 'نام';
+
+  @override
+  String get routingProfileForSubscriptions => 'برای اشتراک‌ها';
+
+  @override
+  String get routingProfileSubOnMain => 'اکنون با پروفایل اصلی';
+
+  @override
+  String routingProfileSubOnOther(String name) {
+    return 'اکنون با پروفایل «$name»';
+  }
+
+  @override
+  String get routingProfileStartFrom => 'شروع از';
+
+  @override
+  String get routingProfileStartCopy => 'رونوشت پروفایل اصلی';
+
+  @override
+  String get routingProfileStartCopyHint => 'همان مسیرها، سپس برای اشتراک تنظیمشان کنید';
+
+  @override
+  String get routingProfileStartEmpty => 'پروفایل خالی';
+
+  @override
+  String get routingProfileStartEmptyHint => 'فقط بقیهٔ ترافیک از طریق VPN';
+
+  @override
+  String get routingProfileCreate => 'ایجاد';
+
+  @override
+  String get routingProfileNoSubscriptionsYet => 'هنوز اشتراکی نیست: پروفایل روی سرورهای اشتراک‌ها اعمال می‌شود';
+
+  @override
+  String get routingProfileRenameTitle => 'تغییر نام پروفایل';
+
+  @override
+  String get routingProfileSubscriptions => 'اشتراک‌ها';
+
+  @override
+  String routingProfileDeleteConfirm(String name) {
+    return 'پروفایل «$name» حذف شود؟ اشتراک‌هایش به پروفایل اصلی برمی‌گردند.';
+  }
+
+  @override
   String routeSplitExcluded(String apps) {
     return '$apps با پروکسی به تفکیک برنامه از VPN عبور نمی‌کند';
   }

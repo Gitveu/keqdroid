@@ -349,6 +349,86 @@ class AppLocalizationsZh extends AppLocalizations {
   String get routeAppsNeedVpn => '仅在 VPN 模式下生效';
 
   @override
+  String get routingProfileMain => '主方案';
+
+  @override
+  String get routingProfileScopeAll => '所有订阅和手动添加的服务器';
+
+  @override
+  String get routingProfileScopeRest => '其余订阅和手动添加的服务器';
+
+  @override
+  String routingProfileRouteCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条路由',
+      zero: '无路由',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String routingProfileFinal(String target) {
+    return '其他所有 → $target';
+  }
+
+  @override
+  String get routingProfileOff => '已关闭：使用主方案';
+
+  @override
+  String get routingProfileNoSubscriptions => '未关联任何订阅';
+
+  @override
+  String get routingProfileNew => '新建方案';
+
+  @override
+  String get routingProfileName => '名称';
+
+  @override
+  String get routingProfileForSubscriptions => '用于订阅';
+
+  @override
+  String get routingProfileSubOnMain => '当前使用主方案';
+
+  @override
+  String routingProfileSubOnOther(String name) {
+    return '当前使用方案“$name”';
+  }
+
+  @override
+  String get routingProfileStartFrom => '起始内容';
+
+  @override
+  String get routingProfileStartCopy => '主方案的副本';
+
+  @override
+  String get routingProfileStartCopyHint => '相同的路由，之后再针对订阅调整';
+
+  @override
+  String get routingProfileStartEmpty => '空方案';
+
+  @override
+  String get routingProfileStartEmptyHint => '仅其他所有走 VPN';
+
+  @override
+  String get routingProfileCreate => '创建';
+
+  @override
+  String get routingProfileNoSubscriptionsYet => '暂无订阅：方案作用于订阅中的服务器';
+
+  @override
+  String get routingProfileRenameTitle => '重命名方案';
+
+  @override
+  String get routingProfileSubscriptions => '订阅';
+
+  @override
+  String routingProfileDeleteConfirm(String name) {
+    return '删除方案“$name”？其订阅将改用主方案。';
+  }
+
+  @override
   String routeSplitExcluded(String apps) {
     return '分应用代理让 $apps 绕过 VPN';
   }
