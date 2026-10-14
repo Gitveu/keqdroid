@@ -1,5 +1,7 @@
 #include "flutter_window.h"
 
+#include <flutter_windows.h>
+
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
@@ -19,6 +21,27 @@ constexpr UINT kAutostartConnectMsg = WM_APP + 100;
 constexpr UINT_PTR kStartupWatchdogTimerId = 0x4B440001;
 // с запасом на самый медленный честный старт
 constexpr UINT kStartupWatchdogMs = 20000;
+
+// вкладкам нужна ширина узкого телефона (360) рядом с боковой панелью (77)
+constexpr int kMinWindowWidth = 480;
+constexpr int kMinWindowHeight = 580;
+
+void ApplyMinWindowSize(HWND hwnd, MINMAXINFO* info) {
+  const double scale = FlutterDesktopGetDpiForHWND(hwnd) / 96.0;
+  LONG width = static_cast<LONG>(kMinWindowWidth * scale);
+  LONG height = static_cast<LONG>(kMinWindowHeight * scale);
+  // на маленьком экране с крупным масштабом минимум не больше рабочей области
+  MONITORINFO monitor = {sizeof(monitor)};
+  if (::GetMonitorInfo(::MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+                       &monitor)) {
+    const LONG work_width = monitor.rcWork.right - monitor.rcWork.left;
+    const LONG work_height = monitor.rcWork.bottom - monitor.rcWork.top;
+    if (width > work_width) width = work_width;
+    if (height > work_height) height = work_height;
+  }
+  info->ptMinTrackSize.x = width;
+  info->ptMinTrackSize.y = height;
+}
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -95,6 +118,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   // до Flutter и плагинов: любой может ответить сам, и прокси повис бы. на WM_QUERYENDSESSION рано, выключение ещё отменят
   if (message == WM_ENDSESSION && wparam) {
     KeqdisClearSystemProxyOnSessionEnd();
+  }
+  // тоже до плагинов: window_manager отвечает на WM_GETMINMAXINFO сам и дальше не пускает
+  if (message == WM_GETMINMAXINFO) {
+    ApplyMinWindowSize(hwnd, reinterpret_cast<MINMAXINFO*>(lparam));
   }
 
   // Give Flutter, including plugins, an opportunity to handle window messages.
