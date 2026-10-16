@@ -23,6 +23,7 @@ import 'linux_core_paths.dart';
 import 'linux_elevation.dart';
 import 'linux_system_proxy.dart';
 import 'local_port_plan.dart';
+import 'local_proxy_probe.dart';
 import 'socks_credential_generator.dart';
 import 'tun_failure_hints.dart';
 import 'tunnel_backend.dart';
@@ -847,22 +848,11 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
   Future<void> _verifyChainReachable(TunnelSessionRequest request) async {
     await Future<void>.delayed(const Duration(seconds: 3));
     if (_activeMode == null) return;
-    final client = HttpClient();
-    String outcome;
-    try {
-      client.findProxy = (uri) => 'PROXY 127.0.0.1:${request.httpPort}';
-      final req = await client
-          .getUrl(Uri.parse('http://connectivitycheck.gstatic.com/generate_204'))
-          .timeout(const Duration(seconds: 10));
-      final response = await req.close().timeout(const Duration(seconds: 10));
-      await response.drain<void>();
-      if (response.statusCode == 204 || response.statusCode == 200) return;
-      outcome = 'status=${response.statusCode}';
-    } catch (e) {
-      outcome = 'failed ($e)';
-    } finally {
-      client.close(force: true);
-    }
+    final result = await probeLocalHttpProxy(request.httpPort);
+    if (probeWentThrough(result)) return;
+    final outcome = result.status != null
+        ? 'status=${result.status}'
+        : 'failed (${result.error})';
     if (_activeMode == null) return;
     AppLogger.instance.warn(
       'The tunnel is up, but a test request through the core did not go '

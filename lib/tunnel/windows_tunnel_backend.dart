@@ -21,6 +21,7 @@ import 'connection_mode.dart';
 import 'core_capabilities.dart';
 import 'desktop_traffic_stats.dart';
 import 'local_port_plan.dart';
+import 'local_proxy_probe.dart';
 import 'socks_credential_generator.dart';
 import 'tun_failure_hints.dart';
 import 'tunnel_backend.dart';
@@ -1165,24 +1166,10 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   }
 
   Future<String> _probeLocalHttpProxy(int httpPort) async {
-    final client = HttpClient();
-    try {
-      client.findProxy = (uri) => 'PROXY 127.0.0.1:$httpPort';
-      final request = await client
-          .getUrl(
-            Uri.parse('http://connectivitycheck.gstatic.com/generate_204'),
-          )
-          .timeout(const Duration(seconds: 10));
-      final response =
-          await request.close().timeout(const Duration(seconds: 10));
-      final body = await response.toList();
-      return 'status=${response.statusCode} bytes=${body.length}';
-    } catch (e) {
-      return 'FAILED ($e) — Xray HTTP inbound on 127.0.0.1:$httpPort may be down '
-          'or routing blocks the test URL';
-    } finally {
-      client.close(force: true);
-    }
+    final result = await probeLocalHttpProxy(httpPort);
+    if (result.status != null) return 'status=${result.status}';
+    return 'FAILED (${result.error}) — Xray HTTP inbound on 127.0.0.1:$httpPort '
+        'may be down or routing blocks the test URL';
   }
 
   Future<void> _proxyDebugLogViaChannel(String message) async {
