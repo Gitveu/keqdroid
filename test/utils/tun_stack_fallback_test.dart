@@ -10,15 +10,13 @@ import 'package:keqdroid/utils/singbox_tun_config.dart';
 /// поднимается вовсе. Умолчание у нас теперь gvisor, поэтому чужая сборка
 /// keqrnel (`go build ./...` без тега) означала бы «туннель не работает у
 /// всех». Понижаем стек до system — он есть в любой сборке.
-String _config(String stack, {bool ein = false}) =>
+String _config(String stack) =>
     SingBoxTunConfigGen.generate(
       localSocksPort: 2080,
       socksUsername: 'u',
       socksPassword: 'p',
       serverIpToExclude: '198.51.100.10',
-      settings: AppSettings(
-        tun: TunSettings(stack: stack, endpointIndependentNat: ein),
-      ),
+      settings: AppSettings(tun: TunSettings(stack: stack)),
       windows: true,
     );
 
@@ -30,14 +28,11 @@ Map<String, dynamic> _tunInbound(String config) =>
 void main() {
   test('gvisor понижается до system, когда ядро без gVisor', () {
     final result = applyTunStackFallback(
-      _config(TunSettings.stackGvisor, ein: true),
+      _config(TunSettings.stackGvisor),
       gvisorAvailable: false,
     );
     expect(result.downgradedFrom, TunSettings.stackGvisor);
-    final tun = _tunInbound(result.config);
-    expect(tun['stack'], TunSettings.stackSystem);
-    // endpoint_independent_nat живёт только на gvisor/mixed.
-    expect(tun.containsKey('endpoint_independent_nat'), isFalse);
+    expect(_tunInbound(result.config)['stack'], TunSettings.stackSystem);
   });
 
   test('mixed понижается так же', () {

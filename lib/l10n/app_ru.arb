@@ -504,8 +504,6 @@
   "settingsTunStrictRouteAutoHint": "Linux: включён, Windows: выключен",
   "settingsTunStrictRouteOn": "Включён",
   "settingsTunStrictRouteOff": "Выключен",
-  "settingsTunEin": "Endpoint-independent NAT",
-  "settingsTunEinHint": "Full-cone NAT для UDP, помогает P2P и играм. Только стек gVisor/mixed",
   "settingsTunAutoRoute": "Заворачивать трафик в туннель (auto route)",
   "settingsTunAutoRouteHint": "Добавляет системные маршруты в туннель. Без него трафик в TUN не попадает.",
   "settingsTunIpv6": "Не выпускать IPv6 мимо туннеля",

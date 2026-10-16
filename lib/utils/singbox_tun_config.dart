@@ -74,8 +74,6 @@ const _gvisorStacks = {TunSettings.stackGvisor, TunSettings.stackMixed};
     final stack = raw['stack']?.toString();
     if (stack == null || !_gvisorStacks.contains(stack)) continue;
     raw['stack'] = TunSettings.stackSystem;
-    // endpoint_independent_nat работает только на gvisor и mixed
-    raw.remove('endpoint_independent_nat');
     downgradedFrom = stack;
   }
   if (downgradedFrom == null) {
@@ -488,8 +486,6 @@ class SingBoxTunConfigGen {
       'auto_route': tun.autoRoute,
       'strict_route': tun.strictRouteEnabled(windows: isWindows),
       'stack': stack,
-      if (tun.endpointIndependentNat && stack != TunSettings.stackSystem)
-        'endpoint_independent_nat': true,
       if (tun.udpTimeoutSec != TunSettings.defaultUdpTimeoutSec)
         'udp_timeout': '${tun.udpTimeoutSec}s',
     };

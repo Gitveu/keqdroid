@@ -862,12 +862,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsTunStrictRouteOff => 'غیرفعال';
 
   @override
-  String get settingsTunEin => 'NAT مستقل از مقصد';
-
-  @override
-  String get settingsTunEinHint => 'NAT از نوع full-cone برای UDP — به بازی و P2P کمک می‌کند. فقط با پشتهٔ gVisor یا mixed';
-
-  @override
   String get settingsTunAutoRoute => 'مسیریابی خودکار (auto route)';
 
   @override

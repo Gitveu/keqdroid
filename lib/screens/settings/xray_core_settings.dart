@@ -1321,24 +1321,6 @@ class _XrayTunSection extends ConsumerWidget {
                 ],
               ),
             ),
-            if (xray)
-              AnimatedOpacity(
-                opacity: tun.stack != TunSettings.stackSystem ? 1 : 0.45,
-                duration: const Duration(milliseconds: 180),
-                child: SwitchListTile(
-                  value: tun.endpointIndependentNat,
-                  onChanged: tun.stack != TunSettings.stackSystem
-                      ? (v) => _saveXrayTun(
-                            ref,
-                            settings,
-                            tun.copyWith(endpointIndependentNat: v),
-                          )
-                      : null,
-                  activeThumbColor: accent,
-                  title: Text(l10n.settingsTunEin),
-                  subtitle: Text(l10n.settingsTunEinHint),
-                ),
-              ),
             SwitchListTile(
               value: tun.autoRoute,
               onChanged: (v) =>

@@ -5,7 +5,6 @@ class TunSettings {
   final int mtu;
   // auto выключает strict_route на Windows: с ним ломаются маршруты при втором VPN вроде Tailscale
   final String strictRoute;
-  final bool endpointIndependentNat;
   final int udpTimeoutSec;
   final bool autoRoute;
 
@@ -15,7 +14,6 @@ class TunSettings {
     this.stack = defaultStack,
     this.mtu = defaultMtu,
     this.strictRoute = strictRouteAuto,
-    this.endpointIndependentNat = false,
     this.udpTimeoutSec = defaultUdpTimeoutSec,
     this.autoRoute = true,
     this.blockIpv6Leak = true,
@@ -79,7 +77,6 @@ class TunSettings {
         'stack': stack,
         'mtu': mtu,
         'strictRoute': strictRoute,
-        'endpointIndependentNat': endpointIndependentNat,
         'udpTimeoutSec': udpTimeoutSec,
         'autoRoute': autoRoute,
         'blockIpv6Leak': blockIpv6Leak,
@@ -102,7 +99,6 @@ class TunSettings {
       stack: stack,
       mtu: mtu,
       strictRoute: normalizeStrictRoute(json['strictRoute'] as String?),
-      endpointIndependentNat: json['endpointIndependentNat'] as bool? ?? false,
       udpTimeoutSec: clampUdpTimeout(
         (json['udpTimeoutSec'] as num?)?.toInt() ?? defaultUdpTimeoutSec,
       ),
@@ -115,7 +111,6 @@ class TunSettings {
     String? stack,
     int? mtu,
     String? strictRoute,
-    bool? endpointIndependentNat,
     int? udpTimeoutSec,
     bool? autoRoute,
     bool? blockIpv6Leak,
@@ -124,8 +119,6 @@ class TunSettings {
         stack: stack ?? this.stack,
         mtu: mtu ?? this.mtu,
         strictRoute: strictRoute ?? this.strictRoute,
-        endpointIndependentNat:
-            endpointIndependentNat ?? this.endpointIndependentNat,
         udpTimeoutSec: udpTimeoutSec ?? this.udpTimeoutSec,
         autoRoute: autoRoute ?? this.autoRoute,
         blockIpv6Leak: blockIpv6Leak ?? this.blockIpv6Leak,
@@ -139,7 +132,6 @@ class TunSettings {
           stack == other.stack &&
           mtu == other.mtu &&
           strictRoute == other.strictRoute &&
-          endpointIndependentNat == other.endpointIndependentNat &&
           udpTimeoutSec == other.udpTimeoutSec &&
           autoRoute == other.autoRoute &&
           blockIpv6Leak == other.blockIpv6Leak;
@@ -149,7 +141,6 @@ class TunSettings {
         stack,
         mtu,
         strictRoute,
-        endpointIndependentNat,
         udpTimeoutSec,
         autoRoute,
         blockIpv6Leak,

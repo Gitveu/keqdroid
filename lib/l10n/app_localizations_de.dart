@@ -866,12 +866,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsTunStrictRouteOff => 'Aus';
 
   @override
-  String get settingsTunEin => 'Endpoint-independent NAT';
-
-  @override
-  String get settingsTunEinHint => 'Full-Cone-NAT für UDP, hilft bei P2P und Spielen. Nur mit dem gVisor- oder mixed-Stack';
-
-  @override
   String get settingsTunAutoRoute => 'Automatisches Routing (auto route)';
 
   @override

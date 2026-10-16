@@ -385,30 +385,29 @@ void main() {
     expect(inbound.containsKey('udp_timeout'), isFalse);
   });
 
-  test('tun settings flow into the inbound (stack, mtu, udp_timeout, EIN)', () {
+  test('tun settings flow into the inbound (stack, mtu, udp_timeout)', () {
     final inbound = tunInboundFor(const AppSettings(
       tun: TunSettings(
         stack: 'gvisor',
         mtu: 9000,
         strictRoute: TunSettings.strictRouteOn,
-        endpointIndependentNat: true,
         udpTimeoutSec: 60,
       ),
     ));
     expect(inbound['stack'], 'gvisor');
     expect(inbound['mtu'], 9000);
     expect(inbound['strict_route'], isTrue);
-    expect(inbound['endpoint_independent_nat'], isTrue);
     // sing-box 1.13 (keqrnel): badoption.Duration — строка вида "60s"
     expect(inbound['udp_timeout'], '60s');
   });
 
-  test('endpoint_independent_nat is dropped on the system stack', () {
-    // system-стек его не поддерживает — не шлём ядру бессмысленный ключ
-    final inbound = tunInboundFor(const AppSettings(
-      tun: TunSettings(stack: 'system', endpointIndependentNat: true),
-    ));
-    expect(inbound.containsKey('endpoint_independent_nat'), isFalse);
+  // sing-box принимает поле молча, но не читает его с 1.11 (docs/configuration/inbound/tun.md)
+  test('endpoint_independent_nat is never written', () {
+    for (final stack in TunSettings.stacks) {
+      final inbound = tunInboundFor(AppSettings(tun: TunSettings(stack: stack)));
+      expect(inbound.containsKey('endpoint_independent_nat'), isFalse,
+          reason: stack);
+    }
   });
 
   test('strict route on/off overrides the platform default', () {
@@ -512,16 +511,11 @@ void main() {
       socksPassword: 'p',
       serverIpToExclude: '1.2.3.4',
       settings: const AppSettings(
-        tun: TunSettings(
-          stack: TunSettings.stackMips,
-          endpointIndependentNat: true,
-        ),
+        tun: TunSettings(stack: TunSettings.stackMips),
       ),
     );
     final inbound = ((jsonDecode(json) as Map<String, dynamic>)['inbounds']
         as List).first as Map<String, dynamic>;
     expect(inbound['stack'], TunSettings.stackGvisor);
-    // full-cone NAT считается по подставленному стеку, а не по сохранённому.
-    expect(inbound['endpoint_independent_nat'], isTrue);
   });
 }

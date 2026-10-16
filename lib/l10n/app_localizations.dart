@@ -1613,18 +1613,6 @@ abstract class AppLocalizations {
   /// **'Disabled'**
   String get settingsTunStrictRouteOff;
 
-  /// No description provided for @settingsTunEin.
-  ///
-  /// In en, this message translates to:
-  /// **'Endpoint-independent NAT'**
-  String get settingsTunEin;
-
-  /// No description provided for @settingsTunEinHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Full-cone NAT for UDP, helps P2P and games. gVisor/mixed stack only'**
-  String get settingsTunEinHint;
-
   /// No description provided for @settingsTunAutoRoute.
   ///
   /// In en, this message translates to:

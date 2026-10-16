@@ -11,7 +11,6 @@ void main() {
     expect(tun.stack, 'gvisor');
     expect(tun.mtu, 9000);
     expect(tun.strictRoute, 'auto');
-    expect(tun.endpointIndependentNat, isFalse);
     expect(tun.udpTimeoutSec, 300);
     expect(tun.autoRoute, isTrue);
     expect(tun.isDefault, isTrue);
@@ -34,11 +33,19 @@ void main() {
       stack: 'gvisor',
       mtu: 9000,
       strictRoute: 'on',
-      endpointIndependentNat: true,
       udpTimeoutSec: 60,
       autoRoute: false,
     );
     expect(TunSettings.fromJson(tun.toJson()), tun);
+  });
+
+  test('ключ убранного переключателя EIN в сохранённых настройках не мешает', () {
+    final tun = TunSettings.fromJson({
+      ...const TunSettings().toJson(),
+      'endpointIndependentNat': true,
+    });
+    expect(tun, const TunSettings());
+    expect(tun.toJson().containsKey('endpointIndependentNat'), isFalse);
   });
 
   test('fromJson sanitizes garbage back to safe values', () {

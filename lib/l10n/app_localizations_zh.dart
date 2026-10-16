@@ -862,12 +862,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTunStrictRouteOff => '关闭';
 
   @override
-  String get settingsTunEin => 'Endpoint-independent NAT';
-
-  @override
-  String get settingsTunEinHint => '为 UDP 提供全锥形 NAT，有助于 P2P 和游戏。仅适用于 gVisor/mixed 协议栈';
-
-  @override
   String get settingsTunAutoRoute => '自动路由';
 
   @override

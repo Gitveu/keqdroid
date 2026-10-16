@@ -252,8 +252,6 @@
   "settingsTunStrictRouteAutoHint": "لینوکس: روشن، ویندوز: خاموش",
   "settingsTunStrictRouteOn": "فعال",
   "settingsTunStrictRouteOff": "غیرفعال",
-  "settingsTunEin": "NAT مستقل از مقصد",
-  "settingsTunEinHint": "NAT از نوع full-cone برای UDP — به بازی و P2P کمک می‌کند. فقط با پشتهٔ gVisor یا mixed",
   "settingsTunAutoRoute": "مسیریابی خودکار (auto route)",
   "settingsTunAutoRouteHint": "مسیرهای سیستم را به تونل می‌افزاید. بدون آن چیزی به TUN نمی‌رسد.",
   "settingsTunIpv6": "نگه‌داشتن IPv6 داخل تونل",

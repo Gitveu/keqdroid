@@ -549,8 +549,6 @@
   "settingsTunStrictRouteAutoHint": "Linux: on, Windows: off",
   "settingsTunStrictRouteOn": "Enabled",
   "settingsTunStrictRouteOff": "Disabled",
-  "settingsTunEin": "Endpoint-independent NAT",
-  "settingsTunEinHint": "Full-cone NAT for UDP, helps P2P and games. gVisor/mixed stack only",
   "settingsTunAutoRoute": "Auto route",
   "settingsTunAutoRouteHint": "Adds system routes into the tunnel. Without it nothing reaches TUN.",
   "settingsTunIpv6": "Keep IPv6 inside the tunnel",

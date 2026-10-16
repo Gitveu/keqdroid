@@ -876,12 +876,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsTunStrictRouteOff => 'Выключен';
 
   @override
-  String get settingsTunEin => 'Endpoint-independent NAT';
-
-  @override
-  String get settingsTunEinHint => 'Full-cone NAT для UDP, помогает P2P и играм. Только стек gVisor/mixed';
-
-  @override
   String get settingsTunAutoRoute => 'Заворачивать трафик в туннель (auto route)';
 
   @override
