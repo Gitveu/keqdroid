@@ -711,7 +711,10 @@ class XrayCoreSettings {
     }
 
     range('maxConcurrency', xmuxMaxConcurrency);
-    range('maxConnections', xmuxMaxConnections);
+    // с обоими xray не разбирает конфиг: maxConnections cannot be specified together with maxConcurrency
+    if (xmuxMaxConcurrency.trim().isEmpty) {
+      range('maxConnections', xmuxMaxConnections);
+    }
     range('cMaxReuseTimes', xmuxCMaxReuseTimes);
     range('hMaxRequestTimes', xmuxHMaxRequestTimes);
     range('hMaxReusableSecs', xmuxHMaxReusableSecs);

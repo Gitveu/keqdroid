@@ -1343,6 +1343,18 @@ abstract class AppLocalizations {
   /// **'Max connections'**
   String get settingsXrayXmuxMaxConnections;
 
+  /// No description provided for @settingsXrayXmuxOneOfTwo.
+  ///
+  /// In en, this message translates to:
+  /// **'Only one of the two'**
+  String get settingsXrayXmuxOneOfTwo;
+
+  /// No description provided for @settingsXrayXmuxConnectionsIgnored.
+  ///
+  /// In en, this message translates to:
+  /// **'Ignored while max concurrency is set'**
+  String get settingsXrayXmuxConnectionsIgnored;
+
   /// No description provided for @settingsXrayXmuxCMaxReuseTimes.
   ///
   /// In en, this message translates to:

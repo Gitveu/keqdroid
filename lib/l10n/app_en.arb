@@ -504,6 +504,8 @@
   "settingsXrayResetDone": "Xray core settings restored",
   "settingsXrayXmuxMaxConcurrency": "Max concurrency",
   "settingsXrayXmuxMaxConnections": "Max connections",
+  "settingsXrayXmuxOneOfTwo": "Only one of the two",
+  "settingsXrayXmuxConnectionsIgnored": "Ignored while max concurrency is set",
   "settingsXrayXmuxCMaxReuseTimes": "Connection reuse limit",
   "settingsXrayXmuxHMaxRequestTimes": "Max requests per stream",
   "settingsXrayXmuxHMaxReusableSecs": "Stream reuse time (sec)",

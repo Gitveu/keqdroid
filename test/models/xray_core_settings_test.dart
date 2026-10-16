@@ -210,6 +210,22 @@ void main() {
       expect(const XrayCoreSettings().buildXmuxMap(), isNull);
     });
 
+    // xray 26 не разбирает конфиг, где заданы оба: maxConnections cannot be specified together with maxConcurrency
+    test('buildXmuxMap never writes maxConnections together with maxConcurrency', () {
+      const both = XrayCoreSettings(
+        xmuxEnabled: true,
+        xmuxMaxConcurrency: '16-32',
+        xmuxMaxConnections: '4',
+      );
+      expect(both.buildXmuxMap(), {'maxConcurrency': '16-32'});
+
+      const connectionsOnly = XrayCoreSettings(
+        xmuxEnabled: true,
+        xmuxMaxConnections: '4',
+      );
+      expect(connectionsOnly.buildXmuxMap(), {'maxConnections': 4});
+    });
+
     test('round-trips JSON', () {
       const core = XrayCoreSettings(
         xmuxEnabled: true,

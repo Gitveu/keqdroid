@@ -727,6 +727,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsXrayXmuxMaxConnections => 'بیشینهٔ اتصال‌ها';
 
   @override
+  String get settingsXrayXmuxOneOfTwo => 'فقط یکی از این دو';
+
+  @override
+  String get settingsXrayXmuxConnectionsIgnored => 'تا وقتی بیشینهٔ هم‌زمانی پر است، نادیده گرفته می‌شود';
+
+  @override
   String get settingsXrayXmuxCMaxReuseTimes => 'حد استفادهٔ مجدد از اتصال';
 
   @override

@@ -731,6 +731,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsXrayXmuxMaxConnections => 'Max connections';
 
   @override
+  String get settingsXrayXmuxOneOfTwo => 'Only one of the two';
+
+  @override
+  String get settingsXrayXmuxConnectionsIgnored => 'Ignored while max concurrency is set';
+
+  @override
   String get settingsXrayXmuxCMaxReuseTimes => 'Connection reuse limit';
 
   @override

@@ -459,6 +459,8 @@
   "settingsXrayResetDone": "Настройки ядра Xray восстановлены",
   "settingsXrayXmuxMaxConcurrency": "Макс. параллельность",
   "settingsXrayXmuxMaxConnections": "Макс. соединений",
+  "settingsXrayXmuxOneOfTwo": "Только одно из двух",
+  "settingsXrayXmuxConnectionsIgnored": "Не учитывается, пока заполнена параллельность",
   "settingsXrayXmuxCMaxReuseTimes": "Лимит переиспользования",
   "settingsXrayXmuxHMaxRequestTimes": "Макс. запросов на поток",
   "settingsXrayXmuxHMaxReusableSecs": "Время жизни потока (сек)",

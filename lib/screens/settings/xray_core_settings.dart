@@ -481,6 +481,8 @@ class _XrayXmuxSection extends ConsumerWidget {
         ref.watch(settingsNotifierProvider).value ?? const AppSettings();
     final core = settings.xrayCore;
     final accent = AppTheme.accent(context);
+    final concurrencySet = core.xmuxMaxConcurrency.trim().isNotEmpty;
+    final connectionsSet = core.xmuxMaxConnections.trim().isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -544,6 +546,10 @@ class _XrayXmuxSection extends ConsumerWidget {
                                     label: l10n.settingsXrayXmuxMaxConcurrency,
                                     hint: '16-32',
                                     initialValue: core.xmuxMaxConcurrency,
+                                    enabled: concurrencySet || !connectionsSet,
+                                    helperText: !concurrencySet && connectionsSet
+                                        ? l10n.settingsXrayXmuxOneOfTwo
+                                        : null,
                                     onSave: (v) => _saveXrayCore(ref, 
                                       settings,
                                       core.copyWith(xmuxMaxConcurrency: v),
@@ -557,6 +563,13 @@ class _XrayXmuxSection extends ConsumerWidget {
                                     label: l10n.settingsXrayXmuxMaxConnections,
                                     hint: '0',
                                     initialValue: core.xmuxMaxConnections,
+                                    enabled: connectionsSet || !concurrencySet,
+                                    helperText: concurrencySet && !connectionsSet
+                                        ? l10n.settingsXrayXmuxOneOfTwo
+                                        : null,
+                                    errorText: concurrencySet && connectionsSet
+                                        ? l10n.settingsXrayXmuxConnectionsIgnored
+                                        : null,
                                     onSave: (v) => _saveXrayCore(ref, 
                                       settings,
                                       core.copyWith(xmuxMaxConnections: v),
@@ -1449,6 +1462,9 @@ class _XrayCoreTextField extends StatefulWidget {
     required this.initialValue,
     required this.onSave,
     this.keyboardType = TextInputType.text,
+    this.enabled = true,
+    this.helperText,
+    this.errorText,
   });
 
   final String label;
@@ -1456,6 +1472,9 @@ class _XrayCoreTextField extends StatefulWidget {
   final String initialValue;
   final ValueChanged<String> onSave;
   final TextInputType keyboardType;
+  final bool enabled;
+  final String? helperText;
+  final String? errorText;
 
   @override
   State<_XrayCoreTextField> createState() => _XrayCoreTextFieldState();
@@ -1491,6 +1510,7 @@ class _XrayCoreTextFieldState extends State<_XrayCoreTextField> {
       padding: const EdgeInsets.only(bottom: 8),
       child: TextField(
         controller: _ctrl,
+        enabled: widget.enabled,
         keyboardType: widget.keyboardType,
         textDirection: technicalInputDirection,
         style: Theme.of(context)
@@ -1500,6 +1520,10 @@ class _XrayCoreTextFieldState extends State<_XrayCoreTextField> {
         decoration: InputDecoration(
           labelText: widget.label,
           hintText: widget.hint,
+          helperText: widget.helperText,
+          helperMaxLines: 3,
+          errorText: widget.errorText,
+          errorMaxLines: 3,
           isDense: true,
           filled: true,
           fillColor: AppTheme.card(context),

@@ -731,6 +731,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsXrayXmuxMaxConnections => 'Max. Verbindungen';
 
   @override
+  String get settingsXrayXmuxOneOfTwo => 'Nur eines von beiden';
+
+  @override
+  String get settingsXrayXmuxConnectionsIgnored => 'Wird ignoriert, solange die Parallelität gesetzt ist';
+
+  @override
   String get settingsXrayXmuxCMaxReuseTimes => 'Limit für Verbindungs-Wiederverwendung';
 
   @override

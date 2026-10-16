@@ -207,6 +207,8 @@
   "settingsXrayResetDone": "تنظیمات هستهٔ Xray بازنشانی شد",
   "settingsXrayXmuxMaxConcurrency": "بیشینهٔ هم‌زمانی",
   "settingsXrayXmuxMaxConnections": "بیشینهٔ اتصال‌ها",
+  "settingsXrayXmuxOneOfTwo": "فقط یکی از این دو",
+  "settingsXrayXmuxConnectionsIgnored": "تا وقتی بیشینهٔ هم‌زمانی پر است، نادیده گرفته می‌شود",
   "settingsXrayXmuxCMaxReuseTimes": "حد استفادهٔ مجدد از اتصال",
   "settingsXrayXmuxHMaxRequestTimes": "بیشینهٔ درخواست در هر جریان",
   "settingsXrayXmuxHMaxReusableSecs": "مدت استفادهٔ مجدد جریان (ثانیه)",

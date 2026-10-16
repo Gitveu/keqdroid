@@ -727,6 +727,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsXrayXmuxMaxConnections => '最大连接数';
 
   @override
+  String get settingsXrayXmuxOneOfTwo => '两项只能填一项';
+
+  @override
+  String get settingsXrayXmuxConnectionsIgnored => '已填写最大并发数时不生效';
+
+  @override
   String get settingsXrayXmuxCMaxReuseTimes => '连接复用上限';
 
   @override

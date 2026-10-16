@@ -741,6 +741,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsXrayXmuxMaxConnections => 'Макс. соединений';
 
   @override
+  String get settingsXrayXmuxOneOfTwo => 'Только одно из двух';
+
+  @override
+  String get settingsXrayXmuxConnectionsIgnored => 'Не учитывается, пока заполнена параллельность';
+
+  @override
   String get settingsXrayXmuxCMaxReuseTimes => 'Лимит переиспользования';
 
   @override
