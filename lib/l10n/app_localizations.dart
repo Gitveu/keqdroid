@@ -4544,8 +4544,8 @@ abstract class AppLocalizations {
   /// No description provided for @chainPickEmpty.
   ///
   /// In en, this message translates to:
-  /// **'No servers can be a chain node here. VLESS, VMess, Trojan, Shadowsocks and Hysteria2 work; AmneziaWG and ready-made JSON configs do not.'**
-  String get chainPickEmpty;
+  /// **'No servers here can be a chain node for {core}. Another core can be picked in About.'**
+  String chainPickEmpty(String core);
 
   /// No description provided for @chainEdit.
   ///
@@ -4604,7 +4604,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsCoreMihomoSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Clash-compatible core. Chains and ready-made xray configs stay on Xray.'**
+  /// **'Clash-compatible core. Ready-made xray configs stay on Xray.'**
   String get settingsCoreMihomoSubtitle;
 
   /// No description provided for @settingsCoreHint.
@@ -4685,11 +4685,17 @@ abstract class AppLocalizations {
   /// **'The active server is a ready-made Xray JSON config, so it runs on libxray whatever core you pick. mihomo needs a subscription with plain links.'**
   String get settingsCoreSkipCustom;
 
-  /// No description provided for @settingsCoreSkipChain.
+  /// No description provided for @settingsCoreSkipChainXrayOnly.
   ///
   /// In en, this message translates to:
-  /// **'The active server is a proxy chain: its hops are linked by Xray\'s dialerProxy, so it runs on libxray no matter which core is selected.'**
-  String get settingsCoreSkipChain;
+  /// **'The active server is a proxy chain with nodes mihomo cannot link, so it runs on Xray no matter which core is selected.'**
+  String get settingsCoreSkipChainXrayOnly;
+
+  /// No description provided for @settingsCoreSkipChainMihomoOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'The active server is a proxy chain with a node only mihomo can link, such as an AmneziaWG profile, so it runs on mihomo no matter which core is selected.'**
+  String get settingsCoreSkipChainMihomoOnly;
 
   /// No description provided for @settingsCoreSkipAwg.
   ///

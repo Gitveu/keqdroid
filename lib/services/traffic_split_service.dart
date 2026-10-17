@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../core/connections_poll_stats.dart';
 import '../models/traffic_split.dart';
+import '../utils/mihomo_config_gen.dart';
 
 enum TrafficChannel {
   vpn,
@@ -128,7 +129,9 @@ class TrafficSplitSource {
 
 // DIRECT ищем по всей цепочке: с группами из yaml рядом стоит имя группы, а порядок у версий ядра разный
 TrafficChannel channelOfChains(List<String> chains) {
-  if (chains.isEmpty) return TrafficChannel.unknown;
+  if (chains.isEmpty || chains.any(MihomoConfigGen.isChainHop)) {
+    return TrafficChannel.unknown;
+  }
   for (final raw in chains) {
     final tag = raw.trim().toUpperCase();
     if (tag == 'DIRECT') return TrafficChannel.direct;

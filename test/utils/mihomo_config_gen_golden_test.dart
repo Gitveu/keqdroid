@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/models/app_settings.dart';
 import 'package:keqdroid/models/xray_core_settings.dart';
 import 'package:keqdroid/utils/mihomo_config_gen.dart';
+import 'package:keqdroid/utils/proxy_chain.dart';
 import 'package:keqdroid/utils/socks5_credentials.dart';
 
 /// Побайтовая отсечка на конфиг mihomo целиком — пара к
@@ -183,6 +184,40 @@ void main() {
         _settings,
         socksPort: 2080,
         httpPort: 2081,
+      );
+    });
+
+    // узлы связаны dialer-proxy, выход остаётся proxy, адреса всех трёх идут напрямую
+    _golden('chain-reality-awg-hy2', () {
+      return MihomoConfigGen.generate(
+        ProxyChainConfig(
+          name: 'chain',
+          hops: [
+            const ProxyChainHop(
+              config: 'vless://$_uuid@198.51.100.20:443?type=tcp&security=reality'
+                  '&sni=decoy.example&pbk=publickey&sid=aabb&fp=chrome'
+                  '&flow=xtls-rprx-vision#entry',
+            ),
+            const ProxyChainHop(
+              config: '[Interface]\n'
+                  'PrivateKey = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA=\n'
+                  'Address = 10.8.1.2/32\n'
+                  'Jc = 4\nJmin = 40\nJmax = 70\n'
+                  '\n'
+                  '[Peer]\n'
+                  'PublicKey = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA=\n'
+                  'Endpoint = 198.51.100.21:51820\n'
+                  'AllowedIPs = 0.0.0.0/0\n',
+            ),
+            const ProxyChainHop(
+              config: 'hy2://secret@exit.example:8443?sni=exit.example#exit',
+            ),
+          ],
+        ).encode(),
+        _settings,
+        socksPort: 2080,
+        httpPort: 2081,
+        resolvedServerIp: '198.51.100.20',
       );
     });
   });

@@ -120,6 +120,7 @@ abstract final class MultiPingConfig {
       base ??= config;
 
       final renamed = <String, String>{};
+      final probeProxies = <Map<String, dynamic>>[];
       for (final raw in (config['proxies'] as List? ?? const [])) {
         final proxy = Map<String, dynamic>.from(raw as Map);
         final name = proxy['name']?.toString();
@@ -127,8 +128,14 @@ abstract final class MultiPingConfig {
           renamed[name] = '$name-$i';
           proxy['name'] = '$name-$i';
         }
-        proxies.add(proxy);
+        probeProxies.add(proxy);
       }
+      // без этого звено цепочки ссылалось бы на имя до переименования, и ядро не нашло бы его
+      for (final proxy in probeProxies) {
+        final via = renamed[proxy['dialer-proxy']?.toString()];
+        if (via != null) proxy['dialer-proxy'] = via;
+      }
+      proxies.addAll(probeProxies);
 
       final ruleSet = 'probe-$i';
       subRules[ruleSet] = [

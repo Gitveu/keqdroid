@@ -2413,7 +2413,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chainPickSearch => 'Поиск по серверам';
 
   @override
-  String get chainPickEmpty => 'Нет серверов, которые могут быть узлом цепочки. Подходят VLESS, VMess, Trojan, Shadowsocks и Hysteria2; AmneziaWG и готовые JSON-конфиги не подходят.';
+  String chainPickEmpty(String core) {
+    return 'Нет серверов, которые $core может поставить в цепочку. Другое ядро выбирается в «О приложении».';
+  }
 
   @override
   String get chainEdit => 'Изменить цепочку';
@@ -2458,7 +2460,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsCoreXraySubtitle => 'Ядро по умолчанию. Умеет все типы серверов, включая цепочки и готовые JSON-конфиги.';
 
   @override
-  String get settingsCoreMihomoSubtitle => 'Ядро, совместимое с Clash. Цепочки и готовые конфиги xray остаются на Xray.';
+  String get settingsCoreMihomoSubtitle => 'Ядро, совместимое с Clash. Готовые конфиги xray остаются на Xray.';
 
   @override
   String get settingsCoreHint => 'Применится на следующем подключении, текущая сессия не перезапускается.';
@@ -2500,7 +2502,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsCoreSkipCustom => 'У активного сервера готовый JSON-конфиг Xray: он идёт через libxray при любом выборе ядра. Для mihomo нужна подписка с обычными ссылками.';
 
   @override
-  String get settingsCoreSkipChain => 'У активного сервера цепочка: её узлы связаны через dialerProxy Xray, поэтому она идёт через libxray при любом выборе ядра.';
+  String get settingsCoreSkipChainXrayOnly => 'У активного сервера цепочка, и часть её узлов mihomo связать не может: она исполняется на Xray при любом выборе ядра.';
+
+  @override
+  String get settingsCoreSkipChainMihomoOnly => 'В цепочке активного сервера есть узел, который связывает только mihomo, например профиль AmneziaWG: она исполняется на mihomo при любом выборе ядра.';
 
   @override
   String get settingsCoreSkipAwg => 'У активного сервера профиль AmneziaWG: его исполняет mihomo при любом выборе ядра.';

@@ -9,6 +9,7 @@ import '../platform/vpn_native_bridge.dart';
 import '../tunnel/linux_tunnel_backend.dart';
 import '../tunnel/windows_tunnel_backend.dart';
 import '../utils/mihomo_api_session.dart';
+import '../utils/mihomo_config_gen.dart';
 import 'connections_tracker.dart';
 import 'debug_log_service.dart';
 import 'xray_route_decisions.dart';
@@ -222,6 +223,8 @@ class ConnectionsService {
     final chains = (json['chains'] is List)
         ? (json['chains'] as List).map((e) => e.toString()).toList()
         : const <String>[];
+    // у xray звенья цепочки в журнал не пишутся, у mihomo это его собственное соединение к следующему узлу
+    if (chains.any(MihomoConfigGen.isChainHop)) return null;
 
     final ruleType = json['rule']?.toString().trim() ?? '';
     final rulePayload = json['rulePayload']?.toString().trim() ?? '';

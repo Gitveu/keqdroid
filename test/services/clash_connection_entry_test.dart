@@ -64,4 +64,14 @@ void main() {
       isNull,
     );
   });
+
+  // у xray звенья цепочки в журнал не попадают, у mihomo это его Inner-соединение к следующему узлу
+  test('соединение звена цепочки не показывается', () {
+    final hop = {
+      ...conn(rule: ''),
+      'chains': ['keq-chain-0'],
+    };
+    expect(ConnectionsService.entryFromClashJson(hop), isNull);
+    expect(ConnectionsService.entryFromClashJson(conn(rule: '')), isNotNull);
+  });
 }

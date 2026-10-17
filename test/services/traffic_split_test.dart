@@ -45,6 +45,12 @@ void main() {
     test('пустая цепочка — ядро ещё не решило', () {
       expect(channelOfChains([]), TrafficChannel.unknown);
     });
+
+    // mihomo пишет соединение звена цепочки отдельно, и трафик выхода посчитался бы дважды
+    test('соединение звена цепочки не считается', () {
+      expect(channelOfChains(['keq-chain-0']), TrafficChannel.unknown);
+      expect(channelOfChains(['keq-chain-keq-srv-0-0']), TrafficChannel.unknown);
+    });
   });
 
   group('разбор ответа /connections', () {

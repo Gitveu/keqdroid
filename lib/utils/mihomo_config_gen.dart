@@ -13,6 +13,7 @@ import 'fake_ip.dart';
 import 'hysteria_uri.dart';
 import 'mieru_uri.dart';
 import 'process_name_utils.dart';
+import 'proxy_chain.dart';
 import 'route_servers.dart';
 import 'routing_entry.dart';
 import 'rule_lists.dart';
@@ -155,7 +156,8 @@ class MihomoConfigGen {
       );
     }
 
-    final proxy = buildProxy(input.trim());
+    final proxies = buildProxies(input.trim());
+    final addresses = _serverAddresses(proxies);
 
     return <String, dynamic>{
       ..._inbound(
@@ -191,7 +193,7 @@ class MihomoConfigGen {
             routeServers: routeServers,
           ),
         },
-      'proxies': [proxy, ...buildRouteServerProxies(routeServers)],
+      'proxies': [...proxies, ...buildRouteServerProxies(routeServers)],
       if (!ruleLists.isEmpty ||
           routeServers.isNotEmpty ||
           appRules.isNotEmpty)
@@ -202,7 +204,8 @@ class MihomoConfigGen {
         },
       'rules': buildRules(
         settings,
-        serverAddress: proxy['server']?.toString() ?? '',
+        serverAddress: addresses.firstOrNull ?? '',
+        chainAddresses: addresses.skip(1).toList(),
         resolvedServerIp: resolvedServerIp,
         routingMode: effectiveRoutingMode,
         managedProcessNames: processRules ? managedProcessNames : const [],
@@ -280,8 +283,7 @@ class MihomoConfigGen {
           serverAddress: clash.address,
           resolvedServerIp: resolvedServerIp,
         ),
-        for (final server in routeServers)
-          ...buildServerDirectRules(serverAddress: server.address),
+        ...routeServerDirectRules(routeServers),
         if (tun != null) 'IP-CIDR,$tunInterfaceRange,DIRECT,no-resolve',
       ],
       appendRules: buildUserRules(
@@ -462,7 +464,7 @@ class MihomoConfigGen {
     required int socksPort,
     bool httpInbound = false,
   }) {
-    final proxy = buildProxy(input.trim());
+    final proxies = buildProxies(input.trim());
     return jsonEncode(<String, dynamic>{
       if (httpInbound) 'port': socksPort else 'socks-port': socksPort,
       'bind-address': '127.0.0.1',
@@ -474,7 +476,7 @@ class MihomoConfigGen {
       'find-process-mode': 'off',
       'geo-auto-update': false,
       'dns': _pingDns(),
-      'proxies': [proxy],
+      'proxies': proxies,
       'rules': ['MATCH,$proxyName'],
     });
   }
@@ -621,6 +623,40 @@ class MihomoConfigGen {
 
   static String _logLevel(String xrayLevel) =>
       xrayLevel == 'none' ? 'silent' : xrayLevel;
+
+  // звено цепочки по префиксу узнают соединения и счётчик трафика: mihomo пишет его соединение отдельно
+  // как Inner (component/proxydialer), и трафик выхода посчитался бы дважды
+  static const chainHopPrefix = 'keq-chain-';
+
+  static bool isChainHop(String proxy) => proxy.startsWith(chainHopPrefix);
+
+  // выход остаётся под именем, на которое смотрят правила. dialer-proxy умеет любой исходящий (adapter/outbound/base.go)
+  static List<Map<String, dynamic>> buildProxies(
+    String input, {
+    String name = proxyName,
+  }) {
+    final chain = ProxyChainConfig.tryParse(input);
+    if (chain == null) return [{...buildProxy(input), 'name': name}];
+    if (chain.hops.isEmpty) throw ArgumentError('Proxy chain has no nodes');
+    String hop(int i) =>
+        name == proxyName ? '$chainHopPrefix$i' : '$chainHopPrefix$name-$i';
+    final last = chain.hops.length - 1;
+    return [
+      for (var i = 0; i <= last; i++)
+        {
+          ...buildProxy(chain.hops[i].config.trim()),
+          'name': i == last ? name : hop(i),
+          if (i > 0) 'dialer-proxy': hop(i - 1),
+        },
+    ];
+  }
+
+  // мимо туннеля все узлы, как у xray: обращение к промежуточному закольцевалось бы через цепочку
+  static List<String> _serverAddresses(List<Map<String, dynamic>> proxies) => [
+        for (final proxy in proxies)
+          if ((proxy['server']?.toString() ?? '').isNotEmpty)
+            proxy['server'].toString(),
+      ];
 
   static Map<String, dynamic> buildProxy(String link) {
     if (AwgProfile.isAwgConfig(link)) return _amneziaWg(link);
@@ -1620,7 +1656,22 @@ class MihomoConfigGen {
   ) =>
       [
         for (final server in servers)
-          {...buildProxy(server.config.trim()), 'name': server.tag},
+          ...buildProxies(server.config.trim(), name: server.tag),
+      ];
+
+  // address у цепочки это её входной узел
+  static List<String> routeServerDirectRules(
+    List<RouteServerOutbound> servers,
+  ) =>
+      [
+        for (final server in servers) ...[
+          ...buildServerDirectRules(serverAddress: server.address),
+          if (ProxyChainConfig.looksLikeChain(server.config))
+            for (final address in _serverAddresses(
+              buildProxies(server.config.trim(), name: server.tag),
+            ).skip(1))
+              ...buildServerDirectRules(serverAddress: address),
+        ],
       ];
 
   static String _routeServerListSet(RouteServerOutbound server) =>
@@ -1669,6 +1720,7 @@ class MihomoConfigGen {
   static List<String> buildRules(
     AppSettings settings, {
     required String serverAddress,
+    List<String> chainAddresses = const [],
     String? resolvedServerIp,
     String proxyTarget = proxyName,
     AppRoutingMode routingMode = AppRoutingMode.allProxy,
@@ -1700,8 +1752,9 @@ class MihomoConfigGen {
         serverAddress: serverAddress,
         resolvedServerIp: resolvedServerIp,
       ),
-      for (final server in routeServers)
-        ...buildServerDirectRules(serverAddress: server.address),
+      for (final address in chainAddresses)
+        ...buildServerDirectRules(serverAddress: address),
+      ...routeServerDirectRules(routeServers),
       // адрес своего tun-интерфейса мимо туннеля, иначе обращение к нему уйдёт само в себя
       if (tunOwned) 'IP-CIDR,$tunInterfaceRange,DIRECT,no-resolve',
       ...buildUserRules(

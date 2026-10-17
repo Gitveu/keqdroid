@@ -62,19 +62,6 @@ void main() {
       expect(ProxyChainConfig.describeProblem(huge.encode()), isNotNull);
     });
 
-    test('canBeHop accepts link protocols and refuses awg/custom/chain', () {
-      expect(ProxyChainConfig.canBeHop('vless'), isTrue);
-      expect(ProxyChainConfig.canBeHop('hy2'), isTrue);
-      expect(ProxyChainConfig.canBeHop('awg'), isFalse);
-      expect(ProxyChainConfig.canBeHop('custom'), isFalse);
-      expect(ProxyChainConfig.canBeHop('chain'), isFalse);
-      // Узлы цепочки связывает `dialerProxy` xray, а этих протоколов у него
-      // нет вовсе — в цепочку они не годятся, сколько бы их ни умел mihomo.
-      for (final protocol in ['tuic', 'anytls', 'ssr', 'mieru']) {
-        expect(ProxyChainConfig.canBeHop(protocol), isFalse, reason: protocol);
-      }
-    });
-
     test('refreshed pulls the current link of a node that is still around', () {
       const rotated = 'vless://uuid-de@de.example.com:2053?security=tls#DE-1';
       final updated = _chain().refreshed({

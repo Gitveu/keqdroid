@@ -2397,7 +2397,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chainPickSearch => 'جست‌وجوی سرورها';
 
   @override
-  String get chainPickEmpty => 'هیچ سروری نمی‌تواند گرهٔ زنجیره باشد. VLESS، VMess، Trojan، Shadowsocks و Hysteria2 مناسب‌اند؛ AmneziaWG و کانفیگ‌های آمادهٔ JSON نه.';
+  String chainPickEmpty(String core) {
+    return 'هیچ سروری نیست که $core بتواند گرهٔ زنجیره کند. هستهٔ دیگر را در «درباره» انتخاب کنید.';
+  }
 
   @override
   String get chainEdit => 'ویرایش زنجیره';
@@ -2440,7 +2442,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsCoreXraySubtitle => 'هستهٔ پیش‌فرض. همهٔ انواع سرور را اجرا می‌کند، از جمله زنجیره‌ها و کانفیگ‌های آمادهٔ JSON.';
 
   @override
-  String get settingsCoreMihomoSubtitle => 'هستهٔ سازگار با Clash. زنجیره‌ها و کانفیگ‌های آمادهٔ xray روی Xray می‌مانند.';
+  String get settingsCoreMihomoSubtitle => 'هستهٔ سازگار با Clash. کانفیگ‌های آمادهٔ xray روی Xray می‌مانند.';
 
   @override
   String get settingsCoreHint => 'از اتصال بعدی اعمال می‌شود — نشست فعلی راه‌اندازی مجدد نمی‌شود.';
@@ -2482,7 +2484,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsCoreSkipCustom => 'سرور فعال یک کانفیگ آمادهٔ JSON برای Xray است، پس صرف‌نظر از هستهٔ انتخابی با libxray اجرا می‌شود. mihomo به اشتراکی با لینک‌های معمولی نیاز دارد.';
 
   @override
-  String get settingsCoreSkipChain => 'سرور فعال یک زنجیره است: گره‌های آن با dialerProxy در Xray به هم وصل شده‌اند، پس صرف‌نظر از هستهٔ انتخاب‌شده با libxray اجرا می‌شود.';
+  String get settingsCoreSkipChainXrayOnly => 'سرور فعال یک زنجیره است که mihomo نمی‌تواند برخی گره‌های آن را به هم وصل کند — صرف‌نظر از هستهٔ انتخاب‌شده با Xray اجرا می‌شود.';
+
+  @override
+  String get settingsCoreSkipChainMihomoOnly => 'در زنجیرهٔ سرور فعال گره‌ای هست که فقط mihomo می‌تواند وصلش کند، مثلاً پروفایل AmneziaWG — صرف‌نظر از هستهٔ انتخاب‌شده با mihomo اجرا می‌شود.';
 
   @override
   String get settingsCoreSkipAwg => 'سرور فعال یک پروفایل AmneziaWG است — صرف‌نظر از هستهٔ انتخاب‌شده با mihomo اجرا می‌شود.';

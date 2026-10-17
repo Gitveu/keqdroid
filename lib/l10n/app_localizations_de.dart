@@ -2401,7 +2401,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get chainPickSearch => 'Server suchen';
 
   @override
-  String get chainPickEmpty => 'Kein Server taugt hier als Kettenknoten. VLESS, VMess, Trojan, Shadowsocks und Hysteria2 gehen; AmneziaWG und fertige JSON-Konfigurationen nicht.';
+  String chainPickEmpty(String core) {
+    return 'Hier taugt kein Server als Kettenknoten für $core. Einen anderen Kern wählst du unter „Über die App“.';
+  }
 
   @override
   String get chainEdit => 'Kette bearbeiten';
@@ -2444,7 +2446,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsCoreXraySubtitle => 'Standard-Kern. Beherrscht alle Servertypen, auch Ketten und fertige JSON-Konfigurationen.';
 
   @override
-  String get settingsCoreMihomoSubtitle => 'Clash-kompatibler Kern. Ketten und fertige Xray-Konfigurationen bleiben bei Xray.';
+  String get settingsCoreMihomoSubtitle => 'Clash-kompatibler Kern. Fertige Xray-Konfigurationen bleiben bei Xray.';
 
   @override
   String get settingsCoreHint => 'Gilt ab der nächsten Verbindung – die laufende Sitzung wird nicht neu gestartet.';
@@ -2486,7 +2488,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsCoreSkipCustom => 'Der aktive Server ist eine fertige Xray-JSON-Konfiguration und läuft daher unabhängig vom gewählten Kern über libxray. mihomo braucht ein Abonnement mit normalen Links.';
 
   @override
-  String get settingsCoreSkipChain => 'Der aktive Server ist eine Proxy-Kette, deren Knoten über Xrays dialerProxy verbunden sind. Deshalb läuft sie unabhängig von der Kernauswahl über libxray.';
+  String get settingsCoreSkipChainXrayOnly => 'Der aktive Server ist eine Proxy-Kette mit Knoten, die mihomo nicht verbinden kann – sie läuft unabhängig von der Kernauswahl auf Xray.';
+
+  @override
+  String get settingsCoreSkipChainMihomoOnly => 'Der aktive Server ist eine Proxy-Kette mit einem Knoten, den nur mihomo verbinden kann, etwa einem AmneziaWG-Profil – sie läuft unabhängig von der Kernauswahl auf mihomo.';
 
   @override
   String get settingsCoreSkipAwg => 'Der aktive Server ist ein AmneziaWG-Profil – er läuft unabhängig von der Kernauswahl auf mihomo.';

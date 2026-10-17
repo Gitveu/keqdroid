@@ -70,6 +70,77 @@ AllowedIPs = 0.0.0.0/0
     ],
   ).encode();
 
+  final awgChain = ProxyChainConfig(
+    name: 'awg',
+    hops: [
+      const ProxyChainHop(config: 'vless://a@a.example:443?type=tcp'),
+      ProxyChainHop(config: awg),
+    ],
+  ).encode();
+
+  // mkcp-opts у VlessOption mihomo нет
+  final kcpChain = ProxyChainConfig(
+    name: 'kcp',
+    hops: [
+      const ProxyChainHop(config: 'vless://a@a.example:443?type=kcp'),
+      const ProxyChainHop(config: 'vless://b@b.example:443?type=tcp'),
+    ],
+  ).encode();
+
+  group('узел цепочки', () {
+    const both = {VpnBackend.xray, VpnBackend.mihomo};
+
+    test('протоколы xray берут оба ядра', () {
+      expect(chainHopBackends(link), both);
+      expect(chainHopBackends('hy2://pass@hy.example:443#hy'), both);
+      expect(chainHopBackends('trojan://pass@t.example:443?type=tcp'), both);
+    });
+
+    // этого у xray в цепочке нет, а mihomo связывает любой свой исходящий через dialer-proxy
+    test('AmneziaWG и схемы mihomo узлом только у mihomo', () {
+      expect(chainHopBackends(awg), {VpnBackend.mihomo});
+      for (final hop in [
+        'tuic://uuid:pass@t.example:443?alpn=h3',
+        'anytls://pass@a.example:443',
+        'vless://u@h.example:443?type=h2&security=tls',
+      ]) {
+        expect(chainHopBackends(hop), {VpnBackend.mihomo}, reason: hop);
+      }
+    });
+
+    test('транспорт без поля у mihomo узлом только у xray', () {
+      expect(
+        chainHopBackends('vless://u@h.example:443?type=kcp'),
+        {VpnBackend.xray},
+      );
+    });
+
+    test('hysteria v1 mihomo не исполняет вовсе', () {
+      expect(
+        chainHopBackends('hysteria://h.example:443?upmbps=10&downmbps=50'),
+        isNot(contains(VpnBackend.mihomo)),
+      );
+    });
+
+    test('готовый конфиг и цепочка узлом не бывают', () {
+      expect(chainHopBackends(xrayJson), isEmpty);
+      expect(chainHopBackends(clashYaml), isEmpty);
+      expect(chainHopBackends(chain), isEmpty);
+    });
+
+    test('цепочку исполняет ядро, которое умеет все её узлы', () {
+      expect(chainBackends(ProxyChainConfig.tryParse(chain)!), both);
+      expect(
+        chainBackends(ProxyChainConfig.tryParse(awgChain)!),
+        {VpnBackend.mihomo},
+      );
+      expect(
+        chainBackends(ProxyChainConfig.tryParse(kcpChain)!),
+        {VpnBackend.xray},
+      );
+    });
+  });
+
   group('формат', () {
     test('узнаётся по самому конфигу', () {
       expect(detectServerFormat(link), ServerFormat.link);
@@ -161,6 +232,19 @@ rules:
       }
     });
 
+    test('цепочка идёт на выбранное ядро, если оно умеет все узлы', () {
+      expect(
+        choose(chain, preference: AppSettings.vpnCoreMihomo).backend,
+        VpnBackend.mihomo,
+      );
+      expect(choose(chain, preference: AppSettings.vpnCoreMihomo).skip, isNull);
+      expect(choose(awgChain).backend, VpnBackend.mihomo);
+      expect(
+        choose(kcpChain, preference: AppSettings.vpnCoreMihomo).backend,
+        VpnBackend.xray,
+      );
+    });
+
     test('ручной выбор действует только на ссылку', () {
       expect(
         choose(link, preference: AppSettings.vpnCoreMihomo).backend,
@@ -178,8 +262,12 @@ rules:
         VpnCoreSkip.customConfig,
       );
       expect(
-        choose(chain, preference: AppSettings.vpnCoreMihomo).skip,
-        VpnCoreSkip.chain,
+        choose(awgChain).skip,
+        VpnCoreSkip.chainMihomoOnly,
+      );
+      expect(
+        choose(kcpChain, preference: AppSettings.vpnCoreMihomo).skip,
+        VpnCoreSkip.chainXrayOnly,
       );
       expect(
         choose(clashYaml, preference: AppSettings.vpnCoreXray).skip,

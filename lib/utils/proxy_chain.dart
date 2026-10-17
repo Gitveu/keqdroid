@@ -8,8 +8,8 @@ class ProxyChainConfig {
 
   static const int maxHops = 8;
 
-  // awg исполняет только mihomo, а цепочку собирает xray
-  static const Set<String> hopProtocols = {
+  // у xray узлом бывает только это, mihomo связывает через dialer-proxy любой свой исходящий (chainHopBackends)
+  static const Set<String> xrayHopProtocols = {
     'vless',
     'vmess',
     'trojan',
@@ -18,8 +18,6 @@ class ProxyChainConfig {
     'hysteria2',
     'hy2',
   };
-
-  static bool canBeHop(String protocol) => hopProtocols.contains(protocol);
 
   final String name;
   final List<ProxyChainHop> hops;

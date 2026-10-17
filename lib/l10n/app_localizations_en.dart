@@ -2401,7 +2401,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chainPickSearch => 'Search servers';
 
   @override
-  String get chainPickEmpty => 'No servers can be a chain node here. VLESS, VMess, Trojan, Shadowsocks and Hysteria2 work; AmneziaWG and ready-made JSON configs do not.';
+  String chainPickEmpty(String core) {
+    return 'No servers here can be a chain node for $core. Another core can be picked in About.';
+  }
 
   @override
   String get chainEdit => 'Edit chain';
@@ -2444,7 +2446,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsCoreXraySubtitle => 'Default core. Handles every server type, including chains and ready-made JSON configs.';
 
   @override
-  String get settingsCoreMihomoSubtitle => 'Clash-compatible core. Chains and ready-made xray configs stay on Xray.';
+  String get settingsCoreMihomoSubtitle => 'Clash-compatible core. Ready-made xray configs stay on Xray.';
 
   @override
   String get settingsCoreHint => 'Applies on the next connection, the running session is not restarted.';
@@ -2486,7 +2488,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsCoreSkipCustom => 'The active server is a ready-made Xray JSON config, so it runs on libxray whatever core you pick. mihomo needs a subscription with plain links.';
 
   @override
-  String get settingsCoreSkipChain => 'The active server is a proxy chain: its hops are linked by Xray\'s dialerProxy, so it runs on libxray no matter which core is selected.';
+  String get settingsCoreSkipChainXrayOnly => 'The active server is a proxy chain with nodes mihomo cannot link, so it runs on Xray no matter which core is selected.';
+
+  @override
+  String get settingsCoreSkipChainMihomoOnly => 'The active server is a proxy chain with a node only mihomo can link, such as an AmneziaWG profile, so it runs on mihomo no matter which core is selected.';
 
   @override
   String get settingsCoreSkipAwg => 'The active server is an AmneziaWG profile, and it runs on mihomo no matter which core is selected.';

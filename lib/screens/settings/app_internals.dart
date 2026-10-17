@@ -665,7 +665,8 @@ VpnCoreSkip? _coreMismatch(WidgetRef ref) {
 String _coreMismatchText(AppLocalizations l10n, VpnCoreSkip skip) =>
     switch (skip) {
       VpnCoreSkip.customConfig => l10n.settingsCoreSkipCustom,
-      VpnCoreSkip.chain => l10n.settingsCoreSkipChain,
+      VpnCoreSkip.chainXrayOnly => l10n.settingsCoreSkipChainXrayOnly,
+      VpnCoreSkip.chainMihomoOnly => l10n.settingsCoreSkipChainMihomoOnly,
       VpnCoreSkip.amneziaWg => l10n.settingsCoreSkipAwg,
       VpnCoreSkip.clashConfig => l10n.settingsCoreSkipClash,
       VpnCoreSkip.linkXrayOnly => l10n.settingsCoreSkipLinkXrayOnly,

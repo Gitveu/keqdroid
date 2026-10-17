@@ -97,7 +97,7 @@ Two cores run servers on every platform: **Xray** and **mihomo**. On Windows and
 | Links with a transport only Xray has (for example mKCP, XHTTP for VMess and Trojan, finalmask) | Xray |
 | Ready-made Xray config (`.json`) | Xray |
 | Ready-made Clash / mihomo config | mihomo |
-| Proxy chain | Xray |
+| Proxy chain | Xray or mihomo, your choice; a node only mihomo has (an AmneziaWG profile, for example) puts it on mihomo, a node only Xray has puts it on Xray |
 | WireGuard / AmneziaWG profile | mihomo |
 
 For links both cores support, pick the core in **Settings → About**; Xray is the default. A server only one core can run goes to that core whichever is picked, and **About** says so.
@@ -323,7 +323,7 @@ Version and tag `vX.Y.Z` come from `pubspec.yaml`. When uploading manually, incl
 | Ссылки с транспортом, который есть только у Xray (например, mKCP, XHTTP у VMess и Trojan, finalmask) | Xray |
 | Готовый конфиг Xray (`.json`) | Xray |
 | Готовый конфиг Clash / mihomo | mihomo |
-| Цепочка прокси | Xray |
+| Цепочка прокси | Xray или mihomo, на выбор; узел, который есть только у mihomo (например, профиль AmneziaWG), ведёт её на mihomo, а узел только для Xray ведёт на Xray |
 | Профиль WireGuard / AmneziaWG | mihomo |
 
 Для ссылок, которые поддерживают оба ядра, ядро выбирается в **Настройки → О приложении**; **Автоматически** — это Xray. Если сервер не работает на выбранном ядре, приложение покажет ошибку.

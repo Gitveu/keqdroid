@@ -53,7 +53,7 @@ import '../utils/subscription_deep_link.dart';
 import '../utils/bidi.dart';
 import '../utils/error_messages.dart';
 import '../utils/import_payload.dart';
-import '../utils/proxy_chain.dart';
+import '../utils/vpn_core_support.dart';
 import '../utils/server_sort.dart';
 import 'qr_scan_screen.dart';
 import 'tv_receive_screen.dart';
@@ -719,11 +719,17 @@ class _ServersTabState extends ConsumerState<ServersTab>
     );
   }
 
-  int get _chainCandidateCount => ref
-      .read(serversProvider)
-      .servers
-      .where((s) => ProxyChainConfig.canBeHop(s.protocol))
-      .length;
+  int get _chainCandidateCount {
+    final core = preferredBackend(
+      ref.read(settingsNotifierProvider).value?.vpnCore ??
+          AppSettings.vpnCoreXray,
+    );
+    return ref
+        .read(serversProvider)
+        .servers
+        .where((s) => chainHopBackends(s.config).contains(core))
+        .length;
+  }
 
   void _showAddServerDialog(BuildContext ctx) {
     final l10n = AppLocalizations.of(ctx)!;

@@ -1,0 +1,148 @@
+{
+  "socks-port": 2080,
+  "port": 2081,
+  "bind-address": "127.0.0.1",
+  "allow-lan": false,
+  "ipv6": false,
+  "authentication": [
+    "u:p"
+  ],
+  "mode": "rule",
+  "log-level": "warning",
+  "geodata-mode": true,
+  "geo-auto-update": false,
+  "find-process-mode": "off",
+  "sniffer": {
+    "enable": true,
+    "parse-pure-ip": true,
+    "override-destination": true,
+    "sniff": {
+      "HTTP": {
+        "ports": [
+          "80",
+          "8080-8880"
+        ]
+      },
+      "TLS": {
+        "ports": [
+          "443",
+          "8443"
+        ]
+      },
+      "QUIC": {
+        "ports": [
+          "443",
+          "8443"
+        ]
+      }
+    }
+  },
+  "dns": {
+    "enable": true,
+    "ipv6": false,
+    "enhanced-mode": "normal",
+    "default-nameserver": [
+      "https://1.1.1.1/dns-query",
+      "https://8.8.8.8/dns-query"
+    ],
+    "proxy-server-nameserver": [
+      "https://1.1.1.1/dns-query",
+      "https://8.8.8.8/dns-query"
+    ],
+    "nameserver": [
+      "https://1.1.1.1/dns-query",
+      "https://8.8.8.8/dns-query"
+    ],
+    "direct-nameserver": [
+      "https://1.1.1.1/dns-query",
+      "https://8.8.8.8/dns-query",
+      "1.1.1.1",
+      "8.8.8.8"
+    ],
+    "respect-rules": true
+  },
+  "proxies": [
+    {
+      "name": "keq-chain-0",
+      "type": "vless",
+      "server": "198.51.100.20",
+      "port": 443,
+      "uuid": "00000000-0000-4000-8000-000000000000",
+      "udp": true,
+      "flow": "xtls-rprx-vision",
+      "tls": true,
+      "servername": "decoy.example",
+      "client-fingerprint": "chrome",
+      "reality-opts": {
+        "public-key": "publickey",
+        "short-id": "aabb",
+        "support-x25519mlkem768": true
+      },
+      "network": "tcp"
+    },
+    {
+      "name": "keq-chain-1",
+      "type": "wireguard",
+      "server": "198.51.100.21",
+      "port": 51820,
+      "ip": "10.8.1.2/32",
+      "private-key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA=",
+      "peers": [
+        {
+          "server": "198.51.100.21",
+          "port": 51820,
+          "public-key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA=",
+          "allowed-ips": [
+            "0.0.0.0/0"
+          ]
+        }
+      ],
+      "mtu": 1280,
+      "udp": true,
+      "amnezia-wg-option": {
+        "version": 3,
+        "jc": 4,
+        "jmin": 40,
+        "jmax": 70
+      },
+      "ip-stack": {
+        "mode": "gvisor"
+      },
+      "dialer-proxy": "keq-chain-0"
+    },
+    {
+      "name": "proxy",
+      "type": "hysteria2",
+      "server": "exit.example",
+      "port": 8443,
+      "password": "secret",
+      "sni": "exit.example",
+      "dialer-proxy": "keq-chain-1"
+    }
+  ],
+  "rules": [
+    "AND,((NOT,((IN-TYPE,TUN))),(DOMAIN,www.cloudflare.com)),proxy",
+    "DOMAIN-SUFFIX,ads.example,REJECT",
+    "GEOSITE,category-ads-all,REJECT",
+    "IP-CIDR,198.51.100.20/32,DIRECT,no-resolve",
+    "IP-CIDR,198.51.100.20/32,DIRECT,no-resolve",
+    "IP-CIDR,198.51.100.21/32,DIRECT,no-resolve",
+    "DOMAIN,exit.example,DIRECT",
+    "DOMAIN-SUFFIX,direct.example,DIRECT",
+    "IP-CIDR,10.10.0.0/16,DIRECT,no-resolve",
+    "IP-CIDR,0.0.0.0/8,DIRECT,no-resolve",
+    "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve",
+    "IP-CIDR,100.64.0.0/10,DIRECT,no-resolve",
+    "IP-CIDR,127.0.0.0/8,DIRECT,no-resolve",
+    "IP-CIDR,169.254.0.0/16,DIRECT,no-resolve",
+    "IP-CIDR,172.16.0.0/12,DIRECT,no-resolve",
+    "IP-CIDR,192.168.0.0/16,DIRECT,no-resolve",
+    "IP-CIDR,192.0.0.0/24,DIRECT,no-resolve",
+    "IP-CIDR,198.51.100.0/24,DIRECT,no-resolve",
+    "IP-CIDR,203.0.113.0/24,DIRECT,no-resolve",
+    "DOMAIN-SUFFIX,proxy.example,proxy",
+    "GEOSITE,google,proxy",
+    "IP-CIDR,10.10.0.0/16,DIRECT",
+    "MATCH,proxy"
+  ]
+}

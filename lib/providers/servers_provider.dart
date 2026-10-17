@@ -98,14 +98,14 @@ class ServersNotifier extends Notifier<ServersState> {
       );
     }
     for (final hop in hops) {
-      if (!ProxyChainConfig.canBeHop(hop.protocol)) {
+      if (chainHopBackends(hop.config).isEmpty) {
         throw Exception(
           '${hop.displayName}: ${hop.protocol.toUpperCase()} cannot be a chain node',
         );
       }
     }
 
-    final config = ProxyChainConfig(
+    final chain = ProxyChainConfig(
       name: name.trim(),
       hops: [
         for (final hop in hops)
@@ -115,7 +115,11 @@ class ServersNotifier extends Notifier<ServersState> {
             config: hop.config,
           ),
       ],
-    ).encode();
+    );
+    if (chainBackends(chain).isEmpty) {
+      throw Exception('No single core can link all nodes of this chain');
+    }
+    final config = chain.encode();
 
     if (id == null) {
       final server = ServerItem.fromRaw(config);

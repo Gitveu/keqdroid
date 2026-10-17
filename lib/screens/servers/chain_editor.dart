@@ -12,12 +12,15 @@ import 'package:keqdroid/shared/ui/server_picker_sheet.dart';
 import 'package:keqdroid/shared/ui/shape_loading_indicator.dart';
 import 'package:keqdroid/shared/ui/smooth_scroll.dart';
 
+import '../../models/app_settings.dart';
 import '../../models/server_item.dart';
 import '../../models/server_name_utils.dart';
 import '../../providers/providers.dart';
+import '../../tunnel/vpn_backend.dart';
 import '../../utils/bidi.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/proxy_chain.dart';
+import '../../utils/vpn_core_support.dart';
 
 class ChainEditorScreen extends ConsumerStatefulWidget {
   final String? serverId;
@@ -37,6 +40,7 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
 
   String? _error;
   bool _saving = false;
+  VpnBackend _core = VpnBackend.xray;
 
   @override
   void initState() {
@@ -76,9 +80,10 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
 
   Future<void> _addHop() async {
     final all = ref.read(serversProvider).servers;
+    final core = _core;
     final taken = {for (final h in _hops) h.id};
     final candidates = all
-        .where((s) => ProxyChainConfig.canBeHop(s.protocol))
+        .where((s) => chainHopBackends(s.config).contains(core))
         .where((s) => !taken.contains(s.id))
         .toList();
 
@@ -89,7 +94,9 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
       builder: (_) => ServerPickerSheet(
         title: context.l10n.chainPickNode,
         searchHint: context.l10n.chainPickSearch,
-        emptyText: context.l10n.chainPickEmpty,
+        emptyText: context.l10n.chainPickEmpty(
+          ltrIsolate(core == VpnBackend.mihomo ? 'mihomo' : 'Xray'),
+        ),
         candidates: candidates,
       ),
     );
@@ -166,6 +173,9 @@ class _ChainEditorScreenState extends ConsumerState<ChainEditorScreen> {
     final theme = Theme.of(context);
     final textColor = AppTheme.text(context);
     final textLight = AppTheme.textLight(context);
+    _core = preferredBackend(ref.watch(settingsNotifierProvider.select(
+      (a) => a.value?.vpnCore ?? AppSettings.vpnCoreXray,
+    )));
 
     return Scaffold(
       backgroundColor: AppTheme.bg(context),

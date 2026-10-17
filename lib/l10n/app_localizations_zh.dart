@@ -2396,7 +2396,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainPickSearch => '搜索服务器';
 
   @override
-  String get chainPickEmpty => '没有可作为链节点的服务器。支持 VLESS、VMess、Trojan、Shadowsocks 和 Hysteria2；AmneziaWG 和现成的 JSON 配置不支持。';
+  String chainPickEmpty(String core) {
+    return '没有可由 $core 作为链节点的服务器。可在“关于”中选择其他内核。';
+  }
 
   @override
   String get chainEdit => '编辑代理链';
@@ -2438,7 +2440,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCoreXraySubtitle => '默认内核。支持所有服务器类型，包括链式代理和现成的 JSON 配置。';
 
   @override
-  String get settingsCoreMihomoSubtitle => '兼容 Clash 的内核。链式代理和现成的 xray 配置仍由 Xray 处理。';
+  String get settingsCoreMihomoSubtitle => '兼容 Clash 的内核。现成的 xray 配置仍由 Xray 处理。';
 
   @override
   String get settingsCoreHint => '下次连接时生效，当前会话不会重启。';
@@ -2480,7 +2482,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCoreSkipCustom => '当前服务器是现成的 Xray JSON 配置，因此无论选择哪个内核都由 libxray 运行。mihomo 需要普通链接的订阅。';
 
   @override
-  String get settingsCoreSkipChain => '当前服务器是代理链：各节点通过 Xray 的 dialerProxy 串联，因此无论选择哪个内核都由 libxray 运行。';
+  String get settingsCoreSkipChainXrayOnly => '当前服务器是代理链，其中部分节点 mihomo 无法串联，无论选择哪个内核，都由 Xray 运行。';
+
+  @override
+  String get settingsCoreSkipChainMihomoOnly => '当前服务器是代理链，其中有只能由 mihomo 串联的节点（例如 AmneziaWG 配置），无论选择哪个内核，都由 mihomo 运行。';
 
   @override
   String get settingsCoreSkipAwg => '当前服务器是 AmneziaWG 配置，无论选择哪个内核，都由 mihomo 运行。';

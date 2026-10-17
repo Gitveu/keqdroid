@@ -34,8 +34,12 @@ class _FakeSubs extends SubscriptionsNotifier {
 }
 
 class _FakeSettings extends SettingsNotifier {
+  _FakeSettings([this._settings = const AppSettings()]);
+
+  final AppSettings _settings;
+
   @override
-  Future<AppSettings> build() async => const AppSettings();
+  Future<AppSettings> build() async => _settings;
 }
 
 /// Настоящий нотифаер режимов сортировки читает их из хранилища, которого в
@@ -84,6 +88,7 @@ Future<void> _pumpEditor(
   List<ServerItem> servers = const [],
   List<Subscription> subscriptions = const [],
   Map<String, String> sortModes = const {},
+  AppSettings settings = const AppSettings(),
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -92,7 +97,7 @@ Future<void> _pumpEditor(
           () => _FakeServers(ServersState(servers: servers)),
         ),
         subscriptionsProvider.overrideWith(() => _FakeSubs(subscriptions)),
-        settingsNotifierProvider.overrideWith(_FakeSettings.new),
+        settingsNotifierProvider.overrideWith(() => _FakeSettings(settings)),
         serverSortModesProvider.overrideWith(() => _FakeSortModes(sortModes)),
       ],
       child: MaterialApp(
@@ -170,6 +175,66 @@ void main() {
     expect(find.text('Manual servers'), findsOneWidget);
     // Тёзки из разных подписок остаются оба — группа объясняет, кто есть кто.
     expect(find.text('NL-1'), findsNWidgets(2));
+  });
+
+  group('узлы по выбранному ядру', () {
+    const awg = '[Interface]\n'
+        'PrivateKey = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA=\n'
+        'Address = 10.8.1.2/32\n'
+        '\n'
+        '[Peer]\n'
+        'PublicKey = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA=\n'
+        'Endpoint = 198.51.100.21:51820\n'
+        'AllowedIPs = 0.0.0.0/0\n';
+    final servers = [
+      _server('de', 'DE-1'),
+      ServerItem(
+        id: 'wg',
+        config: awg,
+        type: ServerItemType.manual,
+        customName: 'Home WG',
+      ),
+      ServerItem(
+        id: 'tu',
+        config: 'tuic://uuid:pw@tu.example.com:443?alpn=h3#TUIC-1',
+        type: ServerItemType.manual,
+      ),
+    ];
+
+    // так и было: человек хотел AWG в цепочку, а xray его не связывает
+    testWidgets('mihomo показывает AWG и свои протоколы', (tester) async {
+      await _pumpEditor(
+        tester,
+        servers: servers,
+        settings: const AppSettings(vpnCore: AppSettings.vpnCoreMihomo),
+      );
+      await tester.tap(find.text('Add node'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DE-1'), findsOneWidget);
+      expect(find.text('Home WG'), findsOneWidget);
+      expect(find.text('TUIC-1'), findsOneWidget);
+    });
+
+    testWidgets('xray прячет то, что не свяжет', (tester) async {
+      await _pumpEditor(tester, servers: servers);
+      await tester.tap(find.text('Add node'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DE-1'), findsOneWidget);
+      expect(find.text('Home WG'), findsNothing);
+      expect(find.text('TUIC-1'), findsNothing);
+    });
+
+    testWidgets('пустой выбор говорит, какое ядро и где сменить', (tester) async {
+      await _pumpEditor(tester, servers: [servers[1]]);
+      await tester.tap(find.text('Add node'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('chain node for'), findsOneWidget);
+      expect(find.textContaining('Xray'), findsOneWidget);
+      expect(find.textContaining('About'), findsOneWidget);
+    });
   });
 
   testWidgets('внутри группы работает её же сортировка с главного экрана', (

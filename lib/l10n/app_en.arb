@@ -1231,7 +1231,14 @@
   "chainNeedsTwoNodes": "A chain needs at least two nodes",
   "chainPickNode": "Choose a server",
   "chainPickSearch": "Search servers",
-  "chainPickEmpty": "No servers can be a chain node here. VLESS, VMess, Trojan, Shadowsocks and Hysteria2 work; AmneziaWG and ready-made JSON configs do not.",
+  "chainPickEmpty": "No servers here can be a chain node for {core}. Another core can be picked in About.",
+  "@chainPickEmpty": {
+    "placeholders": {
+      "core": {
+        "type": "String"
+      }
+    }
+  },
   "chainEdit": "Edit chain",
   "chainDelete": "Delete chain",
   "chainRouteLabel": "Route",
@@ -1262,7 +1269,7 @@
   "settingsInternalsTitle": "About",
   "settingsInternalsSubtitle": "Version, cores, geo databases and current session",
   "settingsCoreXraySubtitle": "Default core. Handles every server type, including chains and ready-made JSON configs.",
-  "settingsCoreMihomoSubtitle": "Clash-compatible core. Chains and ready-made xray configs stay on Xray.",
+  "settingsCoreMihomoSubtitle": "Clash-compatible core. Ready-made xray configs stay on Xray.",
   "settingsCoreHint": "Applies on the next connection, the running session is not restarted.",
   "settingsProxyAuthTitle": "Password for the local proxy",
   "settingsProxyAuthSubtitle": "Turn off where there is nowhere to enter it, like the Wi-Fi proxy field",
@@ -1276,7 +1283,8 @@
   "settingsTunnelModeHint": "Proxy mode runs SOCKS and HTTP on 127.0.0.1, so point an app or Wi-Fi at them. The proxy is open to every app on the device. Per-app routing and DNS interception need VPN mode.",
   "settingsCoreSkipClash": "The active server is a ready-made Clash config, and only mihomo can run it, no matter which core is selected.",
   "settingsCoreSkipCustom": "The active server is a ready-made Xray JSON config, so it runs on libxray whatever core you pick. mihomo needs a subscription with plain links.",
-  "settingsCoreSkipChain": "The active server is a proxy chain: its hops are linked by Xray's dialerProxy, so it runs on libxray no matter which core is selected.",
+  "settingsCoreSkipChainXrayOnly": "The active server is a proxy chain with nodes mihomo cannot link, so it runs on Xray no matter which core is selected.",
+  "settingsCoreSkipChainMihomoOnly": "The active server is a proxy chain with a node only mihomo can link, such as an AmneziaWG profile, so it runs on mihomo no matter which core is selected.",
   "settingsCoreSkipAwg": "The active server is an AmneziaWG profile, and it runs on mihomo no matter which core is selected.",
   "settingsCoreSkipPlatform": "The mihomo core is not bundled for this platform, so the connection runs on the Xray core instead.",
   "settingsCoreSkipLinkXrayOnly": "The active server's link uses a transport mihomo has no fields for in this protocol, so it runs on Xray no matter which core is selected.",

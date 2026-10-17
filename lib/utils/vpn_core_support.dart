@@ -5,6 +5,7 @@ import '../tunnel/vpn_backend.dart';
 import 'awg_profile.dart';
 import 'custom_clash_config.dart';
 import 'custom_xray_config.dart';
+import 'hysteria_uri.dart';
 import 'proxy_chain.dart';
 
 enum ServerFormat {
@@ -25,7 +26,9 @@ enum ServerFormat {
 enum VpnCoreSkip {
   customConfig,
 
-  chain,
+  chainXrayOnly,
+
+  chainMihomoOnly,
 
   amneziaWg,
 
@@ -82,10 +85,7 @@ const _mihomoOnlySchemes = {'tuic', 'anytls', 'ssr', 'mierus'};
 // непрочитанную ссылку считаем за оба, ошибку скажет генератор
 Set<VpnBackend> backendsForLink(String link) {
   final trimmed = link.trim();
-  final scheme = RegExp(r'^([a-zA-Z][a-zA-Z0-9+.-]*)://')
-      .firstMatch(trimmed)
-      ?.group(1)
-      ?.toLowerCase();
+  final scheme = _schemeOf(trimmed);
   if (scheme == null) return _bothCores;
 
   if (_mihomoOnlySchemes.contains(scheme)) return const {VpnBackend.mihomo};
@@ -164,6 +164,55 @@ Set<VpnBackend> _transportBackends(
     };
 }
 
+String? _schemeOf(String link) => RegExp(r'^([a-zA-Z][a-zA-Z0-9+.-]*)://')
+    .firstMatch(link)
+    ?.group(1)
+    ?.toLowerCase();
+
+// mihomo связывает узлы через dialer-proxy (adapter/outbound/base.go), так умеет любой его исходящий, AmneziaWG тоже.
+// hysteria v1 он не берёт вовсе (buildProxy)
+Set<VpnBackend> chainHopBackends(String config) {
+  final trimmed = config.trim();
+  switch (detectServerFormat(trimmed)) {
+    case ServerFormat.amneziaWg:
+      return const {VpnBackend.mihomo};
+    case ServerFormat.link:
+      final scheme = _schemeOf(trimmed);
+      final link = backendsForLink(trimmed);
+      return {
+        if (link.contains(VpnBackend.xray) &&
+            ProxyChainConfig.xrayHopProtocols.contains(scheme))
+          VpnBackend.xray,
+        if (link.contains(VpnBackend.mihomo) &&
+            !(scheme == 'hysteria' && HysteriaLinkParams.isV1(trimmed)))
+          VpnBackend.mihomo,
+      };
+    default:
+      return const {};
+  }
+}
+
+Set<VpnBackend> chainBackends(ProxyChainConfig chain) {
+  var common = _bothCores;
+  for (final hop in chain.hops) {
+    common = common.intersection(chainHopBackends(hop.config));
+  }
+  return common;
+}
+
+// узлы без общего ядра раньше собирал xray, ошибку назовёт генератор
+Set<VpnBackend> _chainConfigBackends(String config) {
+  final chain = ProxyChainConfig.tryParse(config);
+  if (chain == null) return const {VpnBackend.xray};
+  final common = chainBackends(chain);
+  return common.isEmpty ? const {VpnBackend.xray} : common;
+}
+
+VpnBackend preferredBackend(String preference) =>
+    preference == 'mihomo' && mihomoShipsHere
+        ? VpnBackend.mihomo
+        : VpnBackend.xray;
+
 typedef VpnBackendChoice = ({
   VpnBackend backend,
   ServerFormat format,
@@ -176,9 +225,11 @@ VpnBackendChoice resolveVpnBackend({
   required bool mihomoAvailable,
 }) {
   final format = detectServerFormat(config);
-  final capable = format == ServerFormat.link
-      ? backendsForLink(config)
-      : backendsForFormat(format);
+  final capable = switch (format) {
+    ServerFormat.link => backendsForLink(config),
+    ServerFormat.chain => _chainConfigBackends(config),
+    _ => backendsForFormat(format),
+  };
 
   if (capable.length == 1) {
     final only = capable.single;
@@ -214,7 +265,9 @@ VpnCoreSkip _skipFor(ServerFormat format, VpnBackend only) => switch (format) {
           ? VpnCoreSkip.linkXrayOnly
           : VpnCoreSkip.linkMihomoOnly,
       ServerFormat.xrayJson => VpnCoreSkip.customConfig,
-      ServerFormat.chain => VpnCoreSkip.chain,
+      ServerFormat.chain => only == VpnBackend.xray
+          ? VpnCoreSkip.chainXrayOnly
+          : VpnCoreSkip.chainMihomoOnly,
       ServerFormat.clashYaml => VpnCoreSkip.clashConfig,
       ServerFormat.amneziaWg => VpnCoreSkip.amneziaWg,
       _ => VpnCoreSkip.customConfig,
@@ -223,7 +276,10 @@ VpnCoreSkip _skipFor(ServerFormat format, VpnBackend only) => switch (format) {
 // для лога, в UI локализованный текст
 String vpnCoreSkipLogReason(VpnCoreSkip skip) => switch (skip) {
       VpnCoreSkip.customConfig => 'the server is a ready-made Xray JSON config',
-      VpnCoreSkip.chain => 'the server is a proxy chain',
+      VpnCoreSkip.chainXrayOnly =>
+        'mihomo cannot link some nodes of this proxy chain',
+      VpnCoreSkip.chainMihomoOnly =>
+        'this proxy chain has a node only mihomo can link',
       VpnCoreSkip.amneziaWg => 'the server is an AmneziaWG profile',
       VpnCoreSkip.clashConfig => 'the server is a ready-made Clash config',
       VpnCoreSkip.linkXrayOnly => 'mihomo has no such transport for this '
