@@ -218,7 +218,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get routePickEmpty => 'Keine Server, die der aktuelle Kern als eigenen Ausgang nutzen kann. Fertige Konfigurationen und Ketten passen hier nicht.';
+  String get routePickEmpty => 'Keine Server, die der aktuelle Kern als eigenen Ausgang nutzen kann. Fertige Konfigurationen passen hier nicht, Ketten nur mit mihomo.';
 
   @override
   String settingsRoutingRouteCount(int count) {
@@ -2443,7 +2443,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsInternalsSubtitle => 'Version, Kerne, Geo-Datenbanken und aktuelle Sitzung';
 
   @override
-  String get settingsCoreXraySubtitle => 'Standard-Kern. Beherrscht alle Servertypen, auch Ketten und fertige JSON-Konfigurationen.';
+  String get settingsCoreXraySubtitle => 'Standard-Kern. Führt Links, Ketten und fertige Xray-Konfigurationen aus.';
 
   @override
   String get settingsCoreMihomoSubtitle => 'Clash-kompatibler Kern. Fertige Xray-Konfigurationen bleiben bei Xray.';

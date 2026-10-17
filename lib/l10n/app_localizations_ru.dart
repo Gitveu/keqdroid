@@ -220,7 +220,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get routePickEmpty => 'Нет серверов, которые текущее ядро возьмёт отдельным выходом. Готовые конфиги и цепочки сюда не подходят.';
+  String get routePickEmpty => 'Нет серверов, которые текущее ядро возьмёт отдельным выходом. Готовые конфиги сюда не подходят, а цепочки подходят только на mihomo.';
 
   @override
   String settingsRoutingRouteCount(int count) {
@@ -2457,7 +2457,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsInternalsSubtitle => 'Версия, ядра, geo-базы и текущая сессия';
 
   @override
-  String get settingsCoreXraySubtitle => 'Ядро по умолчанию. Умеет все типы серверов, включая цепочки и готовые JSON-конфиги.';
+  String get settingsCoreXraySubtitle => 'Ядро по умолчанию. Исполняет ссылки, цепочки и готовые конфиги Xray.';
 
   @override
   String get settingsCoreMihomoSubtitle => 'Ядро, совместимое с Clash. Готовые конфиги xray остаются на Xray.';

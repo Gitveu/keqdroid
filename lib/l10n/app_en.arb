@@ -110,7 +110,7 @@
       }
     }
   },
-  "routePickEmpty": "No servers the current core can run as a separate outbound. Ready-made configs and chains do not fit here.",
+  "routePickEmpty": "No servers the current core can run as a separate outbound. Ready-made configs do not fit here, and chains fit only on mihomo.",
   "@routePickEmpty": {},
   "settingsRoutingRouteCount": "{count, plural, =0{no routes} =1{1 route} other{{count} routes}}",
   "@settingsRoutingRouteCount": {
@@ -1268,7 +1268,7 @@
   },
   "settingsInternalsTitle": "About",
   "settingsInternalsSubtitle": "Version, cores, geo databases and current session",
-  "settingsCoreXraySubtitle": "Default core. Handles every server type, including chains and ready-made JSON configs.",
+  "settingsCoreXraySubtitle": "Default core. Runs links, chains and ready-made Xray configs.",
   "settingsCoreMihomoSubtitle": "Clash-compatible core. Ready-made xray configs stay on Xray.",
   "settingsCoreHint": "Applies on the next connection, the running session is not restarted.",
   "settingsProxyAuthTitle": "Password for the local proxy",

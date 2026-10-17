@@ -476,7 +476,7 @@ abstract class AppLocalizations {
   /// No description provided for @routePickEmpty.
   ///
   /// In en, this message translates to:
-  /// **'No servers the current core can run as a separate outbound. Ready-made configs and chains do not fit here.'**
+  /// **'No servers the current core can run as a separate outbound. Ready-made configs do not fit here, and chains fit only on mihomo.'**
   String get routePickEmpty;
 
   /// No description provided for @settingsRoutingRouteCount.
@@ -4598,7 +4598,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsCoreXraySubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Default core. Handles every server type, including chains and ready-made JSON configs.'**
+  /// **'Default core. Runs links, chains and ready-made Xray configs.'**
   String get settingsCoreXraySubtitle;
 
   /// No description provided for @settingsCoreMihomoSubtitle.

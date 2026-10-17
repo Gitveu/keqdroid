@@ -218,7 +218,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get routePickEmpty => 'No servers the current core can run as a separate outbound. Ready-made configs and chains do not fit here.';
+  String get routePickEmpty => 'No servers the current core can run as a separate outbound. Ready-made configs do not fit here, and chains fit only on mihomo.';
 
   @override
   String settingsRoutingRouteCount(int count) {
@@ -2443,7 +2443,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsInternalsSubtitle => 'Version, cores, geo databases and current session';
 
   @override
-  String get settingsCoreXraySubtitle => 'Default core. Handles every server type, including chains and ready-made JSON configs.';
+  String get settingsCoreXraySubtitle => 'Default core. Runs links, chains and ready-made Xray configs.';
 
   @override
   String get settingsCoreMihomoSubtitle => 'Clash-compatible core. Ready-made xray configs stay on Xray.';

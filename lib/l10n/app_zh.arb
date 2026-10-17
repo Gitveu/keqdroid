@@ -110,7 +110,7 @@
       }
     }
   },
-  "routePickEmpty": "没有当前内核可作为独立出站使用的服务器。现成配置和链式代理不适用。",
+  "routePickEmpty": "没有当前内核可作为独立出站使用的服务器。现成配置不适用，链式代理仅在 mihomo 下可用。",
   "@routePickEmpty": {},
   "settingsRoutingRouteCount": "{count, plural, =0{没有路由} other{{count} 条路由}}",
   "@settingsRoutingRouteCount": {
@@ -1213,7 +1213,7 @@
   },
   "settingsInternalsTitle": "关于",
   "settingsInternalsSubtitle": "版本、内核、地理数据库与当前会话",
-  "settingsCoreXraySubtitle": "默认内核。支持所有服务器类型，包括链式代理和现成的 JSON 配置。",
+  "settingsCoreXraySubtitle": "默认内核。运行链接、链式代理和现成的 Xray 配置。",
   "settingsCoreMihomoSubtitle": "兼容 Clash 的内核。现成的 xray 配置仍由 Xray 处理。",
   "settingsCoreHint": "下次连接时生效，当前会话不会重启。",
   "settingsProxyAuthTitle": "本地代理的密码",

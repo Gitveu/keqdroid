@@ -218,7 +218,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get routePickEmpty => '没有当前内核可作为独立出站使用的服务器。现成配置和链式代理不适用。';
+  String get routePickEmpty => '没有当前内核可作为独立出站使用的服务器。现成配置不适用，链式代理仅在 mihomo 下可用。';
 
   @override
   String settingsRoutingRouteCount(int count) {
@@ -2437,7 +2437,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsInternalsSubtitle => '版本、内核、地理数据库与当前会话';
 
   @override
-  String get settingsCoreXraySubtitle => '默认内核。支持所有服务器类型，包括链式代理和现成的 JSON 配置。';
+  String get settingsCoreXraySubtitle => '默认内核。运行链接、链式代理和现成的 Xray 配置。';
 
   @override
   String get settingsCoreMihomoSubtitle => '兼容 Clash 的内核。现成的 xray 配置仍由 Xray 处理。';

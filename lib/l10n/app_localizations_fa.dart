@@ -218,7 +218,7 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get routePickEmpty => 'سروری نیست که هستهٔ فعلی بتواند جداگانه از آن استفاده کند. کانفیگ‌های آماده و زنجیره‌ها اینجا مناسب نیستند.';
+  String get routePickEmpty => 'سروری نیست که هستهٔ فعلی بتواند جداگانه از آن استفاده کند. کانفیگ‌های آماده اینجا مناسب نیستند و زنجیره‌ها فقط روی mihomo مناسب‌اند.';
 
   @override
   String settingsRoutingRouteCount(int count) {
@@ -2439,7 +2439,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsInternalsSubtitle => 'نسخه، هسته‌ها، پایگاه‌های جغرافیایی و نشست جاری';
 
   @override
-  String get settingsCoreXraySubtitle => 'هستهٔ پیش‌فرض. همهٔ انواع سرور را اجرا می‌کند، از جمله زنجیره‌ها و کانفیگ‌های آمادهٔ JSON.';
+  String get settingsCoreXraySubtitle => 'هستهٔ پیش‌فرض. لینک‌ها، زنجیره‌ها و کانفیگ‌های آمادهٔ Xray را اجرا می‌کند.';
 
   @override
   String get settingsCoreMihomoSubtitle => 'هستهٔ سازگار با Clash. کانفیگ‌های آمادهٔ xray روی Xray می‌مانند.';

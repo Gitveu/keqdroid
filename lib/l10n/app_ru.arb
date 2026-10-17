@@ -110,7 +110,7 @@
       }
     }
   },
-  "routePickEmpty": "Нет серверов, которые текущее ядро возьмёт отдельным выходом. Готовые конфиги и цепочки сюда не подходят.",
+  "routePickEmpty": "Нет серверов, которые текущее ядро возьмёт отдельным выходом. Готовые конфиги сюда не подходят, а цепочки подходят только на mihomo.",
   "@routePickEmpty": {},
   "settingsRoutingRouteCount": "{count, plural, =0{нет маршрутов} one{{count} маршрут} few{{count} маршрута} many{{count} маршрутов} other{{count} маршрута}}",
   "@settingsRoutingRouteCount": {
@@ -1215,7 +1215,7 @@
   },
   "settingsInternalsTitle": "О приложении",
   "settingsInternalsSubtitle": "Версия, ядра, geo-базы и текущая сессия",
-  "settingsCoreXraySubtitle": "Ядро по умолчанию. Умеет все типы серверов, включая цепочки и готовые JSON-конфиги.",
+  "settingsCoreXraySubtitle": "Ядро по умолчанию. Исполняет ссылки, цепочки и готовые конфиги Xray.",
   "settingsCoreMihomoSubtitle": "Ядро, совместимое с Clash. Готовые конфиги xray остаются на Xray.",
   "settingsCoreHint": "Применится на следующем подключении, текущая сессия не перезапускается.",
   "settingsProxyAuthTitle": "Пароль для локального прокси",
