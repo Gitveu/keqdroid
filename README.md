@@ -52,7 +52,7 @@ Pre-built binaries are on [Releases](https://github.com/Lemonochka/keqdroid/rele
 | **Android** 7.0+ | `keqdroid-<version>-android.apk` |
 | **Android** 7.0+, 32-bit firmware | `keqdroid-<version>-armeabi-v7a-android.apk` |
 | **Windows** x64 | `keqdroid-windows-x64-<version>.zip` (portable) |
-| **Linux** x64 | `keqdroid-<version>-x86_64.AppImage` · `keqdroid_<version>_amd64.deb` · `keqdroid-<version>-1.x86_64.rpm` · `keqdroid-<version>-linux-x64.tar.gz` · Arch: `keqdroid-bin` on the AUR |
+| **Linux** x64 | `keqdroid-<version>-x86_64.AppImage` · `keqdroid_<version>_amd64.deb` · `keqdroid-<version>-1.x86_64.rpm` · `keqdroid-<version>-linux-x64.tar.gz` · `PKGBUILD` for Arch |
 
 The app **does not provide servers**. Bring your own subscription or configs. Comply with the laws of your country.
 
@@ -64,15 +64,20 @@ The app **does not provide servers**. Bring your own subscription or configs. Co
 - subscription URLs with scheduled auto-update; `keqdroid://` and `keqdis://` deep links from provider panels
 - manual entry, config import, QR code scan (Android)
 - proxy chains: traffic passes through several servers in the order you set
+- **Auto** for a subscription: picks a steady server, moves on when it stops answering and goes back once it answers again
 - per-subscription device identity sent to the provider's panel
 - checks: TCP, HTTP, ICMP, speed test; sorting by ping, name or speed
 
 **Routing and tunnel**
-- routing lists (direct, through the VPN, blocked) and ready-made presets
+- routes: block, direct, through the VPN or through another server, for all apps or chosen ones
+- a route covers sites, IPs, ready-made lists (Russian sites, ads and trackers, Re-filter, Russian mobile whitelists) or links to AdBlock and hosts lists, refreshed daily
+- routing profiles: their own routes and Everything else for chosen subscriptions
 - split tunnel: per-app on Android, per-program on Windows and Linux (TUN mode)
 - **Connections**: active connections and the rule that matched each one
+- after connecting, the flag of the country sites see you from; tap it for the exit IP
 
 **Appearance and data**
+- traffic speed and volume under the connect button, VPN and direct separately on mihomo
 - color presets, dark and light, Material You palette on Android
 - subscription cards with a palette or your own picture, carried over into that subscription's servers
 - interface size, on top of the system text size
@@ -88,7 +93,7 @@ The app **does not provide servers**. Bring your own subscription or configs. Co
 
 ## Cores
 
-Two cores run servers on every platform: **Xray** and **mihomo**. On Windows and Linux, Xray ships inside `keqrnel` together with **sing-box**, which provides TUN mode. The core depends on the server:
+Two cores run servers on every platform: **Xray** and **mihomo**. On Windows and Linux, Xray ships inside `keqrnel` together with **sing-box**, which provides TUN mode for Xray; mihomo runs its own TUN. The core depends on the server:
 
 | Server | Runs on |
 |--------|---------|
@@ -138,7 +143,9 @@ A ready-made config keeps its own routing, DNS and outbound chains; only the inb
 | **VPN** | Everything on the device goes through the tunnel. VPN permission on first connect. |
 | **Proxy** | SOCKS and HTTP on `127.0.0.1`. Set it as the proxy in an app or in the Wi-Fi settings. |
 
-Per-app routing and DNS interception work in VPN mode only. Connect and disconnect from the notification, the Quick Settings tile or launcher shortcuts. Subscriptions update in the background.
+Per-app routing and DNS interception work in VPN mode only. Connect and disconnect from the notification, the Quick Settings tile or launcher shortcuts. Subscriptions update in the background. A VPN that was on comes back after an app update or a phone restart.
+
+On Android TV the app is driven by the remote. A subscription gets to the TV from keqdroid on a phone: the TV shows a QR code, the phone scans it and sends the subscription over the home Wi-Fi.
 
 ### Windows
 
@@ -147,26 +154,26 @@ Per-app routing and DNS interception work in VPN mode only. Connect and disconne
 | **Proxy** | System proxy for browsers and most apps. No administrator rights. |
 | **TUN** | All traffic through a VPN adapter. Needs administrator rights; the app offers to restart with them. |
 
-The window minimizes to the tray and remembers its size and position. Launch at system startup with optional auto-connect. Global hotkeys are in Settings → Advanced → Hotkeys. Subscriptions refresh while the app is open.
+The window minimizes to the tray and remembers its size and position. Launch at system startup with optional auto-connect. Global hotkeys are in Settings → Advanced → Hotkeys. Subscriptions refresh while the app is open. After an in-app update the app reconnects if the VPN was on.
 
 **Settings location:** `%APPDATA%\com.keqdroid\keqdroid\`, not next to the exe. To move to another PC, use backup and restore.
 
 ### Linux
 
-Debian/Fedora/Arch, x86_64. Releases ship AppImage, deb, rpm and tar.gz. On Arch: `yay -S keqdroid-bin` from the AUR, or `makepkg -si` with the `PKGBUILD` from the release.
+Debian/Fedora/Arch, x86_64. Releases ship AppImage, deb, rpm and tar.gz. On Arch: `makepkg -si` with the `PKGBUILD` from the release.
 
 | Mode | What it does |
 |------|--------------|
 | **Proxy** | No root |
-| **TUN** | Root via `pkexec` (polkit) on connect |
+| **TUN** | Root via `pkexec` (polkit) on connect; **Passwordless TUN** in Settings → Advanced → Permissions stops asking for the password |
 
-The window remembers its size and position; hotkeys work while the app window is focused. Closing the window keeps the app in the tray, or minimizes it where there is no tray; Ctrl+Q quits. Proxy mode sets the system proxy in GNOME and KDE settings, which Firefox reads on any desktop; elsewhere other apps need 127.0.0.1 and the port entered by hand.
+The window remembers its size and position; hotkeys work while the app window is focused. Closing the window keeps the app in the tray, or minimizes it where there is no tray; Ctrl+Q quits. Start at login with optional auto-connect. After an in-app update the app reconnects if the VPN was on. Proxy mode sets the system proxy in GNOME and KDE settings, which Firefox reads on any desktop; elsewhere other apps need 127.0.0.1 and the port entered by hand.
 
 ---
 
 ## Getting started
 
-1. **Subscriptions** — paste the URL, then «Add and fetch».
+1. **Subscriptions** — paste the URL, then «Add & Fetch».
 2. **Servers** — pick a node.
 3. Connect.
 4. If needed — **Settings**: routing, split tunnel, hotkeys, connection mode.
@@ -204,12 +211,6 @@ powershell -ExecutionPolicy Bypass -File tool\make_release.ps1
 
 # same + publish GitHub Release (requires gh CLI)
 powershell -ExecutionPolicy Bypass -File tool\make_release.ps1 -Publish -NotesFile notes.md
-```
-
-Publish the AUR package after the GitHub release, since its `PKGBUILD` downloads the tarball from it:
-
-```bash
-wsl -e bash /mnt/c/.../keqdroid/tool/publish_aur.sh
 ```
 
 Version and tag `vX.Y.Z` come from `pubspec.yaml`. When uploading manually, include `SHA256SUMS`, otherwise the updater won't install the update.
@@ -278,7 +279,7 @@ Version and tag `vX.Y.Z` come from `pubspec.yaml`. When uploading manually, incl
 | **Android** 7.0+ | `keqdroid-<версия>-android.apk` |
 | **Android** 7.0+, 32-битная прошивка | `keqdroid-<версия>-armeabi-v7a-android.apk` |
 | **Windows** x64 | `keqdroid-windows-x64-<версия>.zip` (portable) |
-| **Linux** x64 | `keqdroid-<версия>-x86_64.AppImage` · `keqdroid_<версия>_amd64.deb` · `keqdroid-<версия>-1.x86_64.rpm` · `keqdroid-<версия>-linux-x64.tar.gz` · Arch: `keqdroid-bin` на AUR |
+| **Linux** x64 | `keqdroid-<версия>-x86_64.AppImage` · `keqdroid_<версия>_amd64.deb` · `keqdroid-<версия>-1.x86_64.rpm` · `keqdroid-<версия>-linux-x64.tar.gz` · `PKGBUILD` для Arch |
 
 Приложение **не раздаёт серверы** — нужна своя подписка или конфиги. Соблюдайте законы вашей страны.
 
@@ -290,15 +291,20 @@ Version and tag `vX.Y.Z` come from `pubspec.yaml`. When uploading manually, incl
 - подписки по URL с автообновлением по расписанию; deep-ссылки `keqdroid://` и `keqdis://` из панелей провайдеров
 - ручное добавление, импорт конфигов, сканирование QR-кодов (Android)
 - цепочки прокси: трафик проходит через несколько серверов в заданном порядке
+- **Auto** у подписки: выбирает стабильный сервер, уходит с него, когда он перестаёт отвечать, и возвращается, когда он снова отвечает
 - отдельные данные устройства для каждой подписки (их видит панель провайдера)
 - проверки: TCP, HTTP, ICMP, тест скорости; сортировка по пингу, имени или скорости
 
 **Маршрутизация и туннель**
-- списки «напрямую», «через VPN», «блокировать» и готовые пресеты
+- маршруты: блокировать, напрямую, через VPN или через другой сервер, для всех приложений или выбранных
+- маршрут охватывает сайты, IP, готовые списки («Российские сайты», «Реклама и трекеры», Re-filter, «Белые списки мобильной связи») или ссылки на списки AdBlock и hosts, которые обновляются раз в сутки
+- профили маршрутизации: свои маршруты и «Всё остальное» для выбранных подписок
 - split tunnel: на Android по приложениям, на Windows и Linux по программам (режим TUN)
 - **Соединения**: активные соединения и правило, которое сработало для каждого
+- после подключения флаг страны, из которой вас видят сайты; по нажатию IP выхода
 
 **Оформление и данные**
+- скорость и объём трафика под кнопкой подключения, на mihomo отдельно для VPN и для прямых соединений
 - цветовые пресеты, тёмная и светлая тема, палитра Material You на Android
 - карточки подписок с палитрой или своей картинкой, оформление переносится на их серверы
 - размер интерфейса, поверх системного размера текста
@@ -314,7 +320,7 @@ Version and tag `vX.Y.Z` come from `pubspec.yaml`. When uploading manually, incl
 
 ## Ядра
 
-На всех платформах серверы работают на двух ядрах: **Xray** и **mihomo**. На Windows и Linux Xray входит в `keqrnel` вместе с **sing-box**, который отвечает за режим TUN. Ядро зависит от сервера:
+На всех платформах серверы работают на двух ядрах: **Xray** и **mihomo**. На Windows и Linux Xray входит в `keqrnel` вместе с **sing-box**, который отвечает за режим TUN у Xray; у mihomo TUN свой. Ядро зависит от сервера:
 
 | Сервер | Исполняет |
 |--------|-----------|
@@ -326,7 +332,7 @@ Version and tag `vX.Y.Z` come from `pubspec.yaml`. When uploading manually, incl
 | Цепочка прокси | Xray или mihomo, на выбор; узел, который есть только у mihomo (например, профиль AmneziaWG), ведёт её на mihomo, а узел только для Xray ведёт на Xray |
 | Профиль WireGuard / AmneziaWG | mihomo |
 
-Для ссылок, которые поддерживают оба ядра, ядро выбирается в **Настройки → О приложении**; **Автоматически** — это Xray. Если сервер не работает на выбранном ядре, приложение покажет ошибку.
+Для ссылок, которые поддерживают оба ядра, ядро выбирается в **Настройки → О приложении**; по умолчанию Xray. Сервер, который умеет только одно ядро, идёт на нём при любом выборе, и **О приложении** об этом пишет.
 
 ---
 
@@ -364,7 +370,9 @@ Hysteria v1 не поддерживается.
 | **VPN** | Через туннель идёт всё устройство. При первом подключении — разрешение VPN. |
 | **Proxy** | SOCKS и HTTP на `127.0.0.1`. Прокси нужно указать в программе или в настройках Wi-Fi. |
 
-Маршрутизация по приложениям и перехват DNS работают только в режиме VPN. Подключаться и отключаться можно из уведомления, плитки в быстрых настройках и ярлыков на значке приложения. Подписки обновляются в фоне.
+Маршрутизация по приложениям и перехват DNS работают только в режиме VPN. Подключаться и отключаться можно из уведомления, плитки в быстрых настройках и ярлыков на значке приложения. Подписки обновляются в фоне. Если VPN был включён, после обновления приложения или перезагрузки телефона он поднимается сам.
+
+На Android TV приложением управляют пультом. Подписка попадает на телевизор из keqdroid на телефоне: телевизор показывает QR-код, телефон сканирует его и отправляет подписку по домашнему Wi-Fi.
 
 ### Windows
 
@@ -373,20 +381,20 @@ Hysteria v1 не поддерживается.
 | **Proxy** | Системный прокси — браузеры и большинство программ. Без прав администратора. |
 | **TUN** | Весь трафик через VPN-адаптер. Нужны права администратора — приложение предложит перезапуститься с ними. |
 
-Окно сворачивается в трей и запоминает свой размер и позицию. Автозапуск вместе с системой, при желании с автоподключением. Глобальные хоткеи — в Настройки → Дополнительно → Горячие клавиши. Подписки обновляются, пока приложение открыто.
+Окно сворачивается в трей и запоминает свой размер и позицию. Автозапуск вместе с системой, при желании с автоподключением. Глобальные хоткеи — в Настройки → Дополнительно → Горячие клавиши. Подписки обновляются, пока приложение открыто. После обновления из приложения оно переподключается, если VPN был включён.
 
 **Где лежат настройки:** `%APPDATA%\com.keqdroid\keqdroid\`, не в папке с exe. Для переноса на другой ПК есть резервная копия и восстановление.
 
 ### Linux
 
-Debian/Fedora/Arch, x86_64. В релизе есть AppImage, deb, rpm и tar.gz. Для Arch: `yay -S keqdroid-bin` из AUR или `makepkg -si` с `PKGBUILD` из релиза.
+Debian/Fedora/Arch, x86_64. В релизе есть AppImage, deb, rpm и tar.gz. Для Arch: `makepkg -si` с `PKGBUILD` из релиза.
 
 | Режим | Что делает |
 |-------|------------|
 | **Proxy** | Без root |
-| **TUN** | Root через `pkexec` (polkit) при подключении |
+| **TUN** | Root через `pkexec` (polkit) при подключении; **TUN без пароля** в Настройки → Дополнительно → Разрешения перестаёт его спрашивать |
 
-Окно запоминает размер и позицию; хоткеи работают, пока окно приложения в фокусе. Крестик оставляет приложение в трее, а где трея нет, сворачивает окно; Ctrl+Q закрывает приложение. В режиме Proxy системный прокси прописывается в настройки GNOME и KDE, их читает Firefox в любой среде; в остальных средах другим программам 127.0.0.1 и порт указывают вручную.
+Окно запоминает размер и позицию; хоткеи работают, пока окно приложения в фокусе. Крестик оставляет приложение в трее, а где трея нет, сворачивает окно; Ctrl+Q закрывает приложение. Запуск при входе в систему, при желании с автоподключением. После обновления из приложения оно переподключается, если VPN был включён. В режиме Proxy системный прокси прописывается в настройки GNOME и KDE, их читает Firefox в любой среде; в остальных средах другим программам 127.0.0.1 и порт указывают вручную.
 
 ---
 
@@ -430,12 +438,6 @@ powershell -ExecutionPolicy Bypass -File tool\make_release.ps1
 
 # то же + GitHub Release (нужен gh CLI)
 powershell -ExecutionPolicy Bypass -File tool\make_release.ps1 -Publish -NotesFile notes.md
-```
-
-Пакет AUR публикуется после релиза на GitHub: его `PKGBUILD` скачивает архив оттуда.
-
-```bash
-wsl -e bash /mnt/c/.../keqdroid/tool/publish_aur.sh
 ```
 
 Версия и тег `vX.Y.Z` берутся из `pubspec.yaml`. При ручной загрузке добавьте `SHA256SUMS`, иначе апдейтер не установит обновление.
