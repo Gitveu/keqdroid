@@ -1516,34 +1516,39 @@ class _XrayCoreTextFieldState extends State<_XrayCoreTextField> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: TextField(
+      child: CommitOnBlur(
         controller: _ctrl,
-        enabled: widget.enabled,
-        keyboardType: widget.keyboardType,
-        textDirection: technicalInputDirection,
-        style: Theme.of(context)
-          .textTheme
-          .bodyMedium
-          ?.copyWith(color: AppTheme.text(context)),
-        decoration: InputDecoration(
-          labelText: widget.label,
-          hintText: widget.hint,
-          helperText: widget.helperText,
-          helperMaxLines: 3,
-          errorText: widget.errorText,
-          errorMaxLines: 3,
-          isDense: true,
-          filled: true,
-          fillColor: AppTheme.card(context),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(ExpressiveShape.medium)),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(ExpressiveShape.medium),
-            borderSide: BorderSide(color: AppTheme.divider(context)),
+        onCommit: widget.onSave,
+        builder: (focus, commit) => TextField(
+          controller: _ctrl,
+          focusNode: focus,
+          enabled: widget.enabled,
+          keyboardType: widget.keyboardType,
+          textDirection: technicalInputDirection,
+          style: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.copyWith(color: AppTheme.text(context)),
+          decoration: InputDecoration(
+            labelText: widget.label,
+            hintText: widget.hint,
+            helperText: widget.helperText,
+            helperMaxLines: 3,
+            errorText: widget.errorText,
+            errorMaxLines: 3,
+            isDense: true,
+            filled: true,
+            fillColor: AppTheme.card(context),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(ExpressiveShape.medium)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(ExpressiveShape.medium),
+              borderSide: BorderSide(color: AppTheme.divider(context)),
+            ),
           ),
+          onSubmitted: (_) => commit(),
+          onEditingComplete: commit,
         ),
-        onSubmitted: widget.onSave,
-        onEditingComplete: () => widget.onSave(_ctrl.text),
       ),
     );
   }

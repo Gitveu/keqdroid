@@ -150,39 +150,34 @@ class _PingSettingsScreenState extends ConsumerState<_PingSettingsScreen> {
                 if (isCustom)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: TextField(
+                    child: CommitOnBlur(
                       controller: _customUrlCtrl,
-                      textDirection: technicalInputDirection,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.text(context)),
-                      decoration: InputDecoration(
-                        labelText: l10n.settingsPingCustomUrl,
-                        hintText: 'https://example.com/generate_204',
-                        hintTextDirection: technicalInputDirection,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(ExpressiveShape.medium),
+                      onCommit: (v) {
+                        final err = PingTestConfig.validateCustomUrl(v);
+                        if (err != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(l10n.settingsPingCustomUrlInvalid)),
+                          );
+                          return;
+                        }
+                        _save(settings.copyWith(pingTestUrlCustom: v.trim()));
+                      },
+                      builder: (focus, commit) => TextField(
+                        controller: _customUrlCtrl,
+                        focusNode: focus,
+                        textDirection: technicalInputDirection,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.text(context)),
+                        decoration: InputDecoration(
+                          labelText: l10n.settingsPingCustomUrl,
+                          hintText: 'https://example.com/generate_204',
+                          hintTextDirection: technicalInputDirection,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(ExpressiveShape.medium),
+                          ),
                         ),
+                        onSubmitted: (_) => commit(),
+                        onEditingComplete: commit,
                       ),
-                      onSubmitted: (v) {
-                        final err = PingTestConfig.validateCustomUrl(v);
-                        if (err != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(l10n.settingsPingCustomUrlInvalid)),
-                          );
-                          return;
-                        }
-                        _save(settings.copyWith(pingTestUrlCustom: v.trim()));
-                      },
-                      onEditingComplete: () {
-                        final v = _customUrlCtrl.text;
-                        final err = PingTestConfig.validateCustomUrl(v);
-                        if (err != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(l10n.settingsPingCustomUrlInvalid)),
-                          );
-                          return;
-                        }
-                        _save(settings.copyWith(pingTestUrlCustom: v.trim()));
-                      },
                     ),
                   ),
               ],

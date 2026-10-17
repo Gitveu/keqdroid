@@ -44,6 +44,7 @@ import 'package:keqdroid/screens/settings/connection_tile.dart';
 import 'package:keqdroid/shared/ui/add_process_dialog.dart';
 import 'package:keqdroid/shared/ui/app_list_tile.dart';
 import 'package:keqdroid/shared/ui/app_theme.dart';
+import 'package:keqdroid/shared/ui/commit_on_blur.dart';
 import 'package:keqdroid/shared/ui/expressive.dart';
 import 'package:keqdroid/shared/ui/expressive_elements.dart';
 import 'package:keqdroid/shared/ui/expressive_button_group.dart';
