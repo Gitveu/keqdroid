@@ -2,9 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/models/app_settings.dart';
+import 'package:keqdroid/tunnel/vpn_backend.dart';
 import 'package:keqdroid/utils/mihomo_config_gen.dart';
 import 'package:keqdroid/utils/multi_ping_config.dart';
 import 'package:keqdroid/utils/proxy_chain.dart';
+import 'package:keqdroid/utils/route_servers.dart';
 import 'package:keqdroid/utils/socks5_credentials.dart';
 
 // цепочка на mihomo: узлы связаны dialer-proxy (adapter/outbound/base.go), выход остаётся proxy
@@ -94,6 +96,37 @@ void main() {
     expect(byName['proxy-0']!['dialer-proxy'], 'keq-chain-0-0');
     expect(byName['proxy-1']!['dialer-proxy'], 'keq-chain-0-1');
     expect(byName.keys, containsAll(['keq-chain-0-0', 'keq-chain-0-1']));
+  });
+
+  group('цепочка как сервер маршрута', () {
+    final chain = _chain([_pl, _tuic]);
+    final route = RouteServerOutbound(
+      tag: 'keq-srv-0',
+      serverId: 'c',
+      config: chain,
+      address: '203.0.113.7',
+      entries: 'youtube.com',
+    );
+
+    test('только у mihomo', () {
+      expect(routeServerSupported(chain, VpnBackend.mihomo), isTrue);
+      expect(routeServerSupported(chain, VpnBackend.xray), isFalse);
+    });
+
+    test('звенья под своими именами, выход под тегом маршрута', () {
+      final c = MihomoConfigGen.build(
+        _fi,
+        const AppSettings(),
+        socksPort: 2080,
+        routeServers: [route],
+      );
+      final proxies = _proxies(c);
+      expect(proxies.map((p) => p['name']),
+          ['proxy', 'keq-chain-keq-srv-0-0', 'keq-srv-0']);
+      expect(proxies.last['dialer-proxy'], 'keq-chain-keq-srv-0-0');
+      expect(_rules(c), contains('DOMAIN-SUFFIX,youtube.com,keq-srv-0'));
+      expect(_rules(c), contains('DOMAIN,tu.example,DIRECT'));
+    });
   });
 
   test('имя звена узнаётся по префиксу', () {

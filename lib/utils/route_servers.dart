@@ -1,16 +1,24 @@
 import '../models/server_item.dart';
 import '../models/traffic_route.dart';
 import '../tunnel/vpn_backend.dart';
+import 'proxy_chain.dart';
 import 'traffic_routes.dart';
 import 'vpn_core_support.dart';
 
-// готовый конфиг и цепочка не годятся: у них свои выходы, правила и DNS, в чужой конфиг их не вставить
+// готовый конфиг не годится: у него свои выходы, правила и DNS, в чужой конфиг их не вставить.
+// цепочку берёт только mihomo: у xray сервер маршрута собирается одним outbound (config_gen.dart)
 bool routeServerSupported(String config, VpnBackend core) =>
     switch (detectServerFormat(config)) {
       ServerFormat.link => backendsForLink(config).contains(core),
       ServerFormat.amneziaWg => core == VpnBackend.mihomo,
+      ServerFormat.chain => core == VpnBackend.mihomo && _mihomoChain(config),
       _ => false,
     };
+
+bool _mihomoChain(String config) {
+  final chain = ProxyChainConfig.tryParse(config);
+  return chain != null && chainBackends(chain).contains(VpnBackend.mihomo);
+}
 
 // один на сервер, сколько бы маршрутов на него ни вело
 class RouteServerOutbound {
