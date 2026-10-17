@@ -1,0 +1,131 @@
+Route each UDP destination by its own rule, behind keqdroid-udp-per-exit.
+
+tunnel.handleUDPConn keyed the NAT table by the source address alone
+(packetAdapter.Key is LocalAddr), and resolveMetadata ran once, for the first
+datagram of a socket. Every later datagram from that socket went out through
+the same proxy whatever the rules said for its address. A game whose voice
+socket first talked to an address outside the user's routes kept its voice
+server on that exit, and a socket whose first datagram matched DIRECT sent
+everything after it past the tunnel.
+
+With keqdroid-udp-per-exit: true in the config, the key is the source plus the
+name of the proxy the rules pick for the destination. A socket that stays on
+one exit keeps one session, so P2P still sees one external port. An address
+routed elsewhere gets a session of its own. The rules run once per source and
+destination; the answers are kept, 65536 pairs at most.
+
+Off by default and off without the key: P2P traffic that learns its address
+from a STUN server on one exit and reaches the peer through another no longer
+gets through directly (checked on a netns lab with pion ICE, 2026-10-17).
+
+keqdroid writes the key from Settings, core settings. Applied by
+tool/build_mihomo.ps1 after the other mihomo patches.
+
+diff --git a/config/config.go b/config/config.go
+index 707114a..1e14898 100644
+--- a/config/config.go
++++ b/config/config.go
+@@ -61,6 +61,7 @@ type General struct {
+ 	GeositeMatcher    string                  `json:"geosite-matcher"`
+ 	TCPConcurrent     bool                    `json:"tcp-concurrent"`
+ 	FindProcessMode   process.FindProcessMode `json:"find-process-mode"`
++	KeqdroidUDPPerExit bool                    `json:"-"`
+ 	Sniffing          bool                    `json:"sniffing"`
+ 	GlobalUA          string                  `json:"global-ua"`
+ 	ETagSupport       bool                    `json:"etag-support"`
+@@ -441,6 +442,7 @@ type RawConfig struct {
+ 	GeositeMatcher                string                  `yaml:"geosite-matcher" json:"geosite-matcher"`
+ 	TCPConcurrent                 bool                    `yaml:"tcp-concurrent" json:"tcp-concurrent"`
+ 	FindProcessMode               process.FindProcessMode `yaml:"find-process-mode" json:"find-process-mode"`
++	KeqdroidUDPPerExit            bool                    `yaml:"keqdroid-udp-per-exit" json:"keqdroid-udp-per-exit"`
+ 	GlobalClientFingerprint       string                  `yaml:"global-client-fingerprint" json:"global-client-fingerprint"`
+ 	GlobalUA                      string                  `yaml:"global-ua" json:"global-ua"`
+ 	ETagSupport                   bool                    `yaml:"etag-support" json:"etag-support"`
+@@ -797,6 +799,7 @@ func parseGeneral(cfg *RawConfig) (*General, error) {
+ 		GeositeMatcher:    cfg.GeositeMatcher,
+ 		TCPConcurrent:     cfg.TCPConcurrent,
+ 		FindProcessMode:   cfg.FindProcessMode,
++		KeqdroidUDPPerExit: cfg.KeqdroidUDPPerExit,
+ 		GlobalUA:          cfg.GlobalUA,
+ 		ETagSupport:       cfg.ETagSupport,
+ 		KeepAliveIdle:     cfg.KeepAliveIdle,
+diff --git a/hub/executor/executor.go b/hub/executor/executor.go
+index 796face..e972295 100644
+--- a/hub/executor/executor.go
++++ b/hub/executor/executor.go
+@@ -393,6 +393,7 @@ func temporaryUpdateGeneral(general *config.General) func() {
+ func updateGeneral(general *config.General, logging bool) {
+ 	tunnel.SetMode(general.Mode)
+ 	tunnel.SetFindProcessMode(general.FindProcessMode)
++	tunnel.SetUDPPerExit(general.KeqdroidUDPPerExit)
+ 	resolver.DisableIPv6 = !general.IPv6
+ 
+ 	dialer.SetTcpConcurrent(general.TCPConcurrent)
+diff --git a/tunnel/tunnel.go b/tunnel/tunnel.go
+index 2074e3c..f461222 100644
+--- a/tunnel/tunnel.go
++++ b/tunnel/tunnel.go
+@@ -417,6 +417,53 @@ func processUDP(queue chan C.PacketAdapter) {
+ 	}
+ }
+ 
++// keqdroid, keqdroid-udp-per-exit in the config: the NAT table was keyed by the
++// source socket alone, so a socket went out through whatever its first
++// datagram matched, and an address routed to another proxy later on rode
++// along. Keyed by socket and exit, a socket that stays on one exit keeps one
++// session (one external port for P2P), and an address that the rules send
++// elsewhere gets its own. Off by default: P2P whose peer and STUN server the
++// rules send to different exits no longer gets through directly.
++var udpPerExit atomic.Bool
++
++var udpExits = struct {
++	sync.Mutex
++	m map[string]string
++}{m: map[string]string{}}
++
++func SetUDPPerExit(on bool) {
++	udpPerExit.Store(on)
++	udpExits.Lock()
++	udpExits.m = map[string]string{}
++	udpExits.Unlock()
++}
++
++func udpExitKey(key string, metadata *C.Metadata) string {
++	pair := key + ">" + metadata.RemoteAddress()
++	udpExits.Lock()
++	exit, ok := udpExits.m[pair]
++	udpExits.Unlock()
++	if !ok {
++		m := metadata.Clone()
++		if err := preHandleMetadata(m); err != nil {
++			return key
++		}
++		proxy, _, err := resolveMetadata(m)
++		if err != nil {
++			return key
++		}
++		exit = proxy.Name()
++		udpExits.Lock()
++		// a socket spraying addresses (DHT) would grow it forever
++		if len(udpExits.m) >= 65536 {
++			udpExits.m = map[string]string{}
++		}
++		udpExits.m[pair] = exit
++		udpExits.Unlock()
++	}
++	return key + "|" + exit
++}
++
+ func handleUDPConn(packet C.PacketAdapter) {
+ 	if !isHandle(packet.Metadata().Type) {
+ 		packet.Drop()
+@@ -438,6 +485,9 @@ func handleUDPConn(packet C.PacketAdapter) {
+ 	}
+ 
+ 	key := packet.Key()
++	if udpPerExit.Load() {
++		key = udpExitKey(key, metadata)
++	}
+ 	sender, loaded := natTable.GetOrCreate(key, func() C.PacketSender {
+ 		sender := newPacketSender()
+ 		if sniffingEnable && snifferDispatcher.Enable() {

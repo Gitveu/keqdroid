@@ -1,0 +1,278 @@
+Route each UDP destination of the tun inbound by its own rule, behind an
+outbound tagged keq-udp-per-exit.
+
+proxy/tun/udp_fullcone.go kept one flow per source address and dispatched it
+once, with the destination of its first datagram. Every later datagram from
+that socket went out through the same outbound whatever the rules said for its
+address: a game whose voice socket first talked to an address outside the
+user's routes kept its voice server on that exit, and a socket whose first
+datagram matched direct sent everything after it past the tunnel.
+
+With the mark in the config the flow key is the source plus the outbound the
+router picks for the destination (the tun inbound tag and the original target
+go into the routing context, so process rules and the uid-owner patch work as
+for any connection). A socket that stays on one exit keeps one flow, so P2P
+still sees one external port; an address routed elsewhere gets a flow of its
+own. The router runs once per source and destination, 4096 pairs kept.
+
+Off without the mark, and udp_fullcone.go then works as upstream: P2P traffic
+that learns its address from a STUN server on one exit and reaches the peer
+through another no longer gets through directly (checked on a netns lab with
+pion ICE, 2026-10-17). keqdroid adds the outbound, a blackhole nothing routes
+to, from Settings, core settings.
+
+Android only, through tool/build_xray_cores.ps1 (-extra). keqrnel on the
+desktop takes UDP from sing-box and has the same switch in bridge/xray.
+
+--- a/proxy/tun/udp_fullcone.go
++++ b/proxy/tun/udp_fullcone.go
+@@ -16,21 +16,33 @@
+ 	dest *net.Destination
+ }
+ 
++// keqdroid: a flow keyed by the source alone went out through whatever its
++// first datagram matched, and an address routed to another outbound later on
++// rode along. Keyed by source and exit, a socket that stays on one exit keeps
++// one flow (full cone as before), and an address the rules send elsewhere
++// gets its own.
++type udpKey struct {
++	src  net.Destination
++	exit string
++}
++
+ // sub-handler specifically for udp connections under main handler
+ type udpConnectionHandler struct {
+ 	sync.RWMutex
+ 
+-	udpConns map[net.Destination]*udpConn
++	udpConns map[udpKey]*udpConn
+ 
+ 	handleConnection func(conn net.Conn, dest net.Destination)
+ 	writePacket      func(data []byte, src net.Destination, dst net.Destination) error
++	exitOf           func(src net.Destination, dst net.Destination) string
+ }
+ 
+-func newUdpConnectionHandler(handleConnection func(conn net.Conn, dest net.Destination), writePacket func(data []byte, src net.Destination, dst net.Destination) error) *udpConnectionHandler {
++func newUdpConnectionHandler(handleConnection func(conn net.Conn, dest net.Destination), writePacket func(data []byte, src net.Destination, dst net.Destination) error, exitOf func(src net.Destination, dst net.Destination) string) *udpConnectionHandler {
+ 	handler := &udpConnectionHandler{
+-		udpConns:         make(map[net.Destination]*udpConn),
++		udpConns:         make(map[udpKey]*udpConn),
+ 		handleConnection: handleConnection,
+ 		writePacket:      writePacket,
++		exitOf:           exitOf,
+ 	}
+ 
+ 	return handler
+@@ -39,8 +51,12 @@
+ // HandlePacket handles UDP packets coming from tun, to forward to the dispatcher
+ // this custom handler support FullCone NAT of returning packets, binding connection only by the source addr:port
+ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destination, data []byte) {
++	key := udpKey{src: src}
++	if u.exitOf != nil {
++		key.exit = u.exitOf(src, dst)
++	}
+ 	u.RLock()
+-	conn, found := u.udpConns[src]
++	conn, found := u.udpConns[key]
+ 	if found {
+ 		select {
+ 		case conn.egress <- &packet{
+@@ -58,11 +74,11 @@
+ 	u.Lock()
+ 	defer u.Unlock()
+ 
+-	conn, found = u.udpConns[src]
++	conn, found = u.udpConns[key]
+ 	if !found {
+ 		egress := make(chan *packet, 1024)
+-		conn = &udpConn{handler: u, egress: egress, src: src, dst: dst}
+-		u.udpConns[src] = conn
++		conn = &udpConn{handler: u, egress: egress, key: key, src: src, dst: dst}
++		u.udpConns[key] = conn
+ 
+ 		go u.handleConnection(conn, dst)
+ 	}
+@@ -81,8 +97,8 @@
+ func (u *udpConnectionHandler) connectionFinished(conn *udpConn) {
+ 	u.Lock()
+ 	// Close runs twice per flow; a newer conn may already own this src.
+-	if u.udpConns[conn.src] == conn {
+-		delete(u.udpConns, conn.src)
++	if u.udpConns[conn.key] == conn {
++		delete(u.udpConns, conn.key)
+ 		close(conn.egress)
+ 	}
+ 	u.Unlock()
+@@ -93,6 +109,7 @@
+ 	handler *udpConnectionHandler
+ 
+ 	egress chan *packet
++	key    udpKey
+ 	src    net.Destination
+ 	dst    net.Destination
+ }
+--- a/proxy/tun/stack_gvisor.go
++++ b/proxy/tun/stack_gvisor.go
+@@ -99,7 +99,7 @@
+ 	ipStack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
+ 
+ 	// Use custom UDP packet handler, instead of strict gVisor forwarder, for FullCone NAT support
+-	udpForwarder := newUdpConnectionHandler(t.handler.HandleConnection, t.writeRawUDPPacket)
++	udpForwarder := newUdpConnectionHandler(t.handler.HandleConnection, t.writeRawUDPPacket, t.handler.udpExitFunc())
+ 	ipStack.SetTransportProtocolHandler(udp.ProtocolNumber, func(id stack.TransportEndpointID, pkt *stack.PacketBuffer) bool {
+ 		data := pkt.Data().AsRange().ToSlice()
+ 		// if len(data) == 0 {
+--- a/proxy/tun/handler.go
++++ b/proxy/tun/handler.go
+@@ -35,6 +35,10 @@
+ 	sniffingRequest session.SniffingRequest
+ 	uplinkCounter   stats.Counter
+ 	downlinkCounter stats.Counter
++
++	// keqdroid, udp_exit.go
++	instance *core.Instance
++	exits    udpExits
+ }
+ 
+ type tunUDPStatsWriter struct {
+@@ -78,6 +82,7 @@
+ 	}
+ 
+ 	t.ctx = core.ToBackgroundDetachedContext(ctx)
++	t.instance = core.FromContext(ctx)
+ 	t.policyManager = pm
+ 	t.dispatcher = dispatcher
+ 
+--- /dev/null
++++ b/proxy/tun/udp_exit.go
+@@ -0,0 +1,90 @@
++package tun
++
++import (
++	"sync"
++
++	"github.com/xtls/xray-core/common/net"
++	"github.com/xtls/xray-core/common/session"
++	"github.com/xtls/xray-core/features/outbound"
++	"github.com/xtls/xray-core/features/routing"
++	routing_session "github.com/xtls/xray-core/features/routing/session"
++)
++
++// keqdroid: an outbound with this tag turns the per-exit flows of
++// udp_fullcone.go on. Off by default: P2P traffic that learns its address from
++// a STUN server on one exit and reaches the peer through another no longer
++// gets through directly. keqdroid adds the outbound (a blackhole nothing
++// routes to) when its setting is on.
++const udpPerExitTag = "keq-udp-per-exit"
++
++// The outbound the rules pick for one datagram, asked once per source and
++// destination: a process rule costs a lookup in the app.
++type udpExits struct {
++	sync.Mutex
++	m map[string]string
++}
++
++// a socket spraying addresses (DHT) would grow it forever
++const udpExitCache = 4096
++
++// nil without the mark, and the flows stay keyed by source as upstream
++func (t *Handler) udpExitFunc() func(src net.Destination, dst net.Destination) string {
++	if t.instance == nil {
++		return nil
++	}
++	m, ok := t.instance.GetFeature(outbound.ManagerType()).(outbound.Manager)
++	if !ok || m.GetHandler(udpPerExitTag) == nil {
++		return nil
++	}
++	return t.udpExit
++}
++
++func (t *Handler) udpExit(src net.Destination, dst net.Destination) string {
++	pair := src.NetAddr() + ">" + dst.NetAddr()
++	t.exits.Lock()
++	exit, ok := t.exits.m[pair]
++	t.exits.Unlock()
++	if ok {
++		return exit
++	}
++	exit = t.pickExit(src, dst)
++	t.exits.Lock()
++	if t.exits.m == nil || len(t.exits.m) >= udpExitCache {
++		t.exits.m = make(map[string]string)
++	}
++	t.exits.m[pair] = exit
++	t.exits.Unlock()
++	return exit
++}
++
++// no matching rule is the default outbound, which is also where the catch-all
++// sends it: one key for both, or the same exit would be split in two
++func (t *Handler) pickExit(src net.Destination, dst net.Destination) string {
++	fallback := ""
++	if m, ok := t.instance.GetFeature(outbound.ManagerType()).(outbound.Manager); ok {
++		if h := m.GetDefaultHandler(); h != nil {
++			fallback = h.Tag()
++		}
++	}
++	router, ok := t.instance.GetFeature(routing.RouterType()).(routing.Router)
++	if !ok || router == nil {
++		return fallback
++	}
++	ctx := session.ContextWithInbound(t.ctx, &session.Inbound{
++		Name:   "tun",
++		Tag:    t.tag,
++		Source: src,
++	})
++	ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{
++		Target:         dst,
++		OriginalTarget: dst,
++	}})
++	route, err := router.PickRoute(routing_session.AsRoutingContext(ctx))
++	if err != nil {
++		return fallback
++	}
++	if tag := route.GetOutboundTag(); tag != "" {
++		return tag
++	}
++	return fallback
++}
+--- /dev/null
++++ b/proxy/tun/udp_exit_test.go
+@@ -0,0 +1,37 @@
++package tun
++
++import (
++	"testing"
++
++	"github.com/xtls/xray-core/common/net"
++)
++
++func udpFlowsFor(exitOf func(src net.Destination, dst net.Destination) string) int {
++	handle := func(conn net.Conn, dest net.Destination) {}
++	write := func([]byte, net.Destination, net.Destination) error { return nil }
++	h := newUdpConnectionHandler(handle, write, exitOf)
++	src := net.UDPDestination(net.ParseAddress("10.0.0.2"), 40000)
++	for _, ip := range []string{"1.1.1.1", "2.2.2.2", "3.3.3.3"} {
++		h.HandlePacket(src, net.UDPDestination(net.ParseAddress(ip), 3478), []byte("x"))
++	}
++	h.RLock()
++	defer h.RUnlock()
++	return len(h.udpConns)
++}
++
++// keqdroid, xray-android-udp-per-exit.patch: one flow per exit, not per address
++func TestUDPFlowPerExit(t *testing.T) {
++	exits := map[string]string{"1.1.1.1": "proxy", "2.2.2.2": "keq-srv-0", "3.3.3.3": "proxy"}
++	got := udpFlowsFor(func(_ net.Destination, dst net.Destination) string {
++		return exits[dst.Address.String()]
++	})
++	if got != 2 {
++		t.Fatalf("three addresses on two exits made %d flows, want 2", got)
++	}
++}
++
++func TestUDPFlowPerSourceWithoutMark(t *testing.T) {
++	if got := udpFlowsFor(nil); got != 1 {
++		t.Fatalf("without the mark one source made %d flows, want 1", got)
++	}
++}
