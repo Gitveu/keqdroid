@@ -715,6 +715,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsXraySniffingRouteOnlyHint => 'دامنهٔ شناسایی‌شده فقط قانون را انتخاب می‌کند؛ اتصال به آدرس برنامه می‌رود.';
 
   @override
+  String get settingsXrayUdpPerAddress => 'مسیریابی UDP برای هر آدرس مقصد';
+
+  @override
+  String get settingsXrayUdpPerAddressHint => 'خروجی برای هر آدرس مقصد طبق قوانین انتخاب می‌شود، نه بر اساس نخستین بستهٔ سوکت. اگر قوانین سرور STUN و طرف مقابل را به خروجی‌های مختلف بفرستند، P2P بر پایهٔ STUN (تماس، بازی، تورنت) ممکن است مستقیم برقرار نشود.';
+
+  @override
   String get settingsXrayResetDefaults => 'بازگشت به پیش‌فرض';
 
   @override

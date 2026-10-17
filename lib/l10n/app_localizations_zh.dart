@@ -715,6 +715,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsXraySniffingRouteOnlyHint => '嗅探到的域名只用于选择规则，连接仍走应用给出的地址。';
 
   @override
+  String get settingsXrayUdpPerAddress => '按每个目标地址路由 UDP';
+
+  @override
+  String get settingsXrayUdpPerAddressHint => '出口按每个目标地址的规则选择，而不是按套接字的第一个数据包。如果规则把 STUN 服务器和对端分到不同出口，基于 STUN 的 P2P（通话、游戏、BT 下载）可能无法直连。';
+
+  @override
   String get settingsXrayResetDefaults => '重置为默认值';
 
   @override

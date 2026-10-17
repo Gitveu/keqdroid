@@ -174,6 +174,7 @@ class MihomoConfigGen {
       if (settings.xrayCore.concurrentDial) 'tcp-concurrent': true,
       // поиск процесса стоит на каждой сессии, включаем только где без него не работают наши правила
       'find-process-mode': findProcess ? 'strict' : 'off',
+      if (settings.xrayCore.udpPerAddress) udpPerExitKey: true,
       'sniffer': buildSniffer(settings.xrayCore),
       if (buildHosts(settings.xrayCore).isNotEmpty)
         'hosts': buildHosts(settings.xrayCore),
@@ -305,6 +306,7 @@ class MihomoConfigGen {
             buildHosts(settings.xrayCore).isNotEmpty)
           'hosts': buildHosts(settings.xrayCore),
         if (processRules || appRoutes.isNotEmpty) 'find-process-mode': 'strict',
+        if (settings.xrayCore.udpPerAddress) udpPerExitKey: true,
         if (tun != null) 'tun': buildTun(tun),
         if (settings.lanSharing) 'listeners': buildLanListeners(settings),
         // наборы автора остаются: его правила на них ссылаются
@@ -1723,6 +1725,9 @@ class MihomoConfigGen {
 
     return [...rules, 'MATCH,$finalTarget'];
   }
+
+  // читает только наш mihomo, tool/patches/mihomo-udp-per-exit.patch; чужой ключ ядро пропускает
+  static const udpPerExitKey = 'keqdroid-udp-per-exit';
 
   static const tunInterfaceRange = '198.18.0.0/30';
 

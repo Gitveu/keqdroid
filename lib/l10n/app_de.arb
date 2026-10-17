@@ -455,6 +455,8 @@
   "settingsXrayXmuxParamsHint": "Leer nutzt den Xray-Standard. Zahl oder Bereich, z. B. 16-32.",
   "settingsXraySniffingHint": "Zielprotokoll und Domain aus dem eingehenden Datenverkehr erkennen",
   "settingsXraySniffingRouteOnlyHint": "Die erkannte Domain wählt nur die Regel; verbunden wird zur Adresse der App.",
+  "settingsXrayUdpPerAddress": "UDP je Zieladresse nach Regeln leiten",
+  "settingsXrayUdpPerAddressHint": "Der Ausgang folgt für jede Zieladresse den Regeln, nicht dem ersten Paket eines Sockets. P2P über STUN (Anrufe, Spiele, Torrents) kommt eventuell nicht direkt zustande, wenn die Regeln STUN-Server und Gegenstelle über verschiedene Ausgänge schicken.",
   "settingsXrayResetDefaults": "Zurücksetzen",
   "settingsXrayResetDone": "Xray-Kerneinstellungen wiederhergestellt",
   "settingsXrayXmuxMaxConcurrency": "Max. Parallelität",

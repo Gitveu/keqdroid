@@ -1136,6 +1136,14 @@ class _XrayGeneralSection extends ConsumerWidget {
                 ),
               ),
             ),
+            SwitchListTile(
+              value: core.udpPerAddress,
+              onChanged: (v) =>
+                  _saveXrayCore(ref, settings, core.copyWith(udpPerAddress: v)),
+              activeThumbColor: accent,
+              title: Text(l10n.settingsXrayUdpPerAddress),
+              subtitle: Text(l10n.settingsXrayUdpPerAddressHint),
+            ),
           ],
         ),
       ],

@@ -322,6 +322,12 @@ class SingBoxTunConfigGen {
         managedProcessNames
             .any((name) => processNameMatchVariants(name).isNotEmpty);
     if (!selectedOnly) {
+      // свой выход каждому адресу UDP выбирает xray, а сессию sing-box держит по первому пакету сокета:
+      // правило напрямую здесь склеило бы его снова. IPv6 ниже закрывается, как раньше
+      if (settings.xrayCore.udpPerAddress &&
+          routingMode != AppRoutingMode.onlySelected) {
+        rules.add({'network': 'udp', 'ip_version': 4, 'outbound': 'proxy'});
+      }
       if (blockedDomains.isNotEmpty) {
         addDomainRule(
           targetRules: rules,

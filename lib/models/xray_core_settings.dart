@@ -56,6 +56,9 @@ class XrayCoreSettings {
 
   final bool concurrentDial;
 
+  // выход для UDP по правилу каждого адреса, а не первого пакета сокета; ядра читают метку keq-udp-per-exit
+  final bool udpPerAddress;
+
   final String dnsHosts;
 
   final String dnsPolicy;
@@ -95,6 +98,7 @@ class XrayCoreSettings {
     this.sniffingEnabled = true,
     this.sniffingRouteOnly = false,
     this.concurrentDial = false,
+    this.udpPerAddress = false,
     this.dnsHosts = '',
     this.dnsPolicy = '',
   });
@@ -184,6 +188,7 @@ class XrayCoreSettings {
         'sniffingEnabled': sniffingEnabled,
         'sniffingRouteOnly': sniffingRouteOnly,
         'concurrentDial': concurrentDial,
+        'udpPerAddress': udpPerAddress,
         'dnsHosts': dnsHosts,
         'dnsPolicy': dnsPolicy,
       };
@@ -249,6 +254,7 @@ class XrayCoreSettings {
       sniffingEnabled: b('sniffingEnabled', true),
       sniffingRouteOnly: b('sniffingRouteOnly', false),
       concurrentDial: b('concurrentDial', false),
+      udpPerAddress: b('udpPerAddress', false),
       dnsHosts: json['dnsHosts'] as String? ?? '',
       dnsPolicy: json['dnsPolicy'] as String? ?? '',
     );
@@ -287,6 +293,7 @@ class XrayCoreSettings {
     bool? sniffingEnabled,
     bool? sniffingRouteOnly,
     bool? concurrentDial,
+    bool? udpPerAddress,
     String? dnsHosts,
     String? dnsPolicy,
   }) =>
@@ -328,6 +335,7 @@ class XrayCoreSettings {
         sniffingEnabled: sniffingEnabled ?? this.sniffingEnabled,
         sniffingRouteOnly: sniffingRouteOnly ?? this.sniffingRouteOnly,
         concurrentDial: concurrentDial ?? this.concurrentDial,
+        udpPerAddress: udpPerAddress ?? this.udpPerAddress,
         dnsHosts: dnsHosts ?? this.dnsHosts,
         dnsPolicy: dnsPolicy ?? this.dnsPolicy,
       );
@@ -793,6 +801,7 @@ class XrayCoreSettings {
           sniffingEnabled == other.sniffingEnabled &&
           sniffingRouteOnly == other.sniffingRouteOnly &&
           concurrentDial == other.concurrentDial &&
+          udpPerAddress == other.udpPerAddress &&
           dnsHosts == other.dnsHosts &&
           dnsPolicy == other.dnsPolicy;
 
@@ -830,6 +839,7 @@ class XrayCoreSettings {
         sniffingEnabled,
         sniffingRouteOnly,
         concurrentDial,
+        udpPerAddress,
         dnsHosts,
         dnsPolicy,
       ]);

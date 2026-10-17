@@ -1319,6 +1319,18 @@ abstract class AppLocalizations {
   /// **'The sniffed domain only picks the routing rule; the connection still goes to the address the app gave.'**
   String get settingsXraySniffingRouteOnlyHint;
 
+  /// No description provided for @settingsXrayUdpPerAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Route UDP by each destination address'**
+  String get settingsXrayUdpPerAddress;
+
+  /// No description provided for @settingsXrayUdpPerAddressHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The exit follows the rules for every destination address, not the first packet of a socket. P2P over STUN (calls, games, torrents) may not connect directly when the rules send the STUN server and the peer to different exits.'**
+  String get settingsXrayUdpPerAddressHint;
+
   /// No description provided for @settingsXrayResetDefaults.
   ///
   /// In en, this message translates to:

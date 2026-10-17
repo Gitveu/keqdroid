@@ -719,6 +719,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsXraySniffingRouteOnlyHint => 'Die erkannte Domain wählt nur die Regel; verbunden wird zur Adresse der App.';
 
   @override
+  String get settingsXrayUdpPerAddress => 'UDP je Zieladresse nach Regeln leiten';
+
+  @override
+  String get settingsXrayUdpPerAddressHint => 'Der Ausgang folgt für jede Zieladresse den Regeln, nicht dem ersten Paket eines Sockets. P2P über STUN (Anrufe, Spiele, Torrents) kommt eventuell nicht direkt zustande, wenn die Regeln STUN-Server und Gegenstelle über verschiedene Ausgänge schicken.';
+
+  @override
   String get settingsXrayResetDefaults => 'Zurücksetzen';
 
   @override

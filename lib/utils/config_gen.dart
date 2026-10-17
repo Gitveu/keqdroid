@@ -697,6 +697,12 @@ class ConfigGeneratorV2 {
 
   static const _customDnsTag = 'keq-dns-out';
 
+  // keqrnel и xray для Android включают UDP по маршрутам каждого адреса, увидев этот выход:
+  // keqrnel bridge/xray/udp_exits.go, tool/patches/xray-android-udp-per-exit.patch
+  static const udpPerExitTag = 'keq-udp-per-exit';
+
+  static Map<String, dynamic> _udpPerExitMark() => {'protocol': 'blackhole', 'tag': udpPerExitTag};
+
   // nonIPQuery ядро объявило к удалению, а удалённые поля роняют конфиг. без правил вышел бы пустой ответ вместо REFUSED
   static Map<String, dynamic> _dnsOutboundSettings() => {
         'rules': [
@@ -981,6 +987,7 @@ class ConfigGeneratorV2 {
           'tag': _customDnsTag,
           'settings': _dnsOutboundSettings(),
         },
+      if (settings.xrayCore.udpPerAddress) _udpPerExitMark(),
     ];
     if (extraOutbounds.isNotEmpty) {
       config['outbounds'] = [
@@ -2055,6 +2062,7 @@ class ConfigGeneratorV2 {
             'tag': 'dns-out',
             'settings': _dnsOutboundSettings(),
           },
+        if (!isPingMode && core.udpPerAddress) _udpPerExitMark(),
     ];
     if (resolvesForIpRules && finalTag != 'proxy') {
       final index = outbounds.indexWhere((o) => o['tag'] == finalTag);

@@ -729,6 +729,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsXraySniffingRouteOnlyHint => 'Домен из снифера только выбирает правило, а соединение идёт на адрес от приложения.';
 
   @override
+  String get settingsXrayUdpPerAddress => 'UDP по маршрутам для каждого адреса';
+
+  @override
+  String get settingsXrayUdpPerAddressHint => 'Выход выбирается по правилам для каждого адреса назначения, а не по первому пакету сокета. P2P через STUN (звонки, игры, торренты) может не установиться напрямую, если правила разводят STUN-сервер и пира по разным выходам.';
+
+  @override
   String get settingsXrayResetDefaults => 'Сбросить настройки';
 
   @override
