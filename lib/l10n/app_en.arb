@@ -1108,6 +1108,8 @@
   "appearanceTabThemes": "Themes",
   "appearanceAmoled": "Pure black (AMOLED)",
   "appearanceAmoledNeedsDark": "Available with the dark theme on",
+  "appearanceHalloween": "Show holiday decorations",
+  "appearanceHalloweenUntil": "Until November 2",
   "appearanceHaptics": "Vibration",
   "appearanceShowTraffic": "Traffic speed and volume",
   "appearanceShowTime": "Connection time",

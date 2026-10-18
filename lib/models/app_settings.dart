@@ -65,6 +65,7 @@ class AppSettings {
   final Map<String, String> hotkeys;
   final bool serversTwoColumns;
   final bool amoledBlack;
+  final bool seasonalDecor;
   final bool hapticFeedback;
   final bool showTrafficStats;
   final bool showConnectionTime;
@@ -129,6 +130,7 @@ class AppSettings {
     this.hotkeys = const {},
     this.serversTwoColumns = false,
     this.amoledBlack = false,
+    this.seasonalDecor = true,
     this.hapticFeedback = true,
     this.showTrafficStats = true,
     this.showConnectionTime = true,
@@ -186,6 +188,7 @@ class AppSettings {
     'hotkeys': hotkeys,
     'serversTwoColumns': serversTwoColumns,
     'amoledBlack': amoledBlack,
+    'seasonalDecor': seasonalDecor,
     'hapticFeedback': hapticFeedback,
     'showTrafficStats': showTrafficStats,
     'showConnectionTime': showConnectionTime,
@@ -274,6 +277,7 @@ class AppSettings {
       hotkeys: _readHotkeys(json['hotkeys']),
       serversTwoColumns: json['serversTwoColumns'] as bool? ?? false,
       amoledBlack: json['amoledBlack'] as bool? ?? false,
+      seasonalDecor: json['seasonalDecor'] as bool? ?? true,
       hapticFeedback: json['hapticFeedback'] as bool? ?? true,
       // у старых настроек бывают включены обе, тогда побеждает разбивка
       showTrafficStats: (json['showTrafficStats'] as bool? ?? true) &&
@@ -430,6 +434,7 @@ class AppSettings {
     Map<String, String>? hotkeys,
     bool? serversTwoColumns,
     bool? amoledBlack,
+    bool? seasonalDecor,
     bool? hapticFeedback,
     bool? showTrafficStats,
     bool? showConnectionTime,
@@ -488,6 +493,7 @@ class AppSettings {
         hotkeys: hotkeys ?? this.hotkeys,
         serversTwoColumns: serversTwoColumns ?? this.serversTwoColumns,
         amoledBlack: amoledBlack ?? this.amoledBlack,
+        seasonalDecor: seasonalDecor ?? this.seasonalDecor,
         hapticFeedback: hapticFeedback ?? this.hapticFeedback,
         showTrafficStats: showTrafficStats ?? this.showTrafficStats,
         showConnectionTime: showConnectionTime ?? this.showConnectionTime,
@@ -562,6 +568,7 @@ class AppSettings {
               fakeIp == other.fakeIp &&
               serversTwoColumns == other.serversTwoColumns &&
               amoledBlack == other.amoledBlack &&
+              seasonalDecor == other.seasonalDecor &&
               hapticFeedback == other.hapticFeedback &&
               showTrafficStats == other.showTrafficStats &&
               showConnectionTime == other.showConnectionTime &&
@@ -628,6 +635,7 @@ class AppSettings {
     fakeIp,
     serversTwoColumns,
     amoledBlack,
+    seasonalDecor,
     hapticFeedback,
     showTrafficStats,
     showConnectionTime,

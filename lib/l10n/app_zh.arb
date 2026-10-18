@@ -1060,6 +1060,8 @@
   "appearanceTabThemes": "主题",
   "appearanceAmoled": "纯黑（AMOLED）",
   "appearanceAmoledNeedsDark": "需要开启深色主题",
+  "appearanceHalloween": "显示节日装饰",
+  "appearanceHalloweenUntil": "持续到 11 月 2 日",
   "appearanceHaptics": "振动",
   "appearanceShowTraffic": "速度与流量",
   "appearanceShowTime": "连接时长",

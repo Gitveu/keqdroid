@@ -3953,6 +3953,18 @@ abstract class AppLocalizations {
   /// **'Available with the dark theme on'**
   String get appearanceAmoledNeedsDark;
 
+  /// No description provided for @appearanceHalloween.
+  ///
+  /// In en, this message translates to:
+  /// **'Show holiday decorations'**
+  String get appearanceHalloween;
+
+  /// No description provided for @appearanceHalloweenUntil.
+  ///
+  /// In en, this message translates to:
+  /// **'Until November 2'**
+  String get appearanceHalloweenUntil;
+
   /// No description provided for @appearanceHaptics.
   ///
   /// In en, this message translates to:

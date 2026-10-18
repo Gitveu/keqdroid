@@ -5,6 +5,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_color_utilities/material_color_utilities.dart' as mcu;
 import 'package:keqdroid/l10n/app_localizations.dart';
 
 import '../models/app_font.dart';
@@ -84,6 +85,62 @@ ColorScheme _lavenderMilkScheme(Brightness brightness) {
   );
 }
 
+/// «Тыква и ночь»: две семьи цветов по правилам Material вместо одной.
+///
+/// Тыквенный исходный цвет даёт почти ту же палитру, что Amber, — такие
+/// пары-близнецы из списка уже убирали (см. [_kRetiredPresets]). Отличие держит
+/// фиолетовая семья: она уходит в выбранное и в фон. Тоны всех ролей считает
+/// сама библиотека, как у простых тем, поэтому тема читается как своя, а не
+/// вставленная. Насыщенность фона поднята с шести у простых тем до четырнадцати,
+/// чтобы фиолетовый в нём читался; «вариантный» фон, как и у них, на два больше.
+ColorScheme _pumpkinNightScheme(Brightness brightness) {
+  final pumpkin = mcu.Hct.fromInt(0xFFFF7518);
+  final d = mcu.DynamicScheme(
+    sourceColorHct: pumpkin,
+    variant: mcu.Variant.tonalSpot,
+    isDark: brightness == Brightness.dark,
+    primaryPalette: mcu.TonalPalette.of(pumpkin.hue, 48),
+    secondaryPalette: mcu.TonalPalette.of(300, 24),
+    tertiaryPalette: mcu.TonalPalette.of(290, 40),
+    neutralPalette: mcu.TonalPalette.of(295, 14),
+    neutralVariantPalette: mcu.TonalPalette.of(295, 16),
+  );
+  Color c(mcu.DynamicColor role) => Color(role.getArgb(d));
+  return ColorScheme.fromSeed(
+    seedColor: const Color(0xFFFF7518),
+    brightness: brightness,
+  ).copyWith(
+    primary: c(mcu.MaterialDynamicColors.primary),
+    onPrimary: c(mcu.MaterialDynamicColors.onPrimary),
+    primaryContainer: c(mcu.MaterialDynamicColors.primaryContainer),
+    onPrimaryContainer: c(mcu.MaterialDynamicColors.onPrimaryContainer),
+    secondary: c(mcu.MaterialDynamicColors.secondary),
+    onSecondary: c(mcu.MaterialDynamicColors.onSecondary),
+    secondaryContainer: c(mcu.MaterialDynamicColors.secondaryContainer),
+    onSecondaryContainer: c(mcu.MaterialDynamicColors.onSecondaryContainer),
+    tertiary: c(mcu.MaterialDynamicColors.tertiary),
+    onTertiary: c(mcu.MaterialDynamicColors.onTertiary),
+    tertiaryContainer: c(mcu.MaterialDynamicColors.tertiaryContainer),
+    onTertiaryContainer: c(mcu.MaterialDynamicColors.onTertiaryContainer),
+    surface: c(mcu.MaterialDynamicColors.surface),
+    onSurface: c(mcu.MaterialDynamicColors.onSurface),
+    onSurfaceVariant: c(mcu.MaterialDynamicColors.onSurfaceVariant),
+    surfaceDim: c(mcu.MaterialDynamicColors.surfaceDim),
+    surfaceBright: c(mcu.MaterialDynamicColors.surfaceBright),
+    surfaceContainerLowest: c(mcu.MaterialDynamicColors.surfaceContainerLowest),
+    surfaceContainerLow: c(mcu.MaterialDynamicColors.surfaceContainerLow),
+    surfaceContainer: c(mcu.MaterialDynamicColors.surfaceContainer),
+    surfaceContainerHigh: c(mcu.MaterialDynamicColors.surfaceContainerHigh),
+    surfaceContainerHighest: c(mcu.MaterialDynamicColors.surfaceContainerHighest),
+    outline: c(mcu.MaterialDynamicColors.outline),
+    outlineVariant: c(mcu.MaterialDynamicColors.outlineVariant),
+    inverseSurface: c(mcu.MaterialDynamicColors.inverseSurface),
+    inversePrimary: c(mcu.MaterialDynamicColors.inversePrimary),
+    surfaceTint: c(mcu.MaterialDynamicColors.surfaceTint),
+    onInverseSurface: c(mcu.MaterialDynamicColors.inverseOnSurface),
+  );
+}
+
 const kThemePresets = <ThemePreset>[
   ThemePreset(id: 'ocean', name: 'Ocean', seed: Color(0xFF3A86FF)),
   ThemePreset(id: 'sunset', name: 'Sunset', seed: Color(0xFFEF476F)),
@@ -110,6 +167,12 @@ const kThemePresets = <ThemePreset>[
     flair: true,
     kawaii: KawaiiFlavor.lavender,
     variant: DynamicSchemeVariant.fidelity,
+  ),
+  ThemePreset(
+    id: 'pumpkin_night',
+    name: 'Pumpkin Night',
+    seed: Color(0xFFFF7518),
+    schemeBuilder: _pumpkinNightScheme,
   ),
 ];
 

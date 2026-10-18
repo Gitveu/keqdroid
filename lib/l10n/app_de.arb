@@ -1060,6 +1060,8 @@
   "appearanceTabThemes": "Designs",
   "appearanceAmoled": "Reines Schwarz (AMOLED)",
   "appearanceAmoledNeedsDark": "Nur mit dunklem Design verfügbar",
+  "appearanceHalloween": "Festliche Gestaltung anzeigen",
+  "appearanceHalloweenUntil": "Bis zum 2. November",
   "appearanceHaptics": "Vibration",
   "appearanceShowTraffic": "Geschwindigkeit und Datenmenge",
   "appearanceShowTime": "Verbindungsdauer",

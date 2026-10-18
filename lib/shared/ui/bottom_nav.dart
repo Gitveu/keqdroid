@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:keqdroid/shared/ui/halloween/halloween_icons.dart';
 import 'package:keqdroid/l10n/app_localizations.dart';
 import 'package:keqdroid/shared/ui/app_theme.dart';
 import 'package:keqdroid/shared/ui/expressive.dart';
@@ -244,7 +245,7 @@ class NavIcon extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Icon(icon, size: 24, color: color),
+        SeasonalIcon(icon, size: 24, color: color),
         if (badge)
           Positioned(
             top: -1,
