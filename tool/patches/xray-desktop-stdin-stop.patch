@@ -1,0 +1,34 @@
+Stop on EOF at stdin, when KEQ_STOP_ON_STDIN_EOF is set.
+
+On Windows Dart's Process.kill is TerminateProcess whatever the signal.
+Killed that way, the tun inbound never runs Close: the weak host send it
+turned off on the physical interface stays off for good, and the DNS cache
+keeps the TUN's answers. keqdroid starts xray with the variable set and
+closes its stdin to stop it, which goes the same way as Ctrl+C. keqrnel had
+the same switch before the move to xray.
+diff --git a/main/run.go b/main/run.go
+index b87ca63..d22d781 100644
+--- a/main/run.go
++++ b/main/run.go
+@@ -2,6 +2,7 @@ package main
+ 
+ import (
+ 	"fmt"
++	"io"
+ 	"log"
+ 	"os"
+ 	"os/signal"
+@@ -104,6 +105,13 @@ func executeRun(cmd *base.Command, args []string) {
+ 	{
+ 		osSignals := make(chan os.Signal, 1)
+ 		signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM)
++		// keqdroid patch, see tool/patches/xray-desktop-stdin-stop.patch
++		if os.Getenv("KEQ_STOP_ON_STDIN_EOF") != "" {
++			go func() {
++				io.Copy(io.Discard, os.Stdin)
++				osSignals <- os.Interrupt
++			}()
++		}
+ 		<-osSignals
+ 	}
+ }

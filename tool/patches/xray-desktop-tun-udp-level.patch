@@ -1,0 +1,68 @@
+UDP flows of the tun inbound get an idle timer of their own.
+
+An idle TUN flow is closed by the outbound's timer, freedom's userLevel or the
+proxy user's level, the same for TCP and UDP; the inbound's level only picks
+stats, and the stack's IdleTimeout is set but never read. keqdroid has a UDP
+timeout of its own in the TUN settings (sing-box's udp_timeout before the move
+to xray). A UDP flow now also ends after connIdle of level userLevel + 1 with
+no datagram either way. The outbound's timer still runs, so the flow ends at
+the shorter of the two, as it did when sing-box handed UDP to xray over SOCKS.
+A level the config does not set has xray's defaults, 300 s, the outbound's
+own, so nothing changes until the config sets one.
+diff --git a/proxy/tun/handler.go b/proxy/tun/handler.go
+index 9ba4fab..c8a6634 100644
+--- a/proxy/tun/handler.go
++++ b/proxy/tun/handler.go
+@@ -14,6 +14,7 @@ import (
+ 	"github.com/xtls/xray-core/common/net"
+ 	"github.com/xtls/xray-core/common/protocol"
+ 	"github.com/xtls/xray-core/common/session"
++	"github.com/xtls/xray-core/common/signal"
+ 	"github.com/xtls/xray-core/core"
+ 	"github.com/xtls/xray-core/features/policy"
+ 	"github.com/xtls/xray-core/features/routing"
+@@ -60,6 +61,31 @@ func (w *tunUDPStatsWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+ 	return nil
+ }
+ 
++type udpActivityReader struct {
++	buf.Reader
++	timer signal.ActivityUpdater
++}
++
++func (r *udpActivityReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
++	mb, err := r.Reader.ReadMultiBuffer()
++	if !mb.IsEmpty() {
++		r.timer.Update()
++	}
++	return mb, err
++}
++
++type udpActivityWriter struct {
++	buf.Writer
++	timer signal.ActivityUpdater
++}
++
++func (w *udpActivityWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
++	if !mb.IsEmpty() {
++		w.timer.Update()
++	}
++	return w.Writer.WriteMultiBuffer(mb)
++}
++
+ // ConnectionHandler interface with the only method that stack is going to push new connections to
+ type ConnectionHandler interface {
+ 	HandleConnection(conn net.Conn, destination net.Destination)
+@@ -247,6 +273,12 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
+ 		if t.downlinkCounter != nil {
+ 			writer = &tunUDPStatsWriter{writer: writer, counter: t.downlinkCounter}
+ 		}
++		// keqdroid patch, see tool/patches/xray-desktop-tun-udp-level.patch: a UDP
++		// flow ends after connIdle of level userLevel+1 with no datagram either
++		// way. The outbound keeps its own timer, so this only ends it sooner
++		timer := signal.CancelAfterInactivity(ctx, cancel, t.policyManager.ForLevel(t.config.UserLevel+1).Timeouts.ConnectionIdle)
++		reader.Reader = &udpActivityReader{Reader: reader.Reader, timer: timer}
++		writer = &udpActivityWriter{Writer: writer, timer: timer}
+ 	}
+ 
+ 	link := &transport.Link{

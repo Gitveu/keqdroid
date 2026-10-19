@@ -1,0 +1,51 @@
+The metrics endpoint serves the counters and nothing else.
+
+keqdroid reads traffic counters from the metrics endpoint (/debug/vars) on
+127.0.0.1. Any program on the machine can reach that port, and upstream also
+serves net/http/pprof there: goroutine and heap profiles, a CPU profile, the
+command line. Only /debug/vars stays.
+diff --git a/app/metrics/metrics.go b/app/metrics/metrics.go
+index 6d1cff7..ab87961 100644
+--- a/app/metrics/metrics.go
++++ b/app/metrics/metrics.go
+@@ -7,7 +7,6 @@ import (
+ 	"expvar"
+ 	stdnet "net"
+ 	"net/http"
+-	"net/http/pprof"
+ 	"strings"
+ 
+ 	"github.com/xtls/xray-core/app/observatory"
+@@ -132,14 +131,12 @@ func isClosedListenerError(err error) bool {
+ 		strings.Contains(errText, "use of closed network connection")
+ }
+ 
++// keqdroid patch, see tool/patches/xray-desktop-metrics.patch: the app reads
++// the counters here, and any program on the machine can reach this port, so
++// the profiler and its memory dumps stay off
+ func (p *MetricsHandler) httpHandler() http.Handler {
+ 	mux := http.NewServeMux()
+ 	mux.HandleFunc("/debug/vars", p.handleDebugVars)
+-	mux.HandleFunc("/debug/pprof/", pprof.Index)
+-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+ 	return mux
+ }
+ 
+diff --git a/app/metrics/metrics_test.go b/app/metrics/metrics_test.go
+index a493887..d448cb9 100644
+--- a/app/metrics/metrics_test.go
++++ b/app/metrics/metrics_test.go
+@@ -144,8 +144,8 @@ func readMetricsPprof(t *testing.T, server *core.Instance) {
+ 		httptest.NewRequest(http.MethodGet, "/debug/pprof/goroutine?debug=1", nil),
+ 	)
+ 
+-	if recorder.Code != http.StatusOK {
+-		t.Fatalf("unexpected metrics pprof status: %d", recorder.Code)
++	if recorder.Code != http.StatusNotFound {
++		t.Fatalf("the profiler answered on the metrics port: %d", recorder.Code)
+ 	}
+ }
+ 

@@ -1,0 +1,439 @@
+Process rules and the access log for the desktop tun inbound.
+
+When keqdroid moved desktop TUN from sing-box to xray's own tun inbound, xray
+had to take over what sing-box's process rules did. Three things were missing:
+
+- "Only the selected apps" sends every other program direct. mihomo writes it
+  as NOT(PROCESS-NAME-REGEX ...); xray has no NOT. An entry written as "!name"
+  in a rule's process list now makes the rule match a process outside the
+  "!" entries. A process the system tables do not know counts as outside, as
+  for mihomo's NOT.
+- Windows names and paths ignore case, and the path a file dialog returns can
+  differ in case from the one the system reports. On Windows names, paths,
+  folders and the .exe suffix now compare without case.
+- Each process rule searched the system tables again for the same connection,
+  and the access log needs the program too. common/net.FindProcessCached keeps
+  one result per source for 2 seconds. Not on Android: there the app keeps
+  its own answers, by both ends of a connection, and keeps no failed one.
+
+The access log ends with " process: <path>", so the app's Connections screen
+can name the program as it did with sing-box: always for TUN connections, as
+sing-box's find_process did there, and for local SOCKS and HTTP clients only
+when the config has an outbound tagged keq-process-log (routed to by nothing),
+as sing-box looked those up only in debug mode. Not on Android, where the app
+asks the VPN service for connection owners.
+diff --git a/app/dispatcher/conn_process.go b/app/dispatcher/conn_process.go
+new file mode 100644
+index 0000000..592b864
+--- /dev/null
++++ b/app/dispatcher/conn_process.go
+@@ -0,0 +1,55 @@
++package dispatcher
++
++import (
++	"context"
++	"runtime"
++
++	"github.com/xtls/xray-core/common/net"
++	"github.com/xtls/xray-core/common/session"
++)
++
++// processLogTag names an outbound, routed to by nothing, whose presence makes
++// the access log name the programs of local SOCKS and HTTP clients too
++const processLogTag = "keq-process-log"
++
++// keqdroid patch, see tool/patches/xray-desktop-process.patch: the access log
++// names the program of a connection, from the same cached lookup the process
++// rules use. TUN connections always, as sing-box's find_process did there;
++// local SOCKS and HTTP clients only with the processLogTag outbound, as sing-box
++// did only in debug mode. On Android the app asks the VPN service instead.
++func (d *DefaultDispatcher) connProcess(ctx context.Context, ob *session.Outbound, destination net.Destination) string {
++	if runtime.GOOS == "android" {
++		return ""
++	}
++	inbound := session.InboundFromContext(ctx)
++	if inbound == nil || inbound.Source.Address == nil || !inbound.Source.Address.Family().IsIP() {
++		return ""
++	}
++	switch inbound.Name {
++	case "tun":
++	case "socks", "http":
++		if !inbound.Source.Address.IP().IsLoopback() || d.ohm.GetHandler(processLogTag) == nil {
++			return ""
++		}
++	default:
++		return ""
++	}
++	target := ob.OriginalTarget
++	if target.Address == nil || !target.Address.Family().IsIP() {
++		target = destination
++	}
++	dstIP := ""
++	if target.Address != nil && target.Address.Family().IsIP() {
++		dstIP = target.Address.IP().String()
++	}
++	network := "tcp"
++	if destination.Network == net.Network_UDP {
++		network = "udp"
++	}
++	_, _, path, err := net.FindProcessCached(network, inbound.Source.Address.IP().String(),
++		uint16(inbound.Source.Port), dstIP, uint16(target.Port))
++	if err != nil {
++		return ""
++	}
++	return path
++}
+diff --git a/app/dispatcher/default.go b/app/dispatcher/default.go
+index cae9735..ecfe41d 100644
+--- a/app/dispatcher/default.go
++++ b/app/dispatcher/default.go
+@@ -490,6 +490,7 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
+ 
+ 	ob.Tag = handler.Tag()
+ 	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil {
++		accessMessage.Process = d.connProcess(ctx, ob, destination)
+ 		if tag := handler.Tag(); tag != "" {
+ 			if inTag == "" {
+ 				accessMessage.Detour = tag
+diff --git a/app/router/condition.go b/app/router/condition.go
+index 99ab6eb..51a3fe0 100644
+--- a/app/router/condition.go
++++ b/app/router/condition.go
+@@ -296,6 +296,10 @@ type ProcessNameMatcher struct {
+ 	AbsPaths      []string
+ 	Folders       []string
+ 	MatchXraySelf bool
++	// keqdroid patch, see tool/patches/xray-desktop-process.patch: entries
++	// written as "!name" make the rule match processes outside them, the way
++	// mihomo's NOT does, so "only the selected apps" fits in one rule
++	Negated *ProcessNameMatcher
+ }
+ 
+ func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
+@@ -303,7 +307,12 @@ func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
+ 	folders := []string{}
+ 	absPaths := []string{}
+ 	matchXraySelf := false
++	var negated []string
+ 	for _, name := range names {
++		if rest, ok := strings.CutPrefix(name, "!"); ok {
++			negated = append(negated, rest)
++			continue
++		}
+ 		if name == "self/" {
+ 			matchXraySelf = true
+ 			continue
+@@ -329,19 +338,75 @@ func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
+ 			continue
+ 		}
+ 		// curl.exe or curl
++		if runtime.GOOS == "windows" && len(name) > 4 && strings.EqualFold(name[len(name)-4:], ".exe") {
++			name = name[:len(name)-4]
++		}
+ 		processNames = append(processNames, strings.TrimSuffix(name, ".exe"))
+ 	}
+-	return &ProcessNameMatcher{
++	m := &ProcessNameMatcher{
+ 		ProcessNames:  processNames,
+ 		AbsPaths:      absPaths,
+ 		Folders:       folders,
+ 		MatchXraySelf: matchXraySelf,
+ 	}
++	if len(negated) > 0 {
++		m.Negated = NewProcessNameMatcher(negated)
++	}
++	return m
++}
++
++func (m *ProcessNameMatcher) positive() bool {
++	return m.MatchXraySelf || len(m.ProcessNames) > 0 || len(m.AbsPaths) > 0 || len(m.Folders) > 0
+ }
+ 
++// a process the system tables do not know is outside the list, as for mihomo's NOT
+ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
++	pid, name, absPath, found := lookupProcess(ctx)
++	if m.Negated != nil {
++		if found && m.Negated.matches(pid, name, absPath) {
++			return false
++		}
++		if !m.positive() {
++			return true
++		}
++	}
++	return found && m.matches(pid, name, absPath)
++}
++
++// Windows names and paths ignore case, and the path a file dialog gives differs
++// from the one the system reports
++func sameProcessText(a, b string) bool {
++	if runtime.GOOS == "windows" {
++		return strings.EqualFold(a, b)
++	}
++	return a == b
++}
++
++func (m *ProcessNameMatcher) matches(pid int, name, absPath string) bool {
++	if m.MatchXraySelf && pid == os.Getpid() {
++		return true
++	}
++	for _, n := range m.ProcessNames {
++		if sameProcessText(n, name) {
++			return true
++		}
++	}
++	for _, p := range m.AbsPaths {
++		if sameProcessText(p, absPath) {
++			return true
++		}
++	}
++	for _, f := range m.Folders {
++		if len(absPath) >= len(f) && sameProcessText(absPath[:len(f)], f) {
++			return true
++		}
++	}
++	return false
++}
++
++func lookupProcess(ctx routing.Context) (int, string, string, bool) {
+ 	if len(ctx.GetSourceIPs()) == 0 {
+-		return false
++		return 0, "", "", false
+ 	}
+ 
+ 	srcPort := uint16(ctx.GetSourcePort())
+@@ -354,7 +419,7 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+ 	case net.Network_UDP:
+ 		network = "udp"
+ 	default:
+-		return false
++		return 0, "", "", false
+ 	}
+ 
+ 	var dstIP string
+@@ -373,30 +438,14 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+ 		dstPort = uint16(ctx.GetTargetPort())
+ 	}
+ 
+-	pid, name, absPath, err := net.FindProcess(network, srcIP, uint16(srcPort), dstIP, uint16(dstPort))
++	pid, name, absPath, err := net.FindProcessCached(network, srcIP, uint16(srcPort), dstIP, uint16(dstPort))
+ 	if err != nil {
+ 		if err != net.ErrNotLocal {
+ 			errors.LogError(context.Background(), "Unables to find local process name: ", err)
+ 		}
+-		return false
++		return 0, "", "", false
+ 	}
+-	if m.MatchXraySelf {
+-		if pid == os.Getpid() {
+-			return true
+-		}
+-	}
+-	if slices.Contains(m.ProcessNames, name) {
+-		return true
+-	}
+-	if slices.Contains(m.AbsPaths, absPath) {
+-		return true
+-	}
+-	for _, f := range m.Folders {
+-		if strings.HasPrefix(absPath, f) {
+-			return true
+-		}
+-	}
+-	return false
++	return pid, name, absPath, true
+ }
+ 
+ // originalTargetIP is the address the connection was opened to, before
+diff --git a/app/router/condition_process_test.go b/app/router/condition_process_test.go
+new file mode 100644
+index 0000000..c831f7b
+--- /dev/null
++++ b/app/router/condition_process_test.go
+@@ -0,0 +1,94 @@
++//go:build windows || linux
++
++package router_test
++
++import (
++	"os"
++	"path/filepath"
++	"runtime"
++	"strings"
++	"testing"
++
++	. "github.com/xtls/xray-core/app/router"
++	"github.com/xtls/xray-core/common/net"
++	"github.com/xtls/xray-core/common/session"
++	routing_session "github.com/xtls/xray-core/features/routing/session"
++)
++
++// keqdroid patch, see tool/patches/xray-desktop-process.patch. The test opens a
++// TCP connection to itself, so the system tables name this test binary.
++func selfConnContext(t *testing.T) *routing_session.Context {
++	t.Helper()
++	l, err := net.Listen("tcp", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { l.Close() })
++	go func() {
++		if c, err := l.Accept(); err == nil {
++			t.Cleanup(func() { c.Close() })
++		}
++	}()
++	c, err := net.Dial("tcp", l.Addr().String())
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { c.Close() })
++	return &routing_session.Context{
++		Inbound: &session.Inbound{Source: net.DestinationFromAddr(c.LocalAddr())},
++		Outbound: &session.Outbound{
++			Target: net.DestinationFromAddr(c.RemoteAddr()),
++		},
++	}
++}
++
++func selfName(t *testing.T) string {
++	t.Helper()
++	exe, err := os.Executable()
++	if err != nil {
++		t.Fatal(err)
++	}
++	return strings.TrimSuffix(filepath.Base(exe), ".exe")
++}
++
++func TestProcessNegation(t *testing.T) {
++	ctx := selfConnContext(t)
++	self := selfName(t)
++
++	if NewProcessNameMatcher([]string{"!" + self}).Apply(ctx) {
++		t.Fatal("!self matched the process it excludes")
++	}
++	if !NewProcessNameMatcher([]string{"!no-such-program"}).Apply(ctx) {
++		t.Fatal("!other did not match a process outside the list")
++	}
++	if !NewProcessNameMatcher([]string{self}).Apply(ctx) {
++		t.Fatal("the plain name stopped matching")
++	}
++}
++
++func TestProcessUnknownIsOutside(t *testing.T) {
++	ctx := &routing_session.Context{
++		Inbound:  &session.Inbound{Source: net.TCPDestination(net.ParseAddress("127.0.0.1"), 1)},
++		Outbound: &session.Outbound{Target: net.TCPDestination(net.ParseAddress("127.0.0.1"), 2)},
++	}
++	if !NewProcessNameMatcher([]string{"!anything"}).Apply(ctx) {
++		t.Fatal("a process the tables do not know must count as outside the list")
++	}
++	if NewProcessNameMatcher([]string{"anything"}).Apply(ctx) {
++		t.Fatal("an unknown process matched a name")
++	}
++}
++
++func TestProcessCaseOnWindows(t *testing.T) {
++	if runtime.GOOS != "windows" {
++		t.Skip("names keep their case outside Windows")
++	}
++	ctx := selfConnContext(t)
++	if !NewProcessNameMatcher([]string{strings.ToUpper(selfName(t)) + ".EXE"}).Apply(ctx) {
++		t.Fatal("the name in another case did not match")
++	}
++	exe, _ := os.Executable()
++	if !NewProcessNameMatcher([]string{strings.ToUpper(filepath.ToSlash(exe))}).Apply(ctx) {
++		t.Fatal("the path in another case did not match")
++	}
++}
+diff --git a/common/log/access.go b/common/log/access.go
+index 204212d..bd92523 100644
+--- a/common/log/access.go
++++ b/common/log/access.go
+@@ -27,6 +27,9 @@ type AccessMessage struct {
+ 	Reason interface{}
+ 	Email  string
+ 	Detour string
++	// keqdroid patch, see tool/patches/xray-desktop-process.patch: the program
++	// behind a TUN connection, printed last since a path may hold spaces
++	Process string
+ }
+ 
+ func (m *AccessMessage) String() string {
+@@ -55,6 +58,11 @@ func (m *AccessMessage) String() string {
+ 		builder.WriteString(m.Email)
+ 	}
+ 
++	if len(m.Process) > 0 {
++		builder.WriteString(" process: ")
++		builder.WriteString(m.Process)
++	}
++
+ 	return builder.String()
+ }
+ 
+diff --git a/common/net/find_process_cached.go b/common/net/find_process_cached.go
+new file mode 100644
+index 0000000..9ad0d82
+--- /dev/null
++++ b/common/net/find_process_cached.go
+@@ -0,0 +1,61 @@
++package net
++
++import (
++	"runtime"
++	"strconv"
++	"sync"
++	"time"
++)
++
++// keqdroid patch, see tool/patches/xray-desktop-process.patch. Every process
++// rule of a connection used to search the system tables again, and so did the
++// access log: one search per connection now, kept for a moment.
++
++const processCacheTTL = 2 * time.Second
++
++type processResult struct {
++	pid     int
++	name    string
++	absPath string
++	err     error
++	until   time.Time
++}
++
++var processCache = struct {
++	sync.Mutex
++	entries map[string]processResult
++}{entries: map[string]processResult{}}
++
++func FindProcessCached(network, srcIP string, srcPort uint16, destIP string, destPort uint16) (int, string, string, error) {
++	// Android asks the app, which keeps its own answers by both ends and never
++	// keeps a failed one (xray-android-uid-owner.patch)
++	if runtime.GOOS == "android" {
++		return FindProcess(network, srcIP, srcPort, destIP, destPort)
++	}
++	key := network + "|" + srcIP + "|" + strconv.Itoa(int(srcPort))
++	now := time.Now()
++
++	processCache.Lock()
++	if hit, ok := processCache.entries[key]; ok && now.Before(hit.until) {
++		processCache.Unlock()
++		return hit.pid, hit.name, hit.absPath, hit.err
++	}
++	processCache.Unlock()
++
++	pid, name, absPath, err := FindProcess(network, srcIP, srcPort, destIP, destPort)
++
++	processCache.Lock()
++	if len(processCache.entries) >= 4096 {
++		for k, v := range processCache.entries {
++			if !now.Before(v.until) {
++				delete(processCache.entries, k)
++			}
++		}
++		if len(processCache.entries) >= 16384 {
++			processCache.entries = map[string]processResult{}
++		}
++	}
++	processCache.entries[key] = processResult{pid, name, absPath, err, now.Add(processCacheTTL)}
++	processCache.Unlock()
++	return pid, name, absPath, err
++}

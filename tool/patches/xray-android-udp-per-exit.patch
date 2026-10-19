@@ -21,8 +21,8 @@ through another no longer gets through directly (checked on a netns lab with
 pion ICE, 2026-10-17). keqdroid adds the outbound, a blackhole nothing routes
 to, from Settings, core settings.
 
-Android only, through tool/build_xray_cores.ps1 (-extra). keqrnel on the
-desktop takes UDP from sing-box and has the same switch in bridge/xray.
+Android and desktop: since the move off keqrnel the desktop TUN is xray's own
+tun inbound as well, built from the same tree by tool/build_xray_cores.ps1.
 
 --- a/proxy/tun/udp_fullcone.go
 +++ b/proxy/tun/udp_fullcone.go
