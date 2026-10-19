@@ -125,6 +125,12 @@ install(DIRECTORY "${CMAKE_SOURCE_DIR}/../assets/bin/windows/"
     PATTERN "*.dll"
     PATTERN "*.dat")
 
+# The runner and the plugin DLLs link MSVCP140 and VCRUNTIME140: on a clean
+# Windows without the VC++ redistributable the app did not start at all.
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION "${CMAKE_INSTALL_PREFIX}")
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT Runtime)
+include(InstallRequiredSystemLibraries)
+
 # Install the AOT library on non-Debug builds only.
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release

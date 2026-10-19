@@ -238,6 +238,13 @@ if (-not $SkipWindows) {
     }
     Write-Host "    $core OK ($([math]::Round($size / 1MB, 1)) MB)"
   }
+  # A clean Windows has no VC++ runtime; without these the exe does not start.
+  foreach ($dll in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $relDir $dll))) {
+      throw "Missing $dll in Windows build output ($relDir). windows/CMakeLists.txt installs the VC++ runtime next to keqdroid.exe."
+    }
+  }
+  Write-Host "    VC++ runtime OK"
 
   # Гео-базы в бандле лежат ДВАЖДЫ, и вторая копия — мёртвый груз.
   #
