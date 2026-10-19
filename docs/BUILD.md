@@ -133,7 +133,7 @@ This repository's `tool/patches/xray-*.patch` go on top, in the same tree for ev
 platform. `xray-android-*` are for Android: the VPN service names the app behind a
 connection, and UDP takes the route of each address. `xray-desktop-*` are for the PC TUN:
 process rules, the program in the access log, counters, a clean stop through stdin, a UDP
-timeout of its own. On the other platform each of them stays idle; the patch headers say
+timeout of its own, ping and traceroute past the tunnel. On the other platform each of them stays idle; the patch headers say
 why.
 
 `-checklinkname=0` is required for `libxray.so`: the
@@ -342,7 +342,7 @@ powershell -File tool/build_xray_cores.ps1 -Target windows   # или android, l
 платформ. `xray-android-*` для Android: VPN-сервис называет приложение за соединением,
 а UDP идёт маршрутом каждого адреса. `xray-desktop-*` для TUN на ПК: правила по
 программам, программа в журнале, счётчики, мягкая остановка через stdin, свой таймаут
-UDP. На другой платформе каждый из них спит, почему, написано в шапке патча.
+UDP, ping и tracert мимо туннеля. На другой платформе каждый из них спит, почему, написано в шапке патча.
 
 `-checklinkname=0` обязателен для `libxray.so`:
 зависимость `anet` ссылается на `net.zoneCache` из стандартной библиотеки, а Go 1.26+ без

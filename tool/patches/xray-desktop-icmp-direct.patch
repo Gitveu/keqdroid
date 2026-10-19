@@ -1,0 +1,619 @@
+Echo requests from the desktop tun inbound go out as real ICMP, past the tunnel.
+
+The gVisor stack answers every echo request itself (BuildLocalEchoReply), so
+with the TUN up, ping and tracert showed about 1 ms and an answer for any
+address, a dead one included. keqdroid ran desktop TUN on sing-box before the
+move to xray, and its route sent ICMP to the direct outbound: ping measured
+the real path past the VPN, and tracert listed the hops.
+
+Now an echo request goes out through a raw ICMP socket bound to the interface
+autoOutboundsInterface found (IP_UNICAST_IF on Windows, SO_BINDTODEVICE on
+Linux), opened again when that interface changes, with the request's TTL. The
+echo reply, and a Time Exceeded or Destination Unreachable quoting the
+request, are written back into the TUN with the client's ident and address.
+The ident sent out is one of our own, so the system's ping socket does not get
+the real reply as well and print every answer twice.
+
+Windows and Linux only, where the TUN process has the rights for a raw socket
+(administrator, root). Without the socket, without autoOutboundsInterface, and
+on every other platform, Android included, the stack answers locally as
+upstream does.
+diff --git a/proxy/tun/icmp_direct.go b/proxy/tun/icmp_direct.go
+new file mode 100644
+index 0000000..fe5e81c
+--- /dev/null
++++ b/proxy/tun/icmp_direct.go
+@@ -0,0 +1,335 @@
++//go:build windows || (linux && !android)
++
++package tun
++
++import (
++	"context"
++	"encoding/binary"
++	stdnet "net"
++	"net/netip"
++	"sync"
++	"syscall"
++	"time"
++
++	"github.com/xtls/xray-core/common/errors"
++	tunicmp "github.com/xtls/xray-core/proxy/tun/icmp"
++	"golang.org/x/net/ipv4"
++	"golang.org/x/net/ipv6"
++	"gvisor.dev/gvisor/pkg/tcpip"
++	"gvisor.dev/gvisor/pkg/tcpip/header"
++)
++
++// keqdroid patch, see tool/patches/xray-desktop-icmp-direct.patch: echo
++// requests from the TUN go out as real ICMP past the tunnel, on the interface
++// autoOutboundsInterface found, the way sing-box's direct route sent them.
++// Replies, and the errors routers send for them (traceroute), come back into
++// the TUN. Without a raw socket the stack answers locally, as upstream does.
++
++const icmpPendingTTL = 30 * time.Second
++
++type icmpPendingKey struct {
++	dst   netip.Addr
++	ident uint16
++	seq   uint16
++}
++
++type icmpPending struct {
++	src      tcpip.Address
++	ident    uint16
++	checksum uint16
++	at       time.Time
++}
++
++type icmpSocket struct {
++	sync.Mutex
++	conn    stdnet.PacketConn
++	p4      *ipv4.PacketConn
++	p6      *ipv6.PacketConn
++	ifIndex int
++}
++
++type icmpDirect struct {
++	stack *stackGVisor
++
++	mu      sync.Mutex
++	sockets [2]*icmpSocket
++	failed  [2]bool
++	pending map[icmpPendingKey]icmpPending
++	nextID  uint16
++	closed  bool
++}
++
++func newICMPDirect(stack *stackGVisor) *icmpDirect {
++	return &icmpDirect{stack: stack, pending: map[icmpPendingKey]icmpPending{}}
++}
++
++// forward reports whether the request is taken care of; false leaves it to
++// the local reply.
++func (d *icmpDirect) forward(netProto tcpip.NetworkProtocolNumber, request []byte, ttl uint8, src, dst tcpip.Address) bool {
++	if d == nil || updater == nil {
++		return false
++	}
++	iface := updater.Get()
++	if iface == nil {
++		return false
++	}
++	v6 := netProto == header.IPv6ProtocolNumber
++	dstAddr, ok := netip.AddrFromSlice(dst.AsSlice())
++	if !ok || len(request) < 8 {
++		return false
++	}
++	sock := d.socket(v6, iface)
++	if sock == nil {
++		return false
++	}
++
++	message := append([]byte(nil), request...)
++	ident := binary.BigEndian.Uint16(message[4:6])
++	seq := binary.BigEndian.Uint16(message[6:8])
++	now := time.Now()
++
++	d.mu.Lock()
++	d.sweepLocked(now)
++	d.nextID++
++	id := d.nextID
++	key := icmpPendingKey{dst: dstAddr, ident: id, seq: seq}
++	d.pending[key] = icmpPending{
++		src:      src,
++		ident:    ident,
++		checksum: binary.BigEndian.Uint16(message[2:4]),
++		at:       now,
++	}
++	d.mu.Unlock()
++
++	// an ident of our own: the system's ping socket would also take the real
++	// reply for its ident, and ping would print every answer twice
++	binary.BigEndian.PutUint16(message[4:6], id)
++	if v6 {
++		// the kernel fills the ICMPv6 checksum of a raw socket, it needs the source address
++		binary.BigEndian.PutUint16(message[2:4], 0)
++	} else if err := tunicmp.RewriteChecksum(netProto, message, src, dst); err != nil {
++		d.drop(key)
++		return false
++	}
++
++	sock.Lock()
++	var err error
++	if v6 {
++		err = sock.p6.SetHopLimit(int(ttl))
++	} else {
++		err = sock.p4.SetTTL(int(ttl))
++	}
++	if err == nil {
++		_, err = sock.conn.WriteTo(message, &stdnet.IPAddr{IP: dstAddr.AsSlice()})
++	}
++	sock.Unlock()
++	if err != nil {
++		// as if the network lost it: the client times out
++		errors.LogDebugInner(d.stack.ctx, err, "[tun][icmp] failed to send echo request to ", dstAddr)
++		d.drop(key)
++	}
++	return true
++}
++
++func (d *icmpDirect) drop(key icmpPendingKey) {
++	d.mu.Lock()
++	delete(d.pending, key)
++	d.mu.Unlock()
++}
++
++func (d *icmpDirect) sweepLocked(now time.Time) {
++	if len(d.pending) < 1024 {
++		return
++	}
++	for key, p := range d.pending {
++		if now.Sub(p.at) > icmpPendingTTL {
++			delete(d.pending, key)
++		}
++	}
++}
++
++// socket opens a raw ICMP socket bound to iface, and opens it again when the
++// outbound interface changes, as the binding is made once at creation
++func (d *icmpDirect) socket(v6 bool, iface *stdnet.Interface) *icmpSocket {
++	i := 0
++	if v6 {
++		i = 1
++	}
++	d.mu.Lock()
++	defer d.mu.Unlock()
++	if d.closed || d.failed[i] {
++		return nil
++	}
++	if s := d.sockets[i]; s != nil {
++		if s.ifIndex == iface.Index {
++			return s
++		}
++		s.conn.Close()
++		d.sockets[i] = nil
++	}
++
++	network := "ip4:icmp"
++	if v6 {
++		network = "ip6:ipv6-icmp"
++	}
++	lc := stdnet.ListenConfig{Control: func(_, _ string, c syscall.RawConn) error {
++		var bindErr error
++		if err := c.Control(func(fd uintptr) {
++			bindErr = bindICMPSocket(fd, v6, iface)
++		}); err != nil {
++			return err
++		}
++		return bindErr
++	}}
++	conn, err := lc.ListenPacket(context.Background(), network, "")
++	if err != nil {
++		// no rights for a raw socket: stays local for the whole session
++		d.failed[i] = true
++		errors.LogInfoInner(d.stack.ctx, err, "[tun][icmp] no raw ", network, " socket, echo is answered locally")
++		return nil
++	}
++	s := &icmpSocket{conn: conn, ifIndex: iface.Index}
++	if v6 {
++		s.p6 = ipv6.NewPacketConn(conn)
++	} else {
++		s.p4 = ipv4.NewPacketConn(conn)
++	}
++	d.sockets[i] = s
++	go d.read(s, v6)
++	return s
++}
++
++func (d *icmpDirect) read(s *icmpSocket, v6 bool) {
++	buf := make([]byte, 65535)
++	for {
++		n, peer, err := s.conn.ReadFrom(buf)
++		if err != nil {
++			return
++		}
++		ipAddr, ok := peer.(*stdnet.IPAddr)
++		if !ok {
++			continue
++		}
++		from, ok := netip.AddrFromSlice(ipAddr.IP)
++		if !ok {
++			continue
++		}
++		d.handle(v6, append([]byte(nil), buf[:n]...), from.Unmap())
++	}
++}
++
++func (d *icmpDirect) handle(v6 bool, message []byte, from netip.Addr) {
++	reply, src, dst, ok := d.translate(v6, message, from)
++	if !ok {
++		return
++	}
++	netProto := header.IPv4ProtocolNumber
++	if v6 {
++		netProto = header.IPv6ProtocolNumber
++	}
++	if err := d.stack.writeRawICMPPacket(netProto, reply, src, dst); err != nil {
++		errors.LogDebugInner(d.stack.ctx, err, "[tun][icmp] failed to write a reply into the TUN")
++	}
++}
++
++// translate turns a message from the network into the one for the TUN client:
++// the client's ident back in an echo reply, and in an error, the client's
++// address and ident in the quoted request
++func (d *icmpDirect) translate(v6 bool, message []byte, from netip.Addr) ([]byte, tcpip.Address, tcpip.Address, bool) {
++	if len(message) < 8 {
++		return nil, tcpip.Address{}, tcpip.Address{}, false
++	}
++	netProto := header.IPv4ProtocolNumber
++	echoReply, echoRequest := byte(header.ICMPv4EchoReply), byte(header.ICMPv4Echo)
++	isError := message[0] == byte(header.ICMPv4TimeExceeded) || message[0] == byte(header.ICMPv4DstUnreachable)
++	if v6 {
++		netProto = header.IPv6ProtocolNumber
++		echoReply, echoRequest = byte(header.ICMPv6EchoReply), byte(header.ICMPv6EchoRequest)
++		isError = message[0] == byte(header.ICMPv6TimeExceeded) || message[0] == byte(header.ICMPv6DstUnreachable)
++	}
++	router := tcpip.AddrFromSlice(from.AsSlice())
++
++	switch {
++	case message[0] == echoReply && message[1] == 0:
++		key := icmpPendingKey{dst: from, ident: binary.BigEndian.Uint16(message[4:6]), seq: binary.BigEndian.Uint16(message[6:8])}
++		p, ok := d.take(key)
++		if !ok {
++			return nil, tcpip.Address{}, tcpip.Address{}, false
++		}
++		binary.BigEndian.PutUint16(message[4:6], p.ident)
++		if tunicmp.RewriteChecksum(netProto, message, router, p.src) != nil {
++			return nil, tcpip.Address{}, tcpip.Address{}, false
++		}
++		return message, router, p.src, true
++
++	case isError:
++		quoted := message[8:]
++		var ipLen int
++		var inner netip.Addr
++		if v6 {
++			if len(quoted) < header.IPv6MinimumSize+8 || header.IPv6(quoted).TransportProtocol() != header.ICMPv6ProtocolNumber {
++				return nil, tcpip.Address{}, tcpip.Address{}, false
++			}
++			ipLen = header.IPv6MinimumSize
++			innerDst := header.IPv6(quoted).DestinationAddress()
++			inner, _ = netip.AddrFromSlice(innerDst.AsSlice())
++		} else {
++			if len(quoted) < header.IPv4MinimumSize || quoted[0]>>4 != 4 {
++				return nil, tcpip.Address{}, tcpip.Address{}, false
++			}
++			ipLen = int(quoted[0]&0x0f) * 4
++			if ipLen < header.IPv4MinimumSize || len(quoted) < ipLen+8 || header.IPv4(quoted).Protocol() != uint8(header.ICMPv4ProtocolNumber) {
++				return nil, tcpip.Address{}, tcpip.Address{}, false
++			}
++			innerDst := header.IPv4(quoted).DestinationAddress()
++			inner, _ = netip.AddrFromSlice(innerDst.AsSlice())
++		}
++		echo := quoted[ipLen:]
++		if echo[0] != echoRequest {
++			return nil, tcpip.Address{}, tcpip.Address{}, false
++		}
++		key := icmpPendingKey{dst: inner, ident: binary.BigEndian.Uint16(echo[4:6]), seq: binary.BigEndian.Uint16(echo[6:8])}
++		p, ok := d.take(key)
++		if !ok {
++			return nil, tcpip.Address{}, tcpip.Address{}, false
++		}
++		if v6 {
++			header.IPv6(quoted).SetSourceAddress(p.src)
++		} else {
++			ip := header.IPv4(quoted)
++			ip.SetSourceAddressWithChecksumUpdate(p.src)
++		}
++		binary.BigEndian.PutUint16(echo[2:4], p.checksum)
++		binary.BigEndian.PutUint16(echo[4:6], p.ident)
++		if tunicmp.RewriteChecksum(netProto, message, router, p.src) != nil {
++			return nil, tcpip.Address{}, tcpip.Address{}, false
++		}
++		return message, router, p.src, true
++	}
++	return nil, tcpip.Address{}, tcpip.Address{}, false
++}
++
++func (d *icmpDirect) take(key icmpPendingKey) (icmpPending, bool) {
++	d.mu.Lock()
++	defer d.mu.Unlock()
++	p, ok := d.pending[key]
++	if ok {
++		delete(d.pending, key)
++	}
++	return p, ok
++}
++
++func (d *icmpDirect) close() {
++	if d == nil {
++		return
++	}
++	d.mu.Lock()
++	defer d.mu.Unlock()
++	d.closed = true
++	for i, s := range d.sockets {
++		if s != nil {
++			s.conn.Close()
++			d.sockets[i] = nil
++		}
++	}
++}
+diff --git a/proxy/tun/icmp_direct_linux.go b/proxy/tun/icmp_direct_linux.go
+new file mode 100644
+index 0000000..d8dc548
+--- /dev/null
++++ b/proxy/tun/icmp_direct_linux.go
+@@ -0,0 +1,14 @@
++//go:build linux && !android
++
++package tun
++
++import (
++	stdnet "net"
++
++	"golang.org/x/sys/unix"
++)
++
++// the device binding also keeps the replies it writes into the TUN off the socket
++func bindICMPSocket(fd uintptr, _ bool, iface *stdnet.Interface) error {
++	return unix.BindToDevice(int(fd), iface.Name)
++}
+diff --git a/proxy/tun/icmp_direct_other.go b/proxy/tun/icmp_direct_other.go
+new file mode 100644
+index 0000000..5cf1dd8
+--- /dev/null
++++ b/proxy/tun/icmp_direct_other.go
+@@ -0,0 +1,20 @@
++//go:build !windows && !(linux && !android)
++
++package tun
++
++import (
++	"gvisor.dev/gvisor/pkg/tcpip"
++)
++
++// keqdroid patch, see tool/patches/xray-desktop-icmp-direct.patch: Windows and
++// Linux only, elsewhere the stack answers echo locally
++
++type icmpDirect struct{}
++
++func newICMPDirect(*stackGVisor) *icmpDirect { return nil }
++
++func (*icmpDirect) forward(tcpip.NetworkProtocolNumber, []byte, uint8, tcpip.Address, tcpip.Address) bool {
++	return false
++}
++
++func (*icmpDirect) close() {}
+diff --git a/proxy/tun/icmp_direct_test.go b/proxy/tun/icmp_direct_test.go
+new file mode 100644
+index 0000000..951f6b7
+--- /dev/null
++++ b/proxy/tun/icmp_direct_test.go
+@@ -0,0 +1,117 @@
++//go:build windows || (linux && !android)
++
++package tun
++
++import (
++	"encoding/binary"
++	"net/netip"
++	"testing"
++	"time"
++
++	"gvisor.dev/gvisor/pkg/tcpip"
++	"gvisor.dev/gvisor/pkg/tcpip/checksum"
++	"gvisor.dev/gvisor/pkg/tcpip/header"
++)
++
++var (
++	icmpClient = tcpip.AddrFrom4([4]byte{172, 19, 0, 1})
++	icmpTarget = netip.MustParseAddr("1.1.1.1")
++	icmpRouter = netip.MustParseAddr("10.0.0.1")
++)
++
++func echoMessage(typ byte, ident, seq uint16, payload string) []byte {
++	m := make([]byte, 8+len(payload))
++	m[0] = typ
++	binary.BigEndian.PutUint16(m[4:6], ident)
++	binary.BigEndian.PutUint16(m[6:8], seq)
++	copy(m[8:], payload)
++	binary.BigEndian.PutUint16(m[2:4], ^checksum.Checksum(m, 0))
++	return m
++}
++
++func validV4Checksum(m []byte) bool {
++	return checksum.Checksum(m, 0) == 0xffff
++}
++
++func newTestDirect() *icmpDirect {
++	d := newICMPDirect(nil)
++	d.pending[icmpPendingKey{dst: icmpTarget, ident: 7, seq: 3}] = icmpPending{
++		src:      icmpClient,
++		ident:    0x1234,
++		checksum: 0xbeef,
++		at:       time.Now(),
++	}
++	return d
++}
++
++func TestICMPDirectEchoReplyGetsClientIdentBack(t *testing.T) {
++	d := newTestDirect()
++	out, src, dst, ok := d.translate(false, echoMessage(byte(header.ICMPv4EchoReply), 7, 3, "abc"), icmpTarget)
++	if !ok {
++		t.Fatal("reply not matched")
++	}
++	if binary.BigEndian.Uint16(out[4:6]) != 0x1234 || binary.BigEndian.Uint16(out[6:8]) != 3 {
++		t.Fatalf("ident/seq %x/%d", out[4:6], out[6:8])
++	}
++	if !validV4Checksum(out) {
++		t.Fatal("bad checksum")
++	}
++	if src != tcpip.AddrFrom4(icmpTarget.As4()) || dst != icmpClient {
++		t.Fatalf("addresses %v -> %v", src, dst)
++	}
++	if len(d.pending) != 0 {
++		t.Fatal("pending kept")
++	}
++	if _, _, _, ok := d.translate(false, echoMessage(byte(header.ICMPv4EchoReply), 7, 3, "abc"), icmpTarget); ok {
++		t.Fatal("second reply matched")
++	}
++}
++
++func TestICMPDirectForeignReplyIgnored(t *testing.T) {
++	d := newTestDirect()
++	if _, _, _, ok := d.translate(false, echoMessage(byte(header.ICMPv4EchoReply), 8, 3, ""), icmpTarget); ok {
++		t.Fatal("foreign ident matched")
++	}
++	if _, _, _, ok := d.translate(false, echoMessage(byte(header.ICMPv4EchoReply), 7, 3, ""), icmpRouter); ok {
++		t.Fatal("foreign address matched")
++	}
++	if len(d.pending) != 1 {
++		t.Fatal("pending lost")
++	}
++}
++
++func TestICMPDirectTimeExceededQuotesTheClient(t *testing.T) {
++	d := newTestDirect()
++	inner := make([]byte, header.IPv4MinimumSize)
++	header.IPv4(inner).Encode(&header.IPv4Fields{
++		TotalLength: header.IPv4MinimumSize + 8,
++		TTL:         1,
++		Protocol:    uint8(header.ICMPv4ProtocolNumber),
++		SrcAddr:     tcpip.AddrFrom4([4]byte{192, 168, 1, 5}),
++		DstAddr:     tcpip.AddrFrom4(icmpTarget.As4()),
++	})
++	header.IPv4(inner).SetChecksum(^header.IPv4(inner).CalculateChecksum())
++	quotedEcho := echoMessage(byte(header.ICMPv4Echo), 7, 3, "")
++	message := append([]byte{byte(header.ICMPv4TimeExceeded), 0, 0, 0, 0, 0, 0, 0}, inner...)
++	message = append(message, quotedEcho...)
++	binary.BigEndian.PutUint16(message[2:4], ^checksum.Checksum(message, 0))
++
++	out, src, dst, ok := d.translate(false, message, icmpRouter)
++	if !ok {
++		t.Fatal("error not matched")
++	}
++	if src != tcpip.AddrFrom4(icmpRouter.As4()) || dst != icmpClient {
++		t.Fatalf("addresses %v -> %v", src, dst)
++	}
++	if !validV4Checksum(out) {
++		t.Fatal("bad outer checksum")
++	}
++	ip := header.IPv4(out[8:])
++	if ip.SourceAddress() != icmpClient || !ip.IsChecksumValid() {
++		t.Fatalf("quoted source %v, checksum valid %v", ip.SourceAddress(), ip.IsChecksumValid())
++	}
++	echo := out[8+header.IPv4MinimumSize:]
++	if binary.BigEndian.Uint16(echo[4:6]) != 0x1234 || binary.BigEndian.Uint16(echo[2:4]) != 0xbeef {
++		t.Fatalf("quoted echo %x", echo[:8])
++	}
++}
+diff --git a/proxy/tun/icmp_direct_windows.go b/proxy/tun/icmp_direct_windows.go
+new file mode 100644
+index 0000000..25adcd9
+--- /dev/null
++++ b/proxy/tun/icmp_direct_windows.go
+@@ -0,0 +1,21 @@
++//go:build windows
++
++package tun
++
++import (
++	"encoding/binary"
++	stdnet "net"
++	"unsafe"
++
++	"golang.org/x/sys/windows"
++)
++
++// IP_UNICAST_IF takes the index in network byte order, IPV6_UNICAST_IF as is
++func bindICMPSocket(fd uintptr, v6 bool, iface *stdnet.Interface) error {
++	if v6 {
++		return windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_UNICAST_IF, iface.Index)
++	}
++	var index [4]byte
++	binary.BigEndian.PutUint32(index[:], uint32(iface.Index))
++	return windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_UNICAST_IF, *(*int)(unsafe.Pointer(&index[0])))
++}
+diff --git a/proxy/tun/stack_gvisor.go b/proxy/tun/stack_gvisor.go
+index fc57a83..8e78e20 100644
+--- a/proxy/tun/stack_gvisor.go
++++ b/proxy/tun/stack_gvisor.go
+@@ -40,6 +40,7 @@ type stackGVisor struct {
+ 	handler     *Handler
+ 	stack       *stack.Stack
+ 	endpoint    stack.LinkEndpoint
++	icmp        *icmpDirect
+ }
+ 
+ // NewStack builds new ip stack (using gVisor)
+@@ -123,6 +124,7 @@ func (t *stackGVisor) Start() error {
+ 
+ 	t.stack = ipStack
+ 	t.endpoint = linkEndpoint
++	t.icmp = newICMPDirect(t)
+ 
+ 	return nil
+ }
+@@ -195,6 +197,7 @@ func (t *stackGVisor) Close() error {
+ 	if t.stack == nil {
+ 		return nil
+ 	}
++	t.icmp.close()
+ 	t.endpoint.Attach(nil)
+ 	t.stack.Close()
+ 	for _, endpoint := range t.stack.CleanupEndpoints() {
+diff --git a/proxy/tun/stack_gvisor_icmp_handler.go b/proxy/tun/stack_gvisor_icmp_handler.go
+index 17ba692..3ca25f0 100644
+--- a/proxy/tun/stack_gvisor_icmp_handler.go
++++ b/proxy/tun/stack_gvisor_icmp_handler.go
+@@ -30,6 +30,11 @@ func (t *stackGVisor) handleICMPEchoPacket(netProto tcpip.NetworkProtocolNumber,
+ 		return true
+ 	}
+ 
++	// keqdroid patch, see tool/patches/xray-desktop-icmp-direct.patch
++	if t.icmp.forward(netProto, message, echoTTL(netProto, pkt), srcIP, dstIP) {
++		return true
++	}
++
+ 	reply, err := tunicmp.BuildLocalEchoReply(netProto, message, dstIP, srcIP)
+ 	if err != nil {
+ 		errors.LogInfoInner(t.ctx, err, "[tun] failed to build local icmp echo reply")
+@@ -88,6 +93,17 @@ func (t *stackGVisor) writeRawICMPPacket(netProto tcpip.NetworkProtocolNumber, m
+ 	return nil
+ }
+ 
++func echoTTL(netProto tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) uint8 {
++	nh := pkt.NetworkHeader().Slice()
++	if netProto == header.IPv4ProtocolNumber && len(nh) >= header.IPv4MinimumSize {
++		return header.IPv4(nh).TTL()
++	}
++	if netProto == header.IPv6ProtocolNumber && len(nh) >= header.IPv6MinimumSize {
++		return header.IPv6(nh).HopLimit()
++	}
++	return 64
++}
++
+ func transportPacketBytes(pkt *stack.PacketBuffer) []byte {
+ 	headerBytes := pkt.TransportHeader().Slice()
+ 	payloadBytes := pkt.Data().AsRange().ToSlice()
