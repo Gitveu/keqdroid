@@ -47,9 +47,11 @@ class SeasonalIcon extends StatelessWidget {
     final side = size ?? theme.size ?? 24;
     var ink = color ?? theme.color ?? const Color(0xFF000000);
     if (color == null && theme.opacity != null) ink = ink.withValues(alpha: ink.a * theme.opacity!);
+    // знак по центру, как у Icon: узкая боковая панель на ПК растягивает рамку на всю ячейку
+    final mark = SizedBox.square(dimension: side, child: CustomPaint(painter: _GlyphPainter(glyph, ink)));
     return Semantics(
       label: semanticLabel,
-      child: SizedBox.square(dimension: side, child: CustomPaint(painter: _GlyphPainter(glyph, ink))),
+      child: SizedBox.square(dimension: side, child: Center(child: mark)),
     );
   }
 }

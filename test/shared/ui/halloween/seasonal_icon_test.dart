@@ -23,6 +23,22 @@ Future<void> _pump(WidgetTester tester, {required bool active, required bool sco
 bool _isPlainIcon(WidgetTester tester) =>
     find.descendant(of: find.byType(SeasonalIcon), matching: find.byType(Icon)).evaluate().isNotEmpty;
 
+// ячейка задаёт значку жёсткий размер, как узкая боковая панель на ПК
+Future<Size> _glyphInCell(WidgetTester tester, Size cell, {double? size}) async {
+  await tester.pumpWidget(ProviderScope(
+    overrides: [halloweenActiveProvider.overrideWith(() => _Fixed(true))],
+    child: MaterialApp(
+      home: Center(
+        child: SizedBox.fromSize(
+          size: cell,
+          child: HalloweenIconScope(child: SeasonalIcon(Icons.dns_rounded, size: size)),
+        ),
+      ),
+    ),
+  ));
+  return tester.getSize(find.descendant(of: find.byType(SeasonalIcon), matching: find.byType(CustomPaint)).first);
+}
+
 void main() {
   testWidgets('в праздник на главном экране значок заменён', (tester) async {
     await _pump(tester, active: true, scoped: true);
@@ -38,6 +54,11 @@ void main() {
   testWidgets('вне праздника значок свой', (tester) async {
     await _pump(tester, active: false, scoped: true);
     expect(_isPlainIcon(tester), isTrue);
+  });
+
+  testWidgets('в узкой боковой панели знак своего размера, а не во всю ячейку', (tester) async {
+    expect(await _glyphInCell(tester, const Size(60, 48)), const Size(24, 24));
+    expect(await _glyphInCell(tester, const Size(60, 40), size: 20), const Size(20, 20));
   });
 
   testWidgets('шестерёнка и пуск с паузой остаются своими и в праздник', (tester) async {
