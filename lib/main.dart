@@ -28,6 +28,7 @@ import 'package:keqdroid/services/update_service.dart';
 import 'package:keqdroid/tunnel/linux_tunnel_backend.dart';
 import 'package:keqdroid/shared/ui/app_theme.dart';
 import 'package:keqdroid/shared/ui/bottom_nav.dart';
+import 'package:keqdroid/shared/ui/halloween/halloween_icons.dart';
 import 'package:keqdroid/shared/ui/nav_rail.dart';
 import 'package:keqdroid/shared/ui/update_dialog.dart';
 import 'package:keqdroid/ui/desktop/desktop_home_screen.dart';
@@ -225,10 +226,13 @@ class _VpnHomeScreenState extends ConsumerState<VpnHomeScreen> {
       body: Row(
         children: [
           if (expanded)
-            AppNavRail(
-              index: _navIndex,
-              showConnectedBadge: isConnected,
-              onTap: _selectTab,
+            // Навигация — часть главного экрана: на праздник и тут свои значки.
+            HalloweenIconScope(
+              child: AppNavRail(
+                index: _navIndex,
+                showConnectedBadge: isConnected,
+                onTap: _selectTab,
+              ),
             ),
           Expanded(
             // без ключа PageView пересоздаётся при повороте вместе с состоянием вкладок
@@ -255,10 +259,12 @@ class _VpnHomeScreenState extends ConsumerState<VpnHomeScreen> {
       ),
       bottomNavigationBar: expanded
           ? null
-          : AppBottomNav(
-              index: _navIndex,
-              showConnectedBadge: isConnected,
-              onTap: _selectTab,
+          : HalloweenIconScope(
+              child: AppBottomNav(
+                index: _navIndex,
+                showConnectedBadge: isConnected,
+                onTap: _selectTab,
+              ),
             ),
     );
   }

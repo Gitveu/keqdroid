@@ -605,6 +605,17 @@ class _AppearanceThemesTab extends StatelessWidget {
                 onChanged: (v) =>
                     onSave(current.copyWith(followSystemTheme: v)),
               ),
+              // Только пока открыто окно праздника: вне его переключатель
+              // ничего бы не делал, а такие настройки прячутся, а не
+              // объясняются. Подпись — до какого числа, из названия этого не узнать.
+              if (HalloweenSeason.isNow)
+                _AppearanceSwitchTile(
+                  icon: Icons.celebration_rounded,
+                  title: l10n.appearanceHalloween,
+                  subtitle: l10n.appearanceHalloweenUntil,
+                  value: current.seasonalDecor,
+                  onChanged: (v) => onSave(current.copyWith(seasonalDecor: v)),
+                ),
             ],
           ),
           Padding(

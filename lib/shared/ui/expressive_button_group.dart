@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'halloween/halloween_icons.dart';
 
 import 'expressive.dart';
 import 'haptics.dart';
@@ -203,7 +204,7 @@ class _SegmentState<T> extends State<_Segment<T>>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (widget.segment.icon != null) ...[
-                      Icon(
+                      SeasonalIcon(
                         widget.segment.icon,
                         size: ExpressiveIconSize.inline,
                         color: iconColor,

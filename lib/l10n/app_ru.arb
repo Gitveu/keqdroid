@@ -1062,6 +1062,8 @@
   "appearanceTabThemes": "Темы",
   "appearanceAmoled": "Чистый чёрный (AMOLED)",
   "appearanceAmoledNeedsDark": "Доступно при включённой тёмной теме",
+  "appearanceHalloween": "Показывать праздничное оформление",
+  "appearanceHalloweenUntil": "До 2 ноября",
   "appearanceHaptics": "Отзываться вибрацией",
   "appearanceShowTraffic": "Показывать скорость и объём трафика",
   "appearanceShowTime": "Показывать, сколько длится подключение",

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
+import '../../shared/ui/halloween/halloween_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -490,7 +491,9 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Material(
+          // Боковое меню — часть главного экрана: на праздник и тут свои значки.
+          HalloweenIconScope(
+            child: Material(
             color: Theme.of(context).colorScheme.surfaceContainerLow,
             child: SizedBox(
               width: MediaQuery.sizeOf(context).width >= 900 ? 220.0 : 76.0,
@@ -524,6 +527,7 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
                 ],
               ),
             ),
+          ),
           ),
           VerticalDivider(width: 1, color: AppTheme.divider(context)),
           Expanded(
@@ -669,7 +673,7 @@ class _SidebarTileState extends State<_SidebarTile>
             child: widget.compact
                 ? SizedBox(
                     height: 48,
-                    child: Icon(widget.icon, color: fg),
+                    child: SeasonalIcon(widget.icon, color: fg),
                   )
                 : Padding(
                     padding: EdgeInsets.symmetric(
@@ -678,7 +682,7 @@ class _SidebarTileState extends State<_SidebarTile>
                     ),
                     child: Row(
                       children: [
-                        Icon(widget.icon, color: fg, size: 22),
+                        SeasonalIcon(widget.icon, color: fg, size: 22),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -720,7 +724,7 @@ class _ConnectionModeMenuButton extends ConsumerWidget {
 
     return PopupMenuButton<ConnectionMode>(
       tooltip: AppLocalizations.of(context)!.desktopConnectionMode,
-      icon: Icon(
+      icon: SeasonalIcon(
         mode == ConnectionMode.tun ? Icons.vpn_lock_rounded : Icons.lan_rounded,
         size: 22,
       ),

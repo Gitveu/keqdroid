@@ -570,7 +570,7 @@ class _ServerGroupHeader extends ConsumerWidget {
                         color: sortMode == ServerSortMode.defaultOrder
                             ? textLightColor
                             : accentColor,
-                        icon: Icon(
+                        icon: SeasonalIcon(
                           sortMode == ServerSortMode.defaultOrder
                               ? Icons.sort_rounded
                               : sortMode.icon,
@@ -613,7 +613,7 @@ class _ServerGroupHeader extends ConsumerWidget {
                                   size: ExpressiveIconSize.medium,
                                   color: accentColor,
                                 )
-                              : const Icon(
+                              : const SeasonalIcon(
                                   Icons.refresh_rounded,
                                   size: ExpressiveIconSize.medium,
                                 ),
@@ -650,7 +650,7 @@ class _ServerGroupHeader extends ConsumerWidget {
                                 size: ExpressiveIconSize.medium,
                                 color: accentColor,
                               )
-                            : const Icon(
+                            : const SeasonalIcon(
                                 Icons.network_ping_rounded,
                                 size: ExpressiveIconSize.medium,
                               ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../shared/ui/halloween/halloween_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -182,7 +183,7 @@ class _GroupJumpTileState extends State<_GroupJumpTile> {
         onTap: widget.onTap,
         borderRadius: shape,
         child: widget.compact
-            ? SizedBox(height: 40, child: Icon(_icon, size: 20, color: accent))
+            ? SizedBox(height: 40, child: SeasonalIcon(_icon, size: 20, color: accent))
             : Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 18,

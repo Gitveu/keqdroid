@@ -2090,6 +2090,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appearanceAmoledNeedsDark => '需要开启深色主题';
 
   @override
+  String get appearanceHalloween => '显示节日装饰';
+
+  @override
+  String get appearanceHalloweenUntil => '持续到 11 月 2 日';
+
+  @override
   String get appearanceHaptics => '振动';
 
   @override

@@ -148,6 +148,7 @@ class SettingsBackupService {
     'iconShapeId',
     'fontId',
     'amoledBlack',
+    'seasonalDecor',
     'serversTwoColumns',
     'serverIconThemeColors',
     'uiScale',

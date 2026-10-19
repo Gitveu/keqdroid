@@ -2094,6 +2094,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appearanceAmoledNeedsDark => 'Available with the dark theme on';
 
   @override
+  String get appearanceHalloween => 'Show holiday decorations';
+
+  @override
+  String get appearanceHalloweenUntil => 'Until November 2';
+
+  @override
   String get appearanceHaptics => 'Vibration';
 
   @override

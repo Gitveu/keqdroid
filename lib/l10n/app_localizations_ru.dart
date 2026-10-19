@@ -2104,6 +2104,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get appearanceAmoledNeedsDark => 'Доступно при включённой тёмной теме';
 
   @override
+  String get appearanceHalloween => 'Показывать праздничное оформление';
+
+  @override
+  String get appearanceHalloweenUntil => 'До 2 ноября';
+
+  @override
   String get appearanceHaptics => 'Отзываться вибрацией';
 
   @override

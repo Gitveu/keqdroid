@@ -3,6 +3,7 @@ library;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'halloween/halloween_icons.dart';
 
 import '../../utils/bidi.dart';
 import 'expressive.dart';
@@ -179,7 +180,7 @@ class StatStrip extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
+                      SeasonalIcon(
                         line.icon,
                         size: ExpressiveIconSize.inline,
                         color: color,

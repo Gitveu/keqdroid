@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'halloween/halloween_icons.dart';
 
 import '../../models/server_item.dart';
 import '../../models/server_name_utils.dart';
@@ -111,7 +112,7 @@ class ServerRow extends StatelessWidget {
             ),
             child: Transform.rotate(
               angle: 45 * pi / 180,
-              child: Icon(
+              child: SeasonalIcon(
                 Icons.push_pin_rounded,
                 size: ExpressiveIconSize.inline,
                 color: foreground ?? AppTheme.accent(context),

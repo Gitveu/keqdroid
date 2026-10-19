@@ -2090,6 +2090,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get appearanceAmoledNeedsDark => 'با روشن بودن پوستهٔ تیره در دسترس است';
 
   @override
+  String get appearanceHalloween => 'نمایش تزئینات جشن';
+
+  @override
+  String get appearanceHalloweenUntil => 'تا ۲ نوامبر';
+
+  @override
   String get appearanceHaptics => 'لرزش';
 
   @override

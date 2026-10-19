@@ -14,6 +14,9 @@ import 'package:keqdroid/shared/ui/expressive.dart';
 import 'package:keqdroid/shared/ui/expressive_group.dart';
 import 'package:keqdroid/shared/ui/connected_status_chip.dart';
 import 'package:keqdroid/shared/ui/expressive_toggle_button.dart';
+import 'package:keqdroid/shared/ui/halloween/halloween_icons.dart';
+import 'package:keqdroid/shared/ui/halloween/halloween_sky.dart';
+import 'package:keqdroid/shared/ui/halloween/pumpkin_button.dart';
 import 'package:keqdroid/shared/ui/haptics.dart';
 import 'package:keqdroid/shared/ui/server_group_anchors.dart';
 import 'package:keqdroid/shared/ui/scroll_hidden_fab.dart';
@@ -35,6 +38,7 @@ import '../models/server_name_utils.dart';
 import '../models/subscription.dart';
 import '../models/subscription_card_theme.dart';
 import '../models/traffic_split.dart';
+import '../providers/halloween_provider.dart';
 import '../providers/providers.dart';
 import '../providers/traffic_split_provider.dart';
 import '../services/auto_server_select.dart';
@@ -159,6 +163,12 @@ class _ConnectHeader extends ConsumerWidget {
     final isConnecting =
         serverSwitchInProgress || vpnStatus == VpnStatus.connecting;
 
+    // connecting остаётся тапабельным — это отмена попытки; блокируем только
+    // disconnecting (гасить уже нечего).
+    final VoidCallback? onTap =
+        vpnStatus == VpnStatus.disconnecting ? null : () => onToggle(vpnStatus);
+    final halloween = ref.watch(halloweenActiveProvider);
+
     final isDesktop = PlatformBootstrap.isDesktop;
     final waveHeight = isDesktop ? 40.0 : 36.0;
     final topPad = isDesktop ? 20.0 : MediaQuery.of(context).padding.top + 24;
@@ -167,14 +177,22 @@ class _ConnectHeader extends ConsumerWidget {
       child: Column(
         children: [
               RepaintBoundary(
-                child: _ConnectButton(
-                  isConnected: isConnected,
-                  isConnecting: isConnecting,
-                  // connecting тапабелен: это отмена попытки
-                  onTap: vpnStatus == VpnStatus.disconnecting
-                      ? null
-                      : () => onToggle(vpnStatus),
-                ),
+                child: halloween
+                    // Ошибку обычная кнопка не показывает, а тыква грустнеет:
+                    // это её третье лицо. При смене сервера ошибка ложная.
+                    ? HalloweenSky(
+                        child: PumpkinConnectButton(
+                          isConnected: isConnected,
+                          isConnecting: isConnecting,
+                          isError: vpnStatus == VpnStatus.error && !serverSwitchInProgress,
+                          onTap: onTap,
+                        ),
+                      )
+                    : _ConnectButton(
+                        isConnected: isConnected,
+                        isConnecting: isConnecting,
+                        onTap: onTap,
+                      ),
               ),
               const SizedBox(height: 18),
               SizedBox(
@@ -662,7 +680,8 @@ class _ServersTabState extends ConsumerState<ServersTab>
       );
     }
 
-    return _withListChrome(context, body, bottomInset);
+    // Мистические значки на время праздника — только на главном экране.
+    return HalloweenIconScope(child: _withListChrome(context, body, bottomInset));
   }
 
   Widget _withListChrome(BuildContext context, Widget child, double bottomInset) {
@@ -682,7 +701,7 @@ class _ServersTabState extends ConsumerState<ServersTab>
                 backgroundColor: AppTheme.accentContainer(fabContext),
                 foregroundColor: AppTheme.onAccentContainer(fabContext),
                 onPressed: () => _showAddServerDialog(context),
-                child: const Icon(Icons.add_rounded),
+                child: const SeasonalIcon(Icons.add_rounded),
               ),
             ),
             child: Stack(
@@ -1139,7 +1158,7 @@ class _ServersTabState extends ConsumerState<ServersTab>
               foregroundColor: AppTheme.onAccentContainer(context),
             ),
             onPressed: () => _showAddServerDialog(context),
-            icon: const Icon(Icons.add_rounded, size: 18),
+            icon: const SeasonalIcon(Icons.add_rounded, size: 18),
             label: Text(l10n.serversAddServer),
           ),
           const SizedBox(height: 8),
