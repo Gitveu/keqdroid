@@ -5,17 +5,46 @@ import 'package:flutter/material.dart';
 import '../../../platform/platform_bootstrap.dart';
 
 // небо шире кнопки, но место в шапке занимает как она: раскладка от праздника не сдвигается
-// неподвижно и в своём слое: тыква перерисовывается каждый кадр, а размытие неба дорогое
-class HalloweenSky extends StatelessWidget {
+class HalloweenSky extends StatefulWidget {
   const HalloweenSky({super.key, required this.child});
 
   final Widget child;
 
+  @override
+  State<HalloweenSky> createState() => _HalloweenSkyState();
+}
+
+class _HalloweenSkyState extends State<HalloweenSky> {
   static const double _side = 136;
+
+  ui.Image? _image;
+  (ColorScheme, double)? _imageFor;
+
+  // небо рисуется один раз в картинку: Impeller не кэширует слои, и размытия неба
+  // пересчитывались в каждом кадре мерцания тыквы, +50% ядра на Pixel 6a
+  ui.Image _sky(ColorScheme scheme, double ratio) {
+    final cached = _image;
+    if (cached != null && _imageFor == (scheme, ratio)) return cached;
+    final recorder = ui.PictureRecorder();
+    _SkyPainter(scheme, desktop: PlatformBootstrap.isDesktop)
+        .paint(Canvas(recorder)..scale(ratio), const Size(_SkyPainter.width, _SkyPainter.height));
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync((_SkyPainter.width * ratio).ceil(), (_SkyPainter.height * ratio).ceil());
+    picture.dispose();
+    cached?.dispose();
+    _imageFor = (scheme, ratio);
+    return _image = image;
+  }
+
+  @override
+  void dispose() {
+    _image?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final image = _sky(Theme.of(context).colorScheme, MediaQuery.devicePixelRatioOf(context));
     return SizedBox.square(
       dimension: _side,
       child: Stack(
@@ -28,11 +57,16 @@ class HalloweenSky extends StatelessWidget {
             height: _SkyPainter.height,
             child: IgnorePointer(
               child: RepaintBoundary(
-                child: CustomPaint(painter: _SkyPainter(scheme, desktop: PlatformBootstrap.isDesktop)),
+                child: RawImage(
+                  image: image,
+                  width: _SkyPainter.width,
+                  height: _SkyPainter.height,
+                  fit: BoxFit.fill,
+                ),
               ),
             ),
           ),
-          child,
+          widget.child,
         ],
       ),
     );
