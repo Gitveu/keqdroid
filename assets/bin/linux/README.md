@@ -8,21 +8,19 @@ Android APK.)
 
 | File | Source | In git? |
 |------|--------|---------|
-| `keqrnel` | the unified core: proxy and TUN for all xray protocols. Embeds xray + sing-box. | yes (committed) |
+| `xray` | the Xray core: proxy and TUN for all xray protocols; in TUN mode it owns the tun device itself | yes (committed) |
 | `mihomo` | the Clash core: runs ready-made Clash configs, plain links and AmneziaWG profiles; in TUN mode it owns the tun device itself | yes |
 | `geoip.dat` | enables `geoip:…` routing rules | yes |
 | `geosite.dat` | enables `geosite:…` rules | yes |
 
 Which core runs a server is decided by the server's **format**, not by a setting:
 Clash YAML and AmneziaWG `.conf` only mihomo can execute, an Xray JSON config only
-keqrnel; a plain link is taken by whichever core the user picked. Standalone `xray`,
-`sing-box` and `wireproxy` used to sit here too; nothing executes them any more, and
-they are gone.
+xray; a plain link is taken by whichever core the user picked.
 
 Proxy mode runs the core with a local SOCKS/HTTP inbound and needs no privileges; TUN
 mode asks for root via `pkexec` at connect time (or skips pkexec when the app is already
-running as root, which is what a system without polkit is left with) — keqrnel because of its sing-box TUN
-inbound, mihomo because it creates the tun device itself.
+running as root, which is what a system without polkit is left with), since both cores
+create the tun device themselves.
 
 ## Building mihomo
 
@@ -30,15 +28,13 @@ inbound, mihomo because it creates the tun device itself.
 stock upstream build: `tool/patches/*.patch` are applied first, and the script fails
 if any of them no longer applies.
 
-## Building keqrnel
+## Building xray
 
-Source: [Lemonochka/keqrnel](https://github.com/Lemonochka/keqrnel), checked out next to
-this repository. Build with `tool/build_xray_cores.ps1 -Target linux`: it builds
-against keqrnel's patched xray-core (`tools/patchxray`), and a plain `go build` in
-keqrnel gives an unpatched core that drops bursts of incoming UDP.
-
-`with_gvisor` is required: the TUN stack is a user setting, and `gvisor` / `mixed`
-(and with them full-cone NAT) do not exist in a build without that tag.
+`tool/build_xray_cores.ps1 -Target linux` (runs on Windows, cross-compiles), from a
+checkout of [Lemonochka/keqrnel](https://github.com/Lemonochka/keqrnel) next to this
+repository: its `tools/patchxray` prepares the patched xray-core tree. A stock xray
+lacks the patches the app relies on (process rules for the TUN, the program in the
+access log, UDP bursts on the desktop), see the headers in `tool/patches/`.
 
 `geoip.dat` / `geosite.dat` are copied from `assets/bin/windows/` so routing behaves
 identically on both platforms.

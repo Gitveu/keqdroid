@@ -56,11 +56,10 @@ flutter build windows --release
   `app_plugin_registrant.cc`) is committed without Firebase, which is Android-only and
   breaks linking. After adding or removing plugins in pubspec, run
   `tool/sync_windows_plugins.ps1`.
-- CMake copies the cores from `assets/bin/windows/` next to the exe: `keqrnel.exe`,
+- CMake copies the cores from `assets/bin/windows/` next to the exe: `xray.exe`,
   `mihomo.exe`, `wintun.dll`, `geoip.dat`, `geosite.dat`
-  ([`assets/bin/windows/README.md`](../assets/bin/windows/README.md)). keqrnel contains
-  both Xray and sing-box.
-- TUN mode needs administrator rights, since keqrnel and mihomo create the wintun adapter
+  ([`assets/bin/windows/README.md`](../assets/bin/windows/README.md)).
+- TUN mode needs administrator rights, since xray and mihomo create the wintun adapter
   themselves; the app offers to restart elevated. Proxy mode works without them.
 
 ### Linux (Debian/Fedora/Arch, x86_64)
@@ -82,7 +81,7 @@ wsl -d Ubuntu-22.04 -e bash /mnt/c/Users/<you>/StudioProjects/keqdroid/tool/pack
   path (or set `MSYS_NO_PATHCONV=1`).
 - Both scripts work in the repository on `/mnt/c` directly, so a Linux build cannot run in
   parallel with a Windows or Android one.
-- The cores live in `assets/bin/linux/`: `keqrnel`, `mihomo` and the geo databases.
+- The cores live in `assets/bin/linux/`: `xray`, `mihomo` and the geo databases.
   CMake puts them next to the bundle binary, not into `flutter_assets`.
 - Proxy mode works without root; TUN asks for root through `pkexec` on connect. Without
   polkit, run the app as root (`sudo -E keqdroid`): it then starts the core directly.
@@ -109,13 +108,13 @@ The prebuilt cores are already in `assets/bin/` and `jniLibs/`. To update a core
 | Script | What it builds |
 |--------|----------------|
 | `tool/build_mihomo.ps1` | mihomo with the patches from `tool/patches/`: `libmihomo.so` (arm64-v8a and armeabi-v7a), `mihomo.exe`, `mihomo` |
-| `tool/build_xray_cores.ps1` | patched xray from keqrnel's `tools/patchxray`: `keqrnel.exe`, `keqrnel`, `libxray.so` (arm64-v8a and armeabi-v7a) |
+| `tool/build_xray_cores.ps1` | patched xray from keqrnel's `tools/patchxray`: `xray.exe`, `xray`, `libxray.so` (arm64-v8a and armeabi-v7a) |
 | `tool/build_linux_native.sh` | the Linux bundle + cores on native Linux |
 | `tool/fetch_xray_geo.ps1` | fresh `geoip.dat` / `geosite.dat` |
 
-`keqrnel` (`assets/bin/windows/keqrnel.exe`, `assets/bin/linux/keqrnel`) and `libxray.so`
-for Android (arm64-v8a and armeabi-v7a) are built with one script, from a checkout of
-[keqrnel](https://github.com/Lemonochka/keqrnel) next to this repository:
+xray for the desktop (`assets/bin/windows/xray.exe`, `assets/bin/linux/xray`) and
+`libxray.so` for Android (arm64-v8a and armeabi-v7a) are built with one script, from a
+checkout of [keqrnel](https://github.com/Lemonochka/keqrnel) next to this repository:
 
 ```powershell
 powershell -File tool/build_xray_cores.ps1                   # all three
@@ -130,16 +129,18 @@ that tree, and stops if a patch does not apply. keqrnel's
 dropped past 16 packets: without it calls, screen shares and games lost up to 39% of
 incoming packets on PC.
 
-The Android build adds this repository's `tool/patches/xray-*.patch` on top, in a tree of
-its own: `xray-android-uid-owner.patch` makes xray ask the VPN service which app opened a
-connection, and look it up by the address before sniffing.
+This repository's `tool/patches/xray-*.patch` go on top, in the same tree for every
+platform. `xray-android-*` are for Android: the VPN service names the app behind a
+connection, and UDP takes the route of each address. `xray-desktop-*` are for the PC TUN:
+process rules, the program in the access log, counters, a clean stop through stdin, a UDP
+timeout of its own. On the other platform each of them stays idle; the patch headers say
+why.
 
-**`with_gvisor` is required** for keqrnel: without it the core has no `gvisor` and `mixed`
-TUN stacks and no full-cone NAT. `-checklinkname=0` is required for `libxray.so`: the
+`-checklinkname=0` is required for `libxray.so`: the
 `anet` dependency links into `net.zoneCache` in the standard library, which Go 1.26+
 rejects without the flag.
 
-Windows binaries (`keqrnel.exe`, `mihomo.exe`) are built unstripped and must not be run
+Windows binaries (`xray.exe`, `mihomo.exe`) are built unstripped and must not be run
 from `%TEMP%`, otherwise Defender flags them. Android and Linux binaries are stripped with
 `-s -w`.
 
@@ -263,11 +264,10 @@ flutter build windows --release
   `app_plugin_registrant.cc`) закоммичен без Firebase: он нужен только на Android и ломает
   линковку. После добавления или удаления плагинов в pubspec запусти
   `tool/sync_windows_plugins.ps1`.
-- Ядра из `assets/bin/windows/` CMake кладёт рядом с exe: `keqrnel.exe`,
+- Ядра из `assets/bin/windows/` CMake кладёт рядом с exe: `xray.exe`,
   `mihomo.exe`, `wintun.dll`, `geoip.dat`, `geosite.dat`
-  ([`assets/bin/windows/README.md`](../assets/bin/windows/README.md)). В keqrnel входят
-  и Xray, и sing-box.
-- Для TUN нужны права администратора: wintun-адаптер создают сами keqrnel и mihomo.
+  ([`assets/bin/windows/README.md`](../assets/bin/windows/README.md)).
+- Для TUN нужны права администратора: wintun-адаптер создают сами xray и mihomo.
   Приложение предлагает перезапуститься с ними. Proxy работает без прав.
 
 ### Linux (Debian/Fedora/Arch, x86_64)
@@ -290,7 +290,7 @@ wsl -d Ubuntu-22.04 -e bash /mnt/c/Users/<ты>/StudioProjects/keqdroid/tool/pac
   (или поставь `MSYS_NO_PATHCONV=1`).
 - Оба скрипта работают прямо в репозитории на `/mnt/c`, поэтому Linux-сборку нельзя
   запускать параллельно с Windows или Android.
-- Ядра — в `assets/bin/linux/`: `keqrnel`, `mihomo` и geo-базы. CMake кладёт их
+- Ядра — в `assets/bin/linux/`: `xray`, `mihomo` и geo-базы. CMake кладёт их
   рядом с бинарём бандла, не в `flutter_assets`.
 - Proxy работает без root; TUN запрашивает root через `pkexec` при подключении. Без
   polkit запусти приложение от root (`sudo -E keqdroid`): тогда ядро стартует напрямую.
@@ -317,11 +317,11 @@ storage/подписки/апдейтер/пинг, `test/models/`, `test/tunnel
 | Скрипт | Что собирает |
 |--------|--------------|
 | `tool/build_mihomo.ps1` | mihomo с патчами из `tool/patches/`: `libmihomo.so` (arm64-v8a и armeabi-v7a), `mihomo.exe`, `mihomo` |
-| `tool/build_xray_cores.ps1` | пропатченный xray из `tools/patchxray` keqrnel: `keqrnel.exe`, `keqrnel`, `libxray.so` (arm64-v8a и armeabi-v7a) |
+| `tool/build_xray_cores.ps1` | пропатченный xray из `tools/patchxray` keqrnel: `xray.exe`, `xray`, `libxray.so` (arm64-v8a и armeabi-v7a) |
 | `tool/build_linux_native.sh` | Linux-бандл + ядра на нативном Linux |
 | `tool/fetch_xray_geo.ps1` | свежие `geoip.dat` / `geosite.dat` |
 
-`keqrnel` (`assets/bin/windows/keqrnel.exe`, `assets/bin/linux/keqrnel`) и `libxray.so`
+xray для ПК (`assets/bin/windows/xray.exe`, `assets/bin/linux/xray`) и `libxray.so`
 для Android (arm64-v8a и armeabi-v7a) собираются одним скриптом из checkout'а
 [keqrnel](https://github.com/Lemonochka/keqrnel), лежащего рядом с этим репозиторием:
 
@@ -338,16 +338,17 @@ powershell -File tool/build_xray_cores.ps1 -Target windows   # или android, l
 выбрасывал сверх 16 пакетов: без него звонки, демонстрация экрана и игры на ПК теряли до
 39% входящих пакетов.
 
-Сборка для Android добавляет сверху `tool/patches/xray-*.patch` этого репозитория, в
-своём отдельном дереве: `xray-android-uid-owner.patch` заставляет xray спрашивать у
-VPN-сервиса, какое приложение открыло соединение, и искать его по адресу до сниффинга.
+Сверху ложатся `tool/patches/xray-*.patch` этого репозитория, в одном дереве для всех
+платформ. `xray-android-*` для Android: VPN-сервис называет приложение за соединением,
+а UDP идёт маршрутом каждого адреса. `xray-desktop-*` для TUN на ПК: правила по
+программам, программа в журнале, счётчики, мягкая остановка через stdin, свой таймаут
+UDP. На другой платформе каждый из них спит, почему, написано в шапке патча.
 
-**`with_gvisor` обязателен** для keqrnel: без него в ядре нет стеков TUN `gvisor` и
-`mixed`, а с ними и full-cone NAT. `-checklinkname=0` обязателен для `libxray.so`:
+`-checklinkname=0` обязателен для `libxray.so`:
 зависимость `anet` ссылается на `net.zoneCache` из стандартной библиотеки, а Go 1.26+ без
 флага такое не линкует.
 
-Windows-бинари (`keqrnel.exe`, `mihomo.exe`) собираются без стрипа, и запускать их из
+Windows-бинари (`xray.exe`, `mihomo.exe`) собираются без стрипа, и запускать их из
 `%TEMP%` нельзя: иначе их блокирует Defender. Android- и Linux-бинари стрипаются
 (`-s -w`).
 

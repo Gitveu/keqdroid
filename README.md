@@ -93,7 +93,7 @@ The app **does not provide servers**. Bring your own subscription or configs. Co
 
 ## Cores
 
-Two cores run servers on every platform: **Xray** and **mihomo**. On Windows and Linux, Xray ships inside `keqrnel` together with **sing-box**, which provides TUN mode for Xray; mihomo runs its own TUN. The core depends on the server:
+Two cores run servers on every platform: **Xray** and **mihomo**. Each runs its own TUN mode. The core depends on the server:
 
 | Server | Runs on |
 |--------|---------|
@@ -231,7 +231,7 @@ Version and tag `vX.Y.Z` come from `pubspec.yaml`. When uploading manually, incl
 
 ## License
 
-[GPL-3.0](LICENSE). The bundled cores keep their upstream licenses: Xray-core (MPL-2.0), mihomo (GPL-3.0), sing-box (GPL-3.0).
+[GPL-3.0](LICENSE). The bundled cores keep their upstream licenses: Xray-core (MPL-2.0), mihomo (GPL-3.0).
 
 ---
 
@@ -320,7 +320,7 @@ Version and tag `vX.Y.Z` come from `pubspec.yaml`. When uploading manually, incl
 
 ## Ядра
 
-На всех платформах серверы работают на двух ядрах: **Xray** и **mihomo**. На Windows и Linux Xray входит в `keqrnel` вместе с **sing-box**, который отвечает за режим TUN у Xray; у mihomo TUN свой. Ядро зависит от сервера:
+На всех платформах серверы работают на двух ядрах: **Xray** и **mihomo**. Режим TUN у каждого свой. Ядро зависит от сервера:
 
 | Сервер | Исполняет |
 |--------|-----------|
@@ -458,9 +458,9 @@ powershell -ExecutionPolicy Bypass -File tool\make_release.ps1 -Publish -NotesFi
 
 ## Лицензия
 
-[GPL-3.0](LICENSE). Встроенные ядра — под своими лицензиями: Xray-core (MPL-2.0), mihomo (GPL-3.0), sing-box (GPL-3.0).
+[GPL-3.0](LICENSE). Встроенные ядра — под своими лицензиями: Xray-core (MPL-2.0), mihomo (GPL-3.0).
 
 ---
 
 <p align="center">✦ ˚ · . &nbsp; ˚ʚ♡ɞ˚ &nbsp; . · ˚ ✦</p>
-<p align="center"><sub>made with ♡ · Flutter + Xray + mihomo + sing-box</sub></p>
+<p align="center"><sub>made with ♡ · Flutter + Xray + mihomo</sub></p>
