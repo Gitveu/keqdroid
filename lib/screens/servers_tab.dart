@@ -163,8 +163,7 @@ class _ConnectHeader extends ConsumerWidget {
     final isConnecting =
         serverSwitchInProgress || vpnStatus == VpnStatus.connecting;
 
-    // connecting остаётся тапабельным — это отмена попытки; блокируем только
-    // disconnecting (гасить уже нечего).
+    // connecting тапабелен: это отмена попытки
     final VoidCallback? onTap =
         vpnStatus == VpnStatus.disconnecting ? null : () => onToggle(vpnStatus);
     final halloween = ref.watch(halloweenActiveProvider);
@@ -178,8 +177,7 @@ class _ConnectHeader extends ConsumerWidget {
         children: [
               RepaintBoundary(
                 child: halloween
-                    // Ошибку обычная кнопка не показывает, а тыква грустнеет:
-                    // это её третье лицо. При смене сервера ошибка ложная.
+                    // ошибку показывает только тыква, при смене сервера она ложная
                     ? HalloweenSky(
                         child: PumpkinConnectButton(
                           isConnected: isConnected,
@@ -680,7 +678,6 @@ class _ServersTabState extends ConsumerState<ServersTab>
       );
     }
 
-    // Мистические значки на время праздника — только на главном экране.
     return HalloweenIconScope(child: _withListChrome(context, body, bottomInset));
   }
 

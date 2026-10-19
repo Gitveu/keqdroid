@@ -4,17 +4,11 @@ import 'package:flutter/material.dart';
 
 import '../../../platform/platform_bootstrap.dart';
 
-/// Небо за кнопкой-тыквой: ночью полумесяц в облаках, днём закатное солнце,
-/// облака и три птицы вдалеке.
-///
-/// Небо рисуется шире кнопки и выходит за её границы, но место в шапке
-/// занимает ровно как кнопка: раскладка экрана от праздника не меняется.
-/// Неподвижно и стоит в своём слое отрисовки — тыква мерцает каждый кадр, а
-/// размытие неба дорогое, перерисовывать его вместе с ней незачем.
+// небо шире кнопки, но место в шапке занимает как она: раскладка от праздника не сдвигается
+// неподвижно и в своём слое: тыква перерисовывается каждый кадр, а размытие неба дорогое
 class HalloweenSky extends StatelessWidget {
   const HalloweenSky({super.key, required this.child});
 
-  /// Кнопка, перед которой висит небо.
   final Widget child;
 
   static const double _side = 136;
@@ -51,14 +45,10 @@ class _SkyPainter extends CustomPainter {
   final ColorScheme scheme;
   final bool desktop;
 
-  // Холст сдвинут относительно кнопки; координаты ниже — в системе кнопки.
   static const dx = 190.0, dy = 40.0, width = 516.0, height = 210.0;
 
   static Rect _o(double x, double y, double w, double h) => Rect.fromCenter(center: Offset(x, y), width: w, height: h);
 
-  /// Ночное облако: строго плоский низ, крупный клуб, пара поменьше и тонкий
-  /// хвост. Клубы — овалы разного размера с сильным перекрытием: одинаковые
-  /// круги рядком читались как бусы из пузырей.
   static Path _night(double baseY, List<Rect> lobes) {
     var p = Path();
     for (final r in lobes) {
@@ -67,8 +57,6 @@ class _SkyPainter extends CustomPainter {
     return Path.combine(PathOperation.intersect, p, Path()..addRect(Rect.fromLTRB(-1000, -1000, 1000, baseY)));
   }
 
-  /// Дневное облако: вытянутое тело с заострёнными хвостами, тянущимися к
-  /// тыкве, и приплюснутые клубы, сбитые к дальнему краю.
   static (Path, List<Rect>) _day(double left, double right, double baseY, double thick, List<Rect> lobes) {
     final w = right - left;
     var p = Path()
@@ -98,9 +86,8 @@ class _SkyPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Матовое стекло между небом и тыквой: всё небо уходит в слегка размытый слой.
     canvas.saveLayer(Offset.zero & size, Paint()..imageFilter = ui.ImageFilter.blur(sigmaX: 1.2, sigmaY: 1.2));
-    // На ПК над кнопкой меньше места, и ореол упирался в край окна.
+    // на ПК над кнопкой меньше места, и ореол упирался в край окна
     canvas.translate(dx, dy + (desktop ? 12 : 0));
     final dark = scheme.brightness == Brightness.dark;
     final center = dark ? const Offset(-64, 20) : const Offset(196, 30);
@@ -114,8 +101,6 @@ class _SkyPainter extends CustomPainter {
           )
         : (Path()..addOval(Rect.fromCircle(center: center, radius: 21)));
 
-    // Светило с ореолом. Внутри облака оно рисуется ещё раз размытым — так свет
-    // проходит сквозь облако, как сквозь стекло.
     void drawLight({double blur = 0, double alpha = 1, BlendMode mode = BlendMode.srcOver}) {
       canvas.drawCircle(
         center,
@@ -146,10 +131,8 @@ class _SkyPainter extends CustomPainter {
     final bottom = Color.lerp(scheme.surfaceContainerHigh, scheme.onSurface, .1)!.withValues(alpha: .8);
     for (final cloud in _nightClouds) {
       final b = cloud.getBounds().inflate(12);
-      // Край растушёван: размытый контур ложится маской, заливка — только на неё
-      // (srcIn), просвечивающая луна — поверх, не выходя за маску (srcATop).
-      // Жёсткий край делал облака мультяшными, а бликов ночью нет совсем —
-      // с ними облака выглядели пластмассовыми.
+      // край растушёван маской из размытого контура: заливка по ней srcIn, луна поверх srcATop,
+      // с жёстким краем облака выглядели мультяшными
       canvas.saveLayer(b, Paint());
       canvas.drawPath(cloud, Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.6));
       canvas.drawRect(
@@ -165,7 +148,6 @@ class _SkyPainter extends CustomPainter {
   }
 
   void _paintDay(Canvas canvas, void Function({double blur, double alpha, BlendMode mode}) drawLight) {
-    // Светлый верх, тёмное брюхо и подсветка клубов со стороны солнца.
     final top = Colors.white.withValues(alpha: .9);
     final bottom = Color.lerp(Colors.white, scheme.onSurfaceVariant, .5)!.withValues(alpha: .88);
     final rim = Colors.white.withValues(alpha: .6);
@@ -191,7 +173,6 @@ class _SkyPainter extends CustomPainter {
       drawLight(blur: 7, alpha: .6);
       canvas.restore();
     }
-    // Три птицы улетают вдаль: чем дальше, тем мельче и выше.
     final bird = Paint()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round

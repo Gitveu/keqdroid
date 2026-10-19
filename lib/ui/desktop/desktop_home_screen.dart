@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
-import '../../shared/ui/halloween/halloween_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -31,6 +30,7 @@ import '../../services/windows_tray_menu.dart';
 import '../../tunnel/linux_tunnel_backend.dart';
 import '../../shared/ui/app_theme.dart';
 import '../../shared/ui/expressive_button_group.dart';
+import '../../shared/ui/halloween/halloween_icons.dart';
 import '../../shared/ui/update_dialog.dart';
 import '../../utils/clipboard_import.dart';
 import 'desktop_connection_mode.dart';
@@ -491,43 +491,42 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Боковое меню — часть главного экрана: на праздник и тут свои значки.
           HalloweenIconScope(
             child: Material(
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            child: SizedBox(
-              width: MediaQuery.sizeOf(context).width >= 900 ? 220.0 : 76.0,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 16),
-                  if (Platform.isWindows || Platform.isLinux) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: MediaQuery.sizeOf(context).width >= 900
-                          ? const _ConnectionModeChip()
-                          : const Center(child: _ConnectionModeMenuButton()),
-                    ),
-                    const SizedBox(height: 12),
-                    Divider(height: 1, color: AppTheme.divider(context)),
-                    const SizedBox(height: 8),
-                  ],
-                  for (var i = 0; i < destinations.length; i++)
-                    _SidebarTile(
-                      icon: destinations[i].icon,
-                      label: destinations[i].label,
-                      selected: _index == i,
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              child: SizedBox(
+                width: MediaQuery.sizeOf(context).width >= 900 ? 220.0 : 76.0,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 16),
+                    if (Platform.isWindows || Platform.isLinux) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: MediaQuery.sizeOf(context).width >= 900
+                            ? const _ConnectionModeChip()
+                            : const Center(child: _ConnectionModeMenuButton()),
+                      ),
+                      const SizedBox(height: 12),
+                      Divider(height: 1, color: AppTheme.divider(context)),
+                      const SizedBox(height: 8),
+                    ],
+                    for (var i = 0; i < destinations.length; i++)
+                      _SidebarTile(
+                        icon: destinations[i].icon,
+                        label: destinations[i].label,
+                        selected: _index == i,
+                        compact: MediaQuery.sizeOf(context).width < 900,
+                        onTap: () => _selectTab(i),
+                      ),
+                    SidebarGroupNav(
                       compact: MediaQuery.sizeOf(context).width < 900,
-                      onTap: () => _selectTab(i),
+                      onOpenServers: () => _selectTab(0),
                     ),
-                  SidebarGroupNav(
-                    compact: MediaQuery.sizeOf(context).width < 900,
-                    onOpenServers: () => _selectTab(0),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
           ),
           VerticalDivider(width: 1, color: AppTheme.divider(context)),
           Expanded(

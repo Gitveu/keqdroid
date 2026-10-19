@@ -6,12 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../platform/platform_bootstrap.dart';
 import '../../../providers/halloween_provider.dart';
 
-/// Где на время праздника значки заменяются мистическими.
-///
-/// Только на главном экране — полоса статистики, навигация, шапка группы,
-/// кнопка добавления. Подмена идёт по самому значку, а значки одни на всё
-/// приложение: без явной границы сеть в настройках LAN-шаринга тоже стала бы
-/// амулетом.
+// подмена только внутри этой границы: значки общие на всё приложение, и без неё
+// сеть в настройках LAN тоже стала бы амулетом
 class HalloweenIconScope extends ConsumerWidget {
   const HalloweenIconScope({super.key, required this.child});
 
@@ -31,11 +27,7 @@ class _HalloweenIcons extends InheritedWidget {
   bool updateShouldNotify(_HalloweenIcons old) => old.enabled != enabled;
 }
 
-/// [Icon], который внутри [HalloweenIconScope] в праздник рисует мистическую
-/// замену, а во всех остальных случаях — сам себя.
-///
-/// Замены нарисованы контурами, а не шрифтом: алхимических знаков из Unicode во
-/// многих системных шрифтах Android нет, и вместо значка был бы пустой квадрат.
+// замены нарисованы контурами: алхимических знаков Unicode нет во многих системных шрифтах Android
 class SeasonalIcon extends StatelessWidget {
   const SeasonalIcon(this.icon, {super.key, this.size, this.color, this.semanticLabel});
 
@@ -62,17 +54,13 @@ class SeasonalIcon extends StatelessWidget {
   }
 }
 
-/// Значок → мистическая замена. Порядок смыслов согласован с хозяйкой: стихии
-/// воздуха и земли повторяют стрелки «вверх» и «вниз», котёл — объём, песочные
-/// часы — время. Шестерёнка настроек и пуск/пауза в строке сервера остаются
-/// своими: замена там мешала узнаванию.
+// шестерёнка настроек и пуск/пауза в строке сервера остаются своими: замена мешала узнаванию
 _Glyph? _glyphFor(IconData d) {
   if (d == Icons.arrow_upward_rounded) return _Glyph.air;
   if (d == Icons.arrow_downward_rounded) return _Glyph.earth;
   if (d == Icons.data_usage_rounded) return _Glyph.cauldron;
   if (d == Icons.schedule_rounded) return _Glyph.hourglass;
-  // Один и тот же значок сети значит разное: на телефоне это раздел «Серверы»,
-  // на ПК — режим Proxy.
+  // на телефоне это раздел Серверы, на ПК режим Proxy
   if (d == Icons.lan_rounded) return PlatformBootstrap.isDesktop ? _Glyph.amulet : _Glyph.crystalBall;
   if (d == Icons.dns_rounded) return _Glyph.crystalBall;
   if (d == Icons.vpn_lock_rounded) return _Glyph.ward;
@@ -89,8 +77,6 @@ _Glyph? _glyphFor(IconData d) {
 
 enum _Glyph { air, earth, cauldron, hourglass, crystalBall, scroll, ouroboros, candles, eye, sparkle, amulet, ward, seal }
 
-/// Рисует замену на сетке 24×24 той же толщиной линии, что у скруглённых
-/// значков Material: иначе они выглядели бы чужими рядом с флагами и текстом.
 class _GlyphPainter extends CustomPainter {
   _GlyphPainter(this.glyph, this.color);
 
@@ -99,8 +85,6 @@ class _GlyphPainter extends CustomPainter {
 
   static Path _circle(double x, double y, double r) => Path()..addOval(Rect.fromCircle(center: Offset(x, y), radius: r));
 
-  /// Треугольник со скруглёнными углами: острые треугольники стихий выбивались
-  /// из приложения, где скруглено всё.
   static Path _roundedTriangle(List<Offset> pts, double r) {
     final p = Path();
     for (var i = 0; i < pts.length; i++) {
@@ -142,7 +126,6 @@ class _GlyphPainter extends CustomPainter {
         canvas.drawPath(_circle(10, 5.6, 1.4), f);
         canvas.drawPath(_circle(14.2, 3.6, 1.1), f);
       case _Glyph.hourglass:
-        // Колба с шейкой, а не два конуса: в узком месте был излом.
         canvas.drawLine(const Offset(6, 3.8), const Offset(18, 3.8), s);
         canvas.drawLine(const Offset(6, 20.2), const Offset(18, 20.2), s);
         canvas.drawPath(Path()
@@ -156,7 +139,6 @@ class _GlyphPainter extends CustomPainter {
         canvas.drawPath(Path()..moveTo(7.6, 16)..lineTo(6, 20.5)..lineTo(18, 20.5)..lineTo(16.4, 16), s);
         canvas.drawPath(Path()..moveTo(8.8, 9)..quadraticBezierTo(9.3, 6.8, 11.5, 6.2), s);
       case _Glyph.scroll:
-        // Подписка — присланный список серверов: наклонный лист с завитками.
         canvas.drawPath(Path()
           ..moveTo(9.2, 4.4)..lineTo(18.2, 4.4)
           ..cubicTo(20.7, 4.4, 20.9, 7.6, 18.9, 7.6)..cubicTo(17.6, 7.6, 17.7, 5.9, 18.8, 6.0), s);
@@ -181,7 +163,7 @@ class _GlyphPainter extends CustomPainter {
             ..cubicTo(x - 1.4, top - 1.2, x - 1.6, top - 3, x, top - 5)..close(), f);
         }
       case _Glyph.eye:
-        // Тупые уголки и никакого треугольника вокруг — не «всевидящее око».
+        // без треугольника вокруг, чтобы не вышло всевидящее око
         canvas.drawPath(Path()
           ..moveTo(3, 12)..cubicTo(5.2, 7.6, 8.4, 5.5, 12, 5.5)..cubicTo(15.6, 5.5, 18.8, 7.6, 21, 12)
           ..cubicTo(18.8, 16.4, 15.6, 18.5, 12, 18.5)..cubicTo(8.4, 18.5, 5.2, 16.4, 3, 12)..close(), s);

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../shared/ui/halloween/halloween_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -10,6 +9,7 @@ import '../../models/subscription_card_theme.dart';
 import '../../providers/providers.dart';
 import '../../services/subscription_accent_service.dart';
 import '../../shared/ui/expressive.dart';
+import '../../shared/ui/halloween/halloween_icons.dart';
 import '../../shared/ui/server_group_anchors.dart';
 
 class SidebarGroupNav extends ConsumerWidget {

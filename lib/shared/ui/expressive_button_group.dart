@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'halloween/halloween_icons.dart';
 
 import 'expressive.dart';
+import 'halloween/halloween_icons.dart';
 import 'haptics.dart';
 
 class ExpressiveSegment<T> {

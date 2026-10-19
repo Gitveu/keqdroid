@@ -1,7 +1,6 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'halloween/halloween_icons.dart';
 
 import '../../models/server_item.dart';
 import '../../models/server_name_utils.dart';
@@ -9,6 +8,7 @@ import '../../services/ping_service.dart';
 import '../../utils/bidi.dart';
 import 'app_theme.dart';
 import 'expressive.dart';
+import 'halloween/halloween_icons.dart';
 import 'server_avatar.dart';
 
 enum ServerRowLayout { inline, card }

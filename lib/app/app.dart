@@ -5,8 +5,8 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_color_utilities/material_color_utilities.dart' as mcu;
 import 'package:keqdroid/l10n/app_localizations.dart';
+import 'package:material_color_utilities/material_color_utilities.dart' as mcu;
 
 import '../models/app_font.dart';
 import '../models/app_settings.dart';
@@ -85,14 +85,8 @@ ColorScheme _lavenderMilkScheme(Brightness brightness) {
   );
 }
 
-/// «Тыква и ночь»: две семьи цветов по правилам Material вместо одной.
-///
-/// Тыквенный исходный цвет даёт почти ту же палитру, что Amber, — такие
-/// пары-близнецы из списка уже убирали (см. [_kRetiredPresets]). Отличие держит
-/// фиолетовая семья: она уходит в выбранное и в фон. Тоны всех ролей считает
-/// сама библиотека, как у простых тем, поэтому тема читается как своя, а не
-/// вставленная. Насыщенность фона поднята с шести у простых тем до четырнадцати,
-/// чтобы фиолетовый в нём читался; «вариантный» фон, как и у них, на два больше.
+// одна тыквенная палитра дала бы близнеца Amber, а такие пары убраны (см. _kRetiredPresets):
+// отличие держит фиолетовая; насыщенность фона 14 вместо 6 у простых тем, иначе фиолетовый не читается
 ColorScheme _pumpkinNightScheme(Brightness brightness) {
   final pumpkin = mcu.Hct.fromInt(0xFFFF7518);
   final d = mcu.DynamicScheme(

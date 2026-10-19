@@ -605,9 +605,7 @@ class _AppearanceThemesTab extends StatelessWidget {
                 onChanged: (v) =>
                     onSave(current.copyWith(followSystemTheme: v)),
               ),
-              // Только пока открыто окно праздника: вне его переключатель
-              // ничего бы не делал, а такие настройки прячутся, а не
-              // объясняются. Подпись — до какого числа, из названия этого не узнать.
+              // вне окна праздника переключатель ничего не делает, поэтому скрыт
               if (HalloweenSeason.isNow)
                 _AppearanceSwitchTile(
                   icon: Icons.celebration_rounded,

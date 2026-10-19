@@ -3,10 +3,10 @@ library;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'halloween/halloween_icons.dart';
 
 import '../../utils/bidi.dart';
 import 'expressive.dart';
+import 'halloween/halloween_icons.dart';
 
 class StatLine {
   final IconData icon;

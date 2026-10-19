@@ -6,12 +6,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../haptics.dart';
 
-/// Кнопка подключения в виде тыквы — праздничная замена круглой кнопке.
-///
-/// Состояние читается не только цветом: выключенная тыква спит с закрытыми
-/// глазами, подключённая горит вырезанным лицом, при ошибке лицо грустнеет.
-/// Движение и тайминги согласованы с хозяйкой по прототипу и перенесены один в
-/// один; менять их — это уже другое оформление, а не правка.
+// движение и тайминги перенесены из согласованного прототипа один в один
 class PumpkinConnectButton extends StatefulWidget {
   const PumpkinConnectButton({
     super.key,
@@ -26,7 +21,7 @@ class PumpkinConnectButton extends StatefulWidget {
   final bool isError;
   final VoidCallback? onTap;
 
-  /// Сторона, как у обычной кнопки: шапка не должна прыгать при смене оформления.
+  // сторона как у обычной кнопки, иначе шапка прыгает при смене оформления
   static const double size = 136;
 
   @override
@@ -35,8 +30,6 @@ class PumpkinConnectButton extends StatefulWidget {
 
 enum _Mode { off, connecting, on, error }
 
-/// Тайминги прототипа. CSS-кривые записаны как есть: `ease`, `ease-out` и
-/// пружинистая с перелётом для прыжка и отпускания.
 abstract final class _Curves {
   static const ease = Cubic(.25, .1, .25, 1);
   static const easeOut = Cubic(0, 0, .58, 1);
@@ -49,25 +42,21 @@ class _PumpkinConnectButtonState extends State<PumpkinConnectButton> with Ticker
   late final Ticker _ticker = createTicker(_onTick);
   final _frame = ValueNotifier<int>(0);
 
-  /// Нажатие: 0 — отпущено, 1 — поджато. Без границ, иначе срежется перелёт
-  /// пружинистой кривой при отпускании.
+  // без границ, иначе при отпускании срежется перелёт пружинистой кривой
   late final AnimationController _press = AnimationController.unbounded(vsync: this)..addListener(_repaint);
 
   _Mode _mode = _Mode.off;
   Duration _tick = Duration.zero;
   Duration _entry = Duration.zero;
 
-  // Значения в момент входа в текущее состояние: каждый переход начинается с
-  // того кадра, на котором его застали, а не с исходного значения. Иначе мигание
-  // и покачивание обрывались бы на случайном кадре.
+  // значения на входе в состояние: переход начинается с застигнутого кадра,
+  // иначе мигание и покачивание обрывались бы скачком
   List<double> _faceFrom = _Face.sleep;
-  /// `null` — переходов ещё не было, цвет сразу целевой.
   Color? _tintFrom;
   double _opacityFrom = 1;
   double _litFrom = 0;
   double _tiltFrom = 0;
 
-  /// Цвет спящего и грустного лица — из темы, поэтому известен только в build.
   Color _sleepInk = const Color(0xFF888888);
 
   bool get _calm => MediaQuery.maybeDisableAnimationsOf(context) ?? false;
@@ -82,8 +71,7 @@ class _PumpkinConnectButtonState extends State<PumpkinConnectButton> with Ticker
   @override
   void initState() {
     super.initState();
-    // Первый кадр — сразу в нужном состоянии, без перехода: открывшийся экран не
-    // должен проигрывать «загорание» тыквы, которая уже горела.
+    // первый кадр сразу в нужном состоянии: открытый экран не зажигает заново горящую тыкву
     _mode = _targetMode;
     _faceFrom = _faceTarget(_mode);
     _litFrom = _mode == _Mode.on ? 1 : 0;
@@ -96,8 +84,8 @@ class _PumpkinConnectButtonState extends State<PumpkinConnectButton> with Ticker
     super.didUpdateWidget(old);
     final next = _targetMode;
     if (next == _mode) return;
-    // Системный диалог разрешения VPN забирает окно, и отпускание пальца до нас
-    // может не дойти: тыква осталась бы сплющенной до следующего касания.
+    // системный диалог разрешения VPN забирает окно, и отпускание пальца может не дойти:
+    // тыква осталась бы сплющенной до следующего касания
     _setPressed(false);
     final t = _sinceEntry;
     _faceFrom = _faceAt(t);
@@ -127,8 +115,7 @@ class _PumpkinConnectButtonState extends State<PumpkinConnectButton> with Ticker
   void _onTick(Duration elapsed) {
     _tick = elapsed;
     _repaint();
-    // Без бесконечных анимаций тикер незачем держать: спящая и грустная тыква
-    // после перехода неподвижны. Подключение и свеча идут, пока длится состояние.
+    // тикер только для бесконечных анимаций, иначе неподвижная тыква жгла бы батарею
     final endless = !_calm && (_mode == _Mode.connecting || _mode == _Mode.on);
     if (!endless && _sinceEntry > 1600) _ticker.stop();
   }
@@ -143,8 +130,6 @@ class _PumpkinConnectButtonState extends State<PumpkinConnectButton> with Ticker
     }
   }
 
-  // ── Значения во времени. t — миллисекунды с входа в текущее состояние. ──
-
   static double _progress(double t, double delay, double duration, Curve curve) =>
       curve.transform(((t - delay) / duration).clamp(0.0, 1.0));
 
@@ -154,9 +139,6 @@ class _PumpkinConnectButtonState extends State<PumpkinConnectButton> with Ticker
         _Mode.error => _Face.sad,
       };
 
-  /// Лицо перетекает по точкам: у всех трёх лиц одинаковый набор команд пути,
-  /// поэтому треугольники глаз сжимаются прямо в спящие дуги, а улыбка
-  /// переворачивается в грустную, без подмены одной картинки другой.
   List<double> _faceAt(double t) {
     final (delay, duration) = switch (_mode) {
       _Mode.off => (0.0, 450.0),
@@ -187,19 +169,15 @@ class _PumpkinConnectButtonState extends State<PumpkinConnectButton> with Ticker
   double _opacityAt(double t) {
     switch (_mode) {
       case _Mode.off:
-        // Гасим сами, от той яркости, на которой застало нажатие: снятое мигание
-        // иначе обрывалось бы скачком.
         if (_calm) return 1;
         return lerpDouble(_opacityFrom, 1, _progress(t, 0, 450, _Curves.easeOut))!;
       case _Mode.connecting:
-        // Сначала спящее лицо раскрывается в полусвете, мигание вступает позже.
         if (_calm || t < 350) return lerpDouble(_opacityFrom, .5, _progress(t, 0, 300, _Curves.ease))!;
         return _Keys.flicker((t - 350) % 1100 / 1100);
       case _Mode.on:
         if (_calm) return 1;
         return _Keys.candle(t % 2600 / 2600);
       case _Mode.error:
-        // Свеча гаснет не сразу: пара затухающих вспышек.
         if (_calm) return 1;
         return _Keys.dying(_opacityFrom, _progress(t, 0, 1400, _Curves.easeOut));
     }
@@ -210,14 +188,11 @@ class _PumpkinConnectButtonState extends State<PumpkinConnectButton> with Ticker
     return lerpDouble(_litFrom, to, _progress(t, 0, 350, _Curves.emphasized))!;
   }
 
-  /// Наклон в радианах: покачивание, пока идёт подключение.
   double _tiltAt(double t) {
     if (_mode != _Mode.connecting || _calm) return 0;
     return _Keys.wobble(t % 900 / 900) * math.pi / 180;
   }
 
-  /// Наклон, сдвиг и масштаб тыквы целиком: прыжок при подключении, вздох при
-  /// ошибке, покачивание при подключении.
   ({double tilt, double dy, double sx, double sy}) _poseAt(double t) {
     if (_calm) return (tilt: 0, dy: 0, sx: 1, sy: 1);
     switch (_mode) {
@@ -226,14 +201,12 @@ class _PumpkinConnectButtonState extends State<PumpkinConnectButton> with Ticker
       case _Mode.on:
         if (t >= 500) return (tilt: 0, dy: 0, sx: 1, sy: 1);
         final p = t / 500;
-        // Кривая с перелётом на каждом отрезке ключевых кадров, как у CSS-анимации.
         final (k, from, to) = p < .35
             ? (_Curves.overshoot.transform(p / .35), 0.0, 1.0)
             : (_Curves.overshoot.transform((p - .35) / .65), 1.0, 0.0);
         final w = lerpDouble(from, to, k)!;
         return (tilt: 0, dy: -8 * w, sx: 1 - .03 * w, sy: 1 + .04 * w);
       case _Mode.error:
-        // Вздох: тыква выпрямляется из наклона и чуть оседает.
         if (t >= 1000) return (tilt: 0, dy: 0, sx: 1, sy: 1);
         final p = _Curves.emphasized.transform(t / 1000);
         if (p < .55) {
@@ -264,7 +237,6 @@ class _PumpkinConnectButtonState extends State<PumpkinConnectButton> with Ticker
           onTapCancel: enabled ? () => _setPressed(false) : null,
           onTap: enabled
               ? () {
-                  // Главное действие приложения — заметная отдача, как у обычной кнопки.
                   AppHaptics.impact();
                   widget.onTap!();
                 }
@@ -295,9 +267,7 @@ abstract final class _Colors {
   static const glowDim = Color(0xFFFFB347);
 }
 
-/// Ключевые кадры прототипа. p — доля цикла от 0 до 1.
 abstract final class _Keys {
-  /// Неровное мигание при подключении, ступенями: свеча разгорается рывками.
   static const _flicker = [(0.0, .15), (.12, .5), (.20, .25), (.35, .65), (.48, .35), (.62, .7), (.75, .3), (.88, .55)];
 
   static double flicker(double p) {
@@ -308,13 +278,11 @@ abstract final class _Keys {
     return v;
   }
 
-  /// Ровное подрагивание горящей свечи.
   static double candle(double p) => _smooth(p, const [(0, 1), (.4, .86), (.55, .97), (.7, .9), (1, 1)]);
 
-  /// Покачивание в градусах.
+  // в градусах
   static double wobble(double p) => _smooth(p, const [(0, -1.5), (.5, 1.5), (1, -1.5)]);
 
-  /// Затухание при ошибке: от застигнутой яркости через пару вспышек к полной.
   static double dying(double from, double p) =>
       _linear(p, [(0, from), (.15, .6), (.3, .3), (.45, .5), (.6, .4), (1, 1)]);
 
@@ -332,11 +300,8 @@ abstract final class _Keys {
   }
 }
 
-/// Лица тыквы как наборы чисел для перетекания. Три контура (глаза и рот) плюс
-/// толщина обводки последним числом: обводка нужна только спящему лицу, у
-/// которого каждый контур схлопнут в дугу, пройденную туда и обратно.
-/// Перетекание лиц возможно, только пока у них одинаковый набор команд пути:
-/// иначе точки съезжают не туда, и при засыпании глаза закручиваются крючками.
+// лица перетекают по точкам, поэтому набор команд пути у всех трёх одинаков,
+// иначе при засыпании глаза закручиваются крючками; последнее число толщина обводки
 @visibleForTesting
 bool debugPumpkinFacesShareShape() => _Face.sameShape;
 
@@ -353,7 +318,6 @@ abstract final class _Face {
     'M60 90 Q64 92.5 68 92.5 L68 92.5 L68 92.5 L68 92.5 Q72 92.5 76 90 C73.33 91.67 70.67 92.5 68 92.5 L68 92.5 L68 92.5 L68 92.5 C65.33 92.5 62.67 91.67 60 90 Z',
   ];
 
-  /// Грустное: внешние уголки глаз опущены, улыбка перевёрнута, зубы на местах.
   static const _sadContours = [
     'M40 75 Q36 75 38 71 L48 61 Q52 57 54 60 L57 69 Q58 73 54 73 Z',
     'M96 75 Q100 75 98 71 L88 61 Q84 57 82 60 L79 69 Q78 73 82 73 Z',
@@ -364,7 +328,6 @@ abstract final class _Face {
   static final sleep = _numbers(_sleepContours, 3.5);
   static final sad = _numbers(_sadContours, 0);
 
-  /// Набор команд по контурам — одинаков у всех трёх лиц, разнятся только числа.
   static final commands = _commands(_litContours);
 
   static bool get sameShape =>
@@ -381,7 +344,6 @@ abstract final class _Face {
   static List<String> _commands(List<String> contours) =>
       [for (final d in contours) RegExp('[MLQCZ]').allMatches(d).map((m) => m[0]!).join()];
 
-  /// Путь лица из чисел по общему набору команд.
   static Path path(List<double> v) {
     final p = Path();
     var i = 0;
@@ -432,7 +394,6 @@ class _PumpkinPainter extends CustomPainter {
     ..moveTo(34, 50)..cubicTo(40, 38, 50, 28, 60, 24)
     ..moveTo(102, 50)..cubicTo(96, 38, 86, 28, 76, 24);
 
-  /// Низ тыквы — точка опоры: и нажатие, и прыжок, и вздох сжимают её к земле.
   static const _origin = Offset(68, 131);
 
   @override
@@ -465,8 +426,7 @@ class _PumpkinPainter extends CustomPainter {
         ..color = Color.lerp(idleRibs, _Colors.ribs, lit)!,
     );
 
-    // Лицо — одной группой с общей прозрачностью: обводка спящего лица и
-    // заливка не должны темнеть там, где перекрываются.
+    // лицо одним слоем с общей прозрачностью, иначе обводка и заливка темнеют на перекрытии
     final path = _Face.path(face);
     final stroke = face.last;
     final layer = opacity < 1;

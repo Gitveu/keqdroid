@@ -21,8 +21,8 @@ void main() {
       final s = buildPresetScheme(preset, brightness);
 
       test('текст читается на фоне, кнопках и выбранном', () {
-        // Роли собраны вручную из двух семей, поэтому контраст сторожим явно:
-        // ошибка в номере тона дала бы нечитаемый текст без единого падения.
+        // роли собраны вручную из двух семей, поэтому контраст сторожим явно:
+        // ошибка в номере тона дала бы нечитаемый текст без единого падения
         for (final (fg, bg, what) in [
           (s.onSurface, s.surface, 'текст на фоне'),
           (s.onSurfaceVariant, s.surfaceContainerHigh, 'второстепенный текст на карточке'),
@@ -35,7 +35,7 @@ void main() {
       });
 
       test('выбранное и фон фиолетовые — этим тема и отличается от Amber', () {
-        // Тыквенный сид сам по себе дал бы близнеца Amber; отличие держит фиолет.
+        // тыквенный сид сам по себе дал бы близнеца Amber, отличие держит фиолет
         for (final role in [s.secondaryContainer, s.surfaceContainerHigh]) {
           final hue = Hct.fromInt(role.toARGB32()).hue;
           expect(hue, inInclusiveRange(270, 320));

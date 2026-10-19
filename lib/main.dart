@@ -226,7 +226,6 @@ class _VpnHomeScreenState extends ConsumerState<VpnHomeScreen> {
       body: Row(
         children: [
           if (expanded)
-            // Навигация — часть главного экрана: на праздник и тут свои значки.
             HalloweenIconScope(
               child: AppNavRail(
                 index: _navIndex,

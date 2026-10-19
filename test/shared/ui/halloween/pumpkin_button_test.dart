@@ -36,7 +36,7 @@ void main() {
   });
 
   testWidgets('без обработчика нажатие ничего не делает', (tester) async {
-    // Так выглядит «отключается»: гасить уже нечего.
+    // так выглядит отключение: гасить уже нечего
     await tester.pumpWidget(_button());
     await tester.tap(find.byType(PumpkinConnectButton), warnIfMissed: false);
     await tester.pumpAndSettle();
@@ -61,8 +61,8 @@ void main() {
   }
 
   testWidgets('спящая и грустная тыква не держат кадры после перехода', (tester) async {
-    // Подключение и свеча анимируются бесконечно, а покой — нет: тикер обязан
-    // остановиться, иначе неподвижная тыква жгла бы батарею.
+    // подключение и свеча анимируются бесконечно, а покой нет: тикер обязан
+    // остановиться, иначе неподвижная тыква жгла бы батарею
     await tester.pumpWidget(_button(connecting: true));
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpWidget(_button());

@@ -30,7 +30,7 @@ void main() {
   });
 
   testWidgets('вне главного экрана значок свой даже в праздник', (tester) async {
-    // Иначе сеть в настройках LAN-шаринга тоже стала бы амулетом.
+    // иначе сеть в настройках LAN тоже стала бы амулетом
     await _pump(tester, active: true, scoped: false);
     expect(_isPlainIcon(tester), isTrue);
   });
