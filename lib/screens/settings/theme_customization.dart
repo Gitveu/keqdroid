@@ -594,6 +594,16 @@ class _AppearanceThemesTab extends StatelessWidget {
                     ? (v) => onSave(current.copyWith(amoledBlack: v))
                     : null,
               ),
+              // вне окна праздника переключатель ничего не делает, поэтому скрыт;
+              // выше системных цветов, чтобы подпись под группой оставалась про них
+              if (HalloweenSeason.isNow)
+                _AppearanceSwitchTile(
+                  icon: Icons.celebration_rounded,
+                  title: l10n.appearanceHalloween,
+                  subtitle: l10n.appearanceHalloweenUntil,
+                  value: current.seasonalDecor,
+                  onChanged: (v) => onSave(current.copyWith(seasonalDecor: v)),
+                ),
               _AppearanceSwitchTile(
                 icon: isDesktop
                     ? Icons.desktop_windows_rounded
@@ -605,15 +615,6 @@ class _AppearanceThemesTab extends StatelessWidget {
                 onChanged: (v) =>
                     onSave(current.copyWith(followSystemTheme: v)),
               ),
-              // вне окна праздника переключатель ничего не делает, поэтому скрыт
-              if (HalloweenSeason.isNow)
-                _AppearanceSwitchTile(
-                  icon: Icons.celebration_rounded,
-                  title: l10n.appearanceHalloween,
-                  subtitle: l10n.appearanceHalloweenUntil,
-                  value: current.seasonalDecor,
-                  onChanged: (v) => onSave(current.copyWith(seasonalDecor: v)),
-                ),
             ],
           ),
           Padding(
