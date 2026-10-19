@@ -460,18 +460,26 @@ List<String> stripUnknownGeoFromConfig(
   return dropped;
 }
 
-// ruleTag и domainMatcher это метки, а не условия
+// ruleTag и domainMatcher это метки, а не условия. список по RawFieldRule в infra/conf/router.go:
+// без process правило по программе из готового конфига выбрасывалось как пустое
 bool _ruleHasCondition(Map<dynamic, dynamic> rule) => const [
       'domain',
+      'domains',
       'ip',
       'port',
       'sourcePort',
       'network',
       'source',
+      'sourceIP',
       'user',
+      'vlessRoute',
       'inboundTag',
       'protocol',
       'attrs',
+      'localIP',
+      'localPort',
+      'process',
+      'localOS',
     ].any((field) {
       final value = rule[field];
       if (value == null) return false;

@@ -216,6 +216,32 @@ void main() {
       expect(rules.single['port'], '443');
     });
 
+    // Правило по программе — полноценное условие: раньше чистка считала его
+    // пустым и молча выкидывала из готового конфига.
+    test('keeps rules whose only condition is a process or a local port', () {
+      final config = _decode('''
+{
+  "routing": {"rules": [
+    {"type": "field", "process": ["Telegram.exe"], "outboundTag": "proxy"},
+    {"type": "field", "process": ["C:/Games/game.exe"], "domain": ["geosite:sberbank"], "outboundTag": "direct"},
+    {"type": "field", "localPort": "53", "outboundTag": "direct"},
+    {"type": "field", "localOS": ["windows"], "outboundTag": "proxy"},
+    {"type": "field", "outboundTag": "block"}
+  ]},
+  "outbounds": [{"protocol": "freedom"}]
+}''');
+      stripUnknownGeoFromConfig(config, index);
+
+      final rules = _rules(config);
+      expect(rules.map((r) => r['process']), [
+        ['Telegram.exe'],
+        null,
+        null,
+      ]);
+      expect(rules[1]['localPort'], '53');
+      expect(rules[2]['localOS'], ['windows']);
+    });
+
     test('a dns server that lost its expectIPs filter goes with it', () {
       final config = _decode('''
 {
