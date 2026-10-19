@@ -86,8 +86,6 @@ class AndroidTunnelBackend implements TunnelBackend {
   @override
   Future<void> startSession(TunnelSessionRequest request) async {
     try {
-      // на Android только чистый libxray: обёртка keqrnel отдаёт всё встроенному xray как прокси,
-      // и сплит-роутинг молча перестаёт работать
       final coreConfig = request.xrayConfig;
 
       final args = <String, dynamic>{

@@ -227,7 +227,7 @@ if (-not $SkipWindows) {
   # Fail closed if the cores are missing: a zip without them generates a valid
   # sha256 but ships a broken app (no cores, no TUN adapter).
   # CMake copies assets/bin/windows/*.{exe,dll} next to keqdroid.exe.
-  foreach ($core in @('keqrnel.exe', 'mihomo.exe', 'wintun.dll')) {
+  foreach ($core in @('xray.exe', 'mihomo.exe', 'wintun.dll')) {
     $corePath = Join-Path $relDir $core
     if (-not (Test-Path -LiteralPath $corePath)) {
       throw "Missing $core in Windows build output ($relDir). CMake should copy assets/bin/windows/. Did you build the core?"

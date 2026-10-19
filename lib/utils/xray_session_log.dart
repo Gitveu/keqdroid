@@ -33,7 +33,7 @@ abstract final class XraySessionLog {
   static bool keep(String line, int threshold) =>
       threshold == 0 || lineLevel(line) >= threshold;
 
-  // строку без метки (sing-box, mihomo, баннер, access-лог) не режем никогда
+  // строку без метки (mihomo, баннер, access-лог) не режем никогда
   static int lineLevel(String line) {
     final tag = line.indexOf('[');
     if (tag < 0) return _levels.length - 1;

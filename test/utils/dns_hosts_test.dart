@@ -5,15 +5,13 @@ import 'package:keqdroid/models/app_settings.dart';
 import 'package:keqdroid/models/xray_core_settings.dart';
 import 'package:keqdroid/utils/config_gen.dart';
 import 'package:keqdroid/utils/mihomo_config_gen.dart';
-import 'package:keqdroid/utils/singbox_tun_config.dart';
 import 'package:keqdroid/utils/socks5_credentials.dart';
 
-/// «Свои адреса для доменов» — одно поле на три ядра, и маски у них разные.
+/// «Свои адреса для доменов» — одно поле на два ядра, и маски у них разные.
 ///
 /// Голый ключ xray разбирает как полное совпадение, поэтому `*.` переезжает в
 /// `domain:`; у mihomo та же маска пишется как `+.`, потому что звёздочка там
-/// значит ровно один уровень; sing-box масок не знает вовсе и берёт только
-/// точные имена с адресами.
+/// значит ровно один уровень.
 const _vless =
     'vless://uuid@de.example.com:443?security=reality&pbk=pub&sid=aa&fp=chrome&sni=de.example.com&type=tcp#DE';
 
@@ -104,19 +102,6 @@ void main() {
 
       expect((xray['dns'] as Map<String, dynamic>).containsKey('hosts'), isFalse);
       expect(mihomo.containsKey('hosts'), isFalse);
-    });
-
-    test('sing-box берёт точные имена, а про остальные говорит вслух', () {
-      final settings = _withHosts(
-        'example.com 10.0.0.5\n*.lan.example.com 10.0.0.6\nold.example.com new.example.com',
-      );
-
-      expect(SingBoxTunConfigGen.hostsServerEntries(settings), {
-        'example.com': ['10.0.0.5'],
-      });
-      // Маска и псевдоним этому ядру не по зубам: карта у сервера `hosts`
-      // точная. Молчать об этом нельзя — настройка выглядела бы сломанной.
-      expect(SingBoxTunConfigGen.ignoredHostsEntries(settings).length, 2);
     });
   });
 }

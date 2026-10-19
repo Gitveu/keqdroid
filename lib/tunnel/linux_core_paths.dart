@@ -8,15 +8,13 @@ class LinuxCorePaths {
   LinuxCorePaths._();
 
   static const assetXray = 'assets/bin/linux/xray';
-  static const assetSingbox = 'assets/bin/linux/sing-box';
-  static const assetKeqrnel = 'assets/bin/linux/keqrnel';
   static const assetMihomo = 'assets/bin/linux/mihomo';
   static const assetGeoip = 'assets/bin/linux/geoip.dat';
   static const assetGeosite = 'assets/bin/linux/geosite.dat';
   static const geoFileNames = ['geoip.dat', 'geosite.dat'];
 
   static const binariesHint =
-      'Положите keqrnel и mihomo в assets/bin/linux/ '
+      'Положите xray и mihomo в assets/bin/linux/ '
       '(см. README) и пересоберите приложение, '
       'или поместите их рядом с исполняемым файлом / в \$PATH.';
 
@@ -37,12 +35,6 @@ class LinuxCorePaths {
 
   static Future<String?> xrayExecutable() =>
       _resolveExecutable(assetXray, 'xray');
-
-  static Future<String?> singboxExecutable() =>
-      _resolveExecutable(assetSingbox, 'sing-box');
-
-  static Future<String?> keqrnelExecutable() =>
-      _resolveExecutable(assetKeqrnel, 'keqrnel');
 
   static Future<String?> mihomoExecutable() =>
       _resolveExecutable(assetMihomo, 'mihomo');

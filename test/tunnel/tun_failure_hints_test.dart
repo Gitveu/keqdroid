@@ -19,6 +19,18 @@ void main() {
     );
   });
 
+  // Строгий маршрут у xray — фильтры WFP, без них ядро TUN не поднимает.
+  test('Windows не дал фильтры строгого маршрута', () {
+    expect(
+      id(
+        'Failed to start: main: failed to start inbound > unable to block DNS '
+        'and IPv6 outside the TUN (remove autoSystemWfpBlockLeak to run '
+        'without) > FwpmFilterAdd0 failed',
+      ),
+      'wfp-refused',
+    );
+  });
+
   test('адаптер прошлой сессии ещё не снят', () {
     expect(
       id('create adapter: error creating adapter: Object already exists'),

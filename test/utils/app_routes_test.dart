@@ -35,43 +35,10 @@ TrafficRoute _app(
 
 void main() {
   group('appRoutesRun', () {
-    test('только со своим туннелем; xray — только на Android', () {
-      for (final android in [false, true]) {
-        expect(
-          appRoutesRun(
-            core: VpnBackend.mihomo,
-            mode: ConnectionMode.tun,
-            android: android,
-          ),
-          isTrue,
-        );
-        for (final core in VpnBackend.values) {
-          expect(
-            appRoutesRun(
-              core: core,
-              mode: ConnectionMode.proxy,
-              android: android,
-            ),
-            isFalse,
-          );
-        }
-      }
-      expect(
-        appRoutesRun(
-          core: VpnBackend.xray,
-          mode: ConnectionMode.tun,
-          android: false,
-        ),
-        isFalse,
-      );
-      expect(
-        appRoutesRun(
-          core: VpnBackend.xray,
-          mode: ConnectionMode.tun,
-          android: true,
-        ),
-        isTrue,
-      );
+    // владельца соединения xray и mihomo узнают у своего TUN на любой платформе
+    test('в TUN да, в режиме прокси нет', () {
+      expect(appRoutesRun(ConnectionMode.tun), isTrue);
+      expect(appRoutesRun(ConnectionMode.proxy), isFalse);
     });
   });
 

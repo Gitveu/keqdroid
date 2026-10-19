@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/models/app_settings.dart';
 import 'package:keqdroid/models/xray_core_settings.dart';
+import 'package:keqdroid/tunnel/app_routing_mode.dart';
 import 'package:keqdroid/utils/config_gen.dart';
+import 'package:keqdroid/utils/desktop_tun.dart';
 import 'package:keqdroid/utils/socks5_credentials.dart';
 
 /// Побайтовая отсечка на форму конфига целиком.
@@ -324,6 +326,70 @@ void main() {
       return ConfigGeneratorV2.generateConfig(
         'vless://$_uuid@198.51.100.20:443?type=tcp&security=none#iprules',
         _settings.copyWith(directRules: '192.0.2.0/24, 203.0.113.7'),
+      );
+    });
+
+    // TUN на ПК держит сам xray: адаптер, маршруты, WFP. Правила по
+    // процессам встают впереди всех, IPv6 закрывается перед final.
+    _golden('vless-desktop-tun-windows', () {
+      return ConfigGeneratorV2.generateConfig(
+        'vless://$_uuid@198.51.100.30:443?type=tcp&security=none#pctun',
+        _settings,
+        desktopTun: const DesktopTunOptions(
+          windows: true,
+          mtu: 9000,
+          strictRoute: true,
+          captureIpv6: true,
+          udpTimeoutSec: 120,
+          routingMode: AppRoutingMode.onlySelected,
+          managedProcessNames: [
+            'firefox.exe',
+            r'C:\Games\Game One\game.exe',
+          ],
+          appProcessName: 'keqdroid.exe',
+        ),
+      );
+    });
+
+    _golden('vless-desktop-tun-linux', () {
+      return ConfigGeneratorV2.generateConfig(
+        'vless://$_uuid@198.51.100.31:443?type=tcp&security=none#pctun',
+        _settings.copyWith(fakeIp: true),
+        desktopTun: const DesktopTunOptions(
+          windows: false,
+          mtu: 9000,
+          captureIpv6: true,
+          appProcessName: 'keqdroid',
+          systemResolvers: ['192.168.1.1/32'],
+        ),
+      );
+    });
+
+    _golden('custom-json-desktop-tun', () {
+      return ConfigGeneratorV2.generateConfig(
+        jsonEncode({
+          'outbounds': [
+            {
+              'tag': 'proxy',
+              'protocol': 'vless',
+              'settings': {
+                'address': '198.51.100.32',
+                'port': 443,
+                'id': _uuid,
+                'encryption': 'none',
+              },
+              'streamSettings': {'network': 'tcp', 'security': 'tls'},
+            },
+          ],
+        }),
+        _settings,
+        desktopTun: const DesktopTunOptions(
+          windows: true,
+          mtu: 9000,
+          routingMode: AppRoutingMode.allExceptSelected,
+          managedProcessNames: ['steam.exe'],
+          appProcessName: 'keqdroid.exe',
+        ),
       );
     });
   });

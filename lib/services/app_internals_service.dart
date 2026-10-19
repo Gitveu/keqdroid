@@ -23,7 +23,6 @@ class AppInternalsService {
 
   static const _engineModules = <String, String>{
     'xtls/xray-core': 'xray-core',
-    'sagernet/sing-box': 'sing-box',
   };
 
   static Future<AppInternals> collect({
@@ -71,7 +70,7 @@ class AppInternalsService {
     }
     if (Platform.isWindows) {
       return [
-        await _core(await WindowsCorePaths.keqrnelExecutable(), 'keqrnel.exe',
+        await _core(await WindowsCorePaths.xrayExecutable(), 'xray.exe',
             CoreRole.core),
         await _core(await WindowsCorePaths.mihomoExecutable(), 'mihomo.exe',
             CoreRole.core),
@@ -79,8 +78,7 @@ class AppInternalsService {
     }
     if (Platform.isLinux) {
       return [
-        await _core(
-            await LinuxCorePaths.keqrnelExecutable(), 'keqrnel', CoreRole.core),
+        await _core(await LinuxCorePaths.xrayExecutable(), 'xray', CoreRole.core),
         await _core(
             await LinuxCorePaths.mihomoExecutable(), 'mihomo', CoreRole.core),
       ];
@@ -178,7 +176,7 @@ class AppInternalsService {
       status: state?.status ?? VpnStatus.disconnected,
       engine: Platform.isAndroid
           ? _androidCoreBinary(android)
-          : _desktopEngine(settings),
+          : _desktopEngine(),
       mode: Platform.isAndroid ? null : settings.connectionModeEnum,
       socksPort: settings.localPort,
       httpPort: settings.httpPort,
@@ -197,14 +195,14 @@ class AppInternalsService {
     );
   }
 
-  static String _desktopEngine(AppSettings settings) {
+  static String _desktopEngine() {
     final pids = Platform.isWindows
         ? WindowsTunnelBackend.activeInstance?.activeCorePids
         : LinuxTunnelBackend.activeInstance?.activeCorePids;
     if (pids != null && pids.keys.any((k) => k.startsWith('mihomo'))) {
       return 'mihomo';
     }
-    return settings.coreEngine;
+    return 'xray';
   }
 
   static String _androidCoreBinary(Map<String, Object?> android) =>

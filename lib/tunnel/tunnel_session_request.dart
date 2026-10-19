@@ -9,7 +9,6 @@ class TunnelSessionRequest {
   final String? mihomoConfig;
   final int socksPort;
   final int httpPort;
-  final String? singboxConfig;
   final List<String> excludePackages;
   final List<String> includePackages;
   final List<String> excludeProcesses;
@@ -28,7 +27,6 @@ class TunnelSessionRequest {
     this.mihomoConfig,
     this.socksPort = 2080,
     this.httpPort = 2081,
-    this.singboxConfig,
     this.excludePackages = const [],
     this.includePackages = const [],
     this.excludeProcesses = const [],
@@ -50,8 +48,6 @@ class TunnelSessionRequest {
         if (mihomoConfig != null && mihomoConfig!.isNotEmpty)
           'mihomoConfig': mihomoConfig,
         'socksPort': socksPort,
-        if (singboxConfig != null && singboxConfig!.isNotEmpty)
-          'singboxConfig': singboxConfig,
         'socksUsername': socksUsername,
         'socksPassword': socksPassword,
         'excludePackages': excludePackages,

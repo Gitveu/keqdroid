@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
@@ -13,11 +12,8 @@ import '../services/core_dial_failures.dart';
 import '../services/xray_route_decisions.dart';
 import '../utils/xray_session_log.dart';
 import '../services/ephemeral_xray_ping.dart';
-import '../utils/keqrnel_config.dart';
 import '../utils/mihomo_api_session.dart';
-import '../utils/singbox_tun_config.dart';
 import 'connection_mode.dart';
-import 'core_capabilities.dart';
 import 'desktop_traffic_stats.dart';
 import 'linux_core_paths.dart';
 import 'linux_elevation.dart';
@@ -30,7 +26,7 @@ import 'tunnel_backend.dart';
 import 'tunnel_session_request.dart';
 import 'tunnel_state.dart';
 import 'vpn_backend.dart';
-import 'xray_session_stats.dart';
+import 'xray_desktop_config.dart';
 
 final StreamController<void> _linuxTunRememberController =
     StreamController<void>.broadcast();
@@ -45,14 +41,14 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       _sessionDir == null ? '' : p.join(_sessionDir!.path, 'core.log');
 
   // по mtime отличаем свежий лог от прошлой сессии: при падении самого pkexec файл не обнулён
-  DateTime? _keqrnelLaunchedAt;
+  DateTime? _rootCoreLaunchedAt;
 
   static LinuxTunnelBackend? activeInstance;
 
   final _stateCtrl = StreamController<VpnState>.broadcast();
 
   Process? _xrayProcess;
-  Process? _singboxProcess;
+  Process? _rootXrayProcess;
   File? _rootSentinel;
   Directory? _sessionDir;
   ConnectionMode? _activeMode;
@@ -60,38 +56,32 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   @override
   ConnectionMode? get activeMode => _activeMode;
   final StringBuffer _xrayLog = StringBuffer();
-  final StringBuffer _singboxLog = StringBuffer();
+  final StringBuffer _rootLog = StringBuffer();
 
-  String? _xrayBinPath;
-  int? _keqrnelClashPort;
+  int? _xrayMetricsPort;
 
-  String? _keqrnelClashSecret;
+  // до фильтра уровня: при loglevel error строка Warning в буфер не попадает
+  bool _xrayStarted = false;
+
+  Timer? _rootLogTimer;
+  int _rootLogOffset = 0;
+  String _rootLogPending = '';
+  bool _rootLogReading = false;
 
   int _xrayLogThreshold = 0;
 
   Process? _mihomoProcess;
 
   int? get clashApiPort =>
-      _keqrnelClashPort ??
-      (_mihomoProcess != null ? MihomoApiSession().port : null);
+      _mihomoProcess != null ? MihomoApiSession().port : null;
 
-  String get clashApiSecret => _keqrnelClashPort != null
-      ? _keqrnelClashSecret ?? ''
-      : MihomoApiSession().secret;
-
-  static String _newSecret() {
-    final random = Random.secure();
-    return [
-      for (var i = 0; i < 16; i++)
-        random.nextInt(256).toRadixString(16).padLeft(2, '0'),
-    ].join();
-  }
+  String get clashApiSecret => MihomoApiSession().secret;
 
   Map<String, int> get activeCorePids => {
-    if (_xrayProcess != null) 'keqrnel': _xrayProcess!.pid,
+    if (_xrayProcess != null) 'xray': _xrayProcess!.pid,
     if (_mihomoProcess != null)
       _mihomoRunsAsRoot ? 'mihomo (root, TUN)' : 'mihomo': _mihomoProcess!.pid,
-    if (_singboxProcess != null) 'keqrnel (root, TUN)': _singboxProcess!.pid,
+    if (_rootXrayProcess != null) 'xray (root, TUN)': _rootXrayProcess!.pid,
   };
 
   // root-процессу обычный пользователь сигнал не пошлёт, останавливаем удалением сентинела
@@ -116,10 +106,10 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
 
   String exportSessionLogs({int maxLines = 400}) {
     final combined = StringBuffer()
-      ..writeln('=== xray ===')
+      ..writeln('=== core ===')
       ..writeln(_xrayLog)
-      ..writeln('=== sing-box ===')
-      ..writeln(_singboxLog);
+      ..writeln('=== root ===')
+      ..writeln(_rootLog);
     return _tail(combined, maxLines: maxLines);
   }
 
@@ -150,7 +140,7 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     emit(VpnState(status: VpnStatus.connecting, activeMode: request.mode));
     _activeMode = request.mode;
     _xrayLog.clear();
-    _singboxLog.clear();
+    _rootLog.clear();
     XrayRouteDecisions.reset();
 
     try {
@@ -166,8 +156,8 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
           await _startMihomoSession(request);
         case VpnBackend.xray:
           await (isTun
-              ? _startKeqrnelTunSession(request)
-              : _startKeqrnelProxySession(request));
+              ? _startXrayTunSession(request)
+              : _startXrayProxySession(request));
       }
 
       startStatsLoop(request.mode);
@@ -176,9 +166,9 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       unawaited(_verifyChainReachable(request));
 
       // без вотчдога смерть ядра оставляла UI в Connected, а системный прокси на мёртвом порту
-      _watchProcessExit(_xrayProcess, 'keqrnel');
+      _watchProcessExit(_xrayProcess, 'xray');
       _watchProcessExit(_mihomoProcess, 'mihomo');
-      _watchProcessExit(_singboxProcess, 'keqrnel TUN');
+      _watchProcessExit(_rootXrayProcess, 'xray TUN');
     } catch (e, st) {
       AppLogger.instance.error(
         'Linux tunnel start failed',
@@ -199,31 +189,24 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  Future<void> _startKeqrnelProxySession(TunnelSessionRequest request) async {
-    final bin = await LinuxCorePaths.keqrnelExecutable();
+  Future<void> _startXrayProxySession(TunnelSessionRequest request) async {
+    final bin = await LinuxCorePaths.xrayExecutable();
     if (bin == null) {
       throw VpnStartException(
-        'keqrnel not found. ${LinuxCorePaths.binariesHint}',
+        'xray not found. ${LinuxCorePaths.binariesHint}',
       );
     }
-    _xrayBinPath = bin;
 
-    final clashPort = await _freePort();
-    final clashSecret = _newSecret();
+    final metricsPort = await _freePort();
     final xrayLog = XraySessionLog.raise(request.xrayConfig);
     _xrayLogThreshold = xrayLog.threshold;
-    final merged = KeqrnelConfig.proxyWithStats(
-      xrayConfig: xrayLog.config,
-      socksPort: request.socksPort,
-      httpPort: request.httpPort,
-      clashPort: clashPort,
-      clashApiSecret: clashSecret,
-      findProcess: request.debugMode,
-    );
-    _keqrnelClashPort = clashPort;
-    _keqrnelClashSecret = clashSecret;
-    final configFile = File(p.join(_sessionDir!.path, 'keqrnel.json'));
-    await configFile.writeAsString(merged);
+    final configFile = File(p.join(_sessionDir!.path, 'xray.json'));
+    await configFile.writeAsString(withXrayDesktopSession(
+      xrayLog.config,
+      metricsPort: metricsPort,
+      processLog: request.debugMode,
+    ));
+    _xrayMetricsPort = metricsPort;
 
     // HTTP-инбаунд ядро поднимает всегда (через него ходит апдейтер), занятый порт роняет всё
     await _ensurePortsAvailable(request, needsHttp: true);
@@ -233,7 +216,7 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       bin,
       ['run', '-c', configFile.path],
       workingDirectory: _sessionDir!.path,
-      environment: _coreProcessEnvironment(geoDir),
+      environment: {'XRAY_LOCATION_ASSET': ?geoDir},
       mode: ProcessStartMode.normal,
     );
     _pipeProcessOutput(_xrayProcess!, _xrayLog);
@@ -243,11 +226,11 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       request.socksPort,
       process: _xrayProcess,
       log: _xrayLog,
-      processLabel: 'keqrnel',
+      processLabel: 'xray',
     );
     if (!socksReady) {
       throw VpnStartException(
-        'keqrnel SOCKS port ${request.socksPort} did not open.\n${_tail(_xrayLog)}',
+        'xray SOCKS port ${request.socksPort} did not open.\n${_tail(_xrayLog)}',
       );
     }
 
@@ -257,11 +240,11 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         request.httpPort,
         process: _xrayProcess,
         log: _xrayLog,
-        processLabel: 'keqrnel HTTP',
+        processLabel: 'xray HTTP',
       );
       if (!httpReady) {
         throw VpnStartException(
-          'keqrnel HTTP port ${request.httpPort} did not open. '
+          'xray HTTP port ${request.httpPort} did not open. '
           'System proxy needs the HTTP inbound.\n${_tail(_xrayLog)}',
         );
       }
@@ -269,27 +252,17 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  Future<void> _startKeqrnelTunSession(TunnelSessionRequest request) async {
-    final singConfig = request.singboxConfig;
-    if (singConfig == null || singConfig.isEmpty) {
-      throw const VpnStartException('singboxConfig is required for TUN mode');
-    }
+  Future<void> _startXrayTunSession(TunnelSessionRequest request) async {
     await _ensurePortsAvailable(request, needsHttp: true);
 
-    final clashPort = await _freePort();
-    final clashSecret = _newSecret();
+    final metricsPort = await _freePort();
     final xrayLog = XraySessionLog.raise(request.xrayConfig);
     _xrayLogThreshold = xrayLog.threshold;
-    final merged = KeqrnelConfig.fromChain(
-      singboxConfig: singConfig,
-      xrayConfig: xrayLog.config,
-      windows: false,
-      clashApiPort: clashPort,
-      clashApiSecret: clashSecret,
-    );
-    _keqrnelClashPort = clashPort;
-    _keqrnelClashSecret = clashSecret;
-    await _runKeqrnelAsRoot(merged);
+    _xrayMetricsPort = metricsPort;
+    await _runXrayAsRoot(withXrayDesktopSession(
+      xrayLog.config,
+      metricsPort: metricsPort,
+    ));
   }
 
   Future<void> _startMihomoSession(TunnelSessionRequest request) async {
@@ -323,27 +296,27 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         geoOrHomeDir: home,
         kind: 'mihomo',
         label: 'mihomo',
-        log: _singboxLog,
+        log: _rootLog,
         onStarted: (p) => _mihomoProcess = p,
       );
 
       final ready = await _waitForTunCore(
         process: _mihomoProcess!,
-        log: _singboxLog,
+        log: _rootLog,
       );
       final coreLog = await _readRootCoreLog();
       if (coreLog.trim().isNotEmpty) {
-        _singboxLog
+        _rootLog
           ..writeln('=== mihomo (core) ===')
           ..writeln(coreLog);
       }
       if (!ready) {
         final tail = coreLog.trim().isEmpty
-            ? _tail(_singboxLog)
+            ? _tail(_rootLog)
             : _tail(StringBuffer(coreLog));
         throw VpnStartException(tunStartFailureMessage(
           fallback: 'The mihomo TUN tunnel did not start.',
-          coreOutput: coreLog.trim().isEmpty ? _singboxLog.toString() : coreLog,
+          coreOutput: coreLog.trim().isEmpty ? _rootLog.toString() : coreLog,
           windows: false,
           tail: tail,
         ));
@@ -425,6 +398,7 @@ class LinuxTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   static bool _rememberOfferedThisRun = false;
 
   // хелпер без пароля запускает только ядро, байт в байт совпавшее с доверенной копией, и запускает саму копию.
+  // слот keqrnel в теле обёртки v5 зашит, с переезда в нём лежит xray
   // modprobe tun здесь: это единственное место, где мы root, а без модуля нет /dev/net/tun
   static const _tunWrapperBody = r'''SB="$1"; CFG="$2"; GEO="$3"; LOGF="$4"; SENT="$5"; APPPID="$6"; AUTHF="$7"; KIND="$8"
 HELPER=/usr/local/lib/keqdroid/core-tun-root
@@ -490,7 +464,7 @@ polkit.addRule(function(action, subject) {
     if (!Platform.isLinux) return false;
     final helper = '#!/bin/sh\n$_tunWrapperBody';
     final cores = <String, String?>{
-      'keqrnel': await LinuxCorePaths.keqrnelExecutable(),
+      'keqrnel': await LinuxCorePaths.xrayExecutable(),
       'mihomo': await LinuxCorePaths.mihomoExecutable(),
     };
     final installCores = [
@@ -550,62 +524,97 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
   static String _shellQuote(String value) =>
       "'${value.replaceAll("'", r"'\''")}'";
 
-  Future<void> _runKeqrnelAsRoot(String config) async {
-    final singBin = await LinuxCorePaths.keqrnelExecutable();
-    if (singBin == null) {
+  // своё имя, а не xray: pkill -x в _stopRootCore иначе задел бы чужие xray в системе
+  static const _rootXrayName = 'keqdroid-xray';
+
+  Future<void> _runXrayAsRoot(String config) async {
+    final bin = await LinuxCorePaths.xrayExecutable();
+    if (bin == null) {
       throw VpnStartException(
-        'keqrnel not found (required for TUN mode). ${LinuxCorePaths.binariesHint}',
+        'xray not found (required for TUN mode). ${LinuxCorePaths.binariesHint}',
       );
     }
 
-    final stackFix = applyTunStackFallback(
-      config,
-      gvisorAvailable: await CoreCapabilities.hasGvisor(singBin),
-    );
-    if (stackFix.downgradedFrom != null) {
-      AppLogger.instance.warn(
-        'TUN stack "${stackFix.downgradedFrom}" needs a core built with '
-        '-tags with_gvisor; this keqrnel has none, falling back to "system".',
-      );
-    }
-
-    final singConfigFile = File(p.join(_sessionDir!.path, 'keqrnel-tun.json'));
-    await singConfigFile.writeAsString(stackFix.config);
+    final configFile = File(p.join(_sessionDir!.path, 'xray-tun.json'));
+    await configFile.writeAsString(config);
     final rootGeoDir = await _stageGeoAssetsForRoot();
-    final rootSingBin = await _stageBinaryForRoot(singBin, 'keqrnel');
+    final rootBin = await _stageBinaryForRoot(bin, _rootXrayName);
 
-    _singboxProcess = await _startElevatedCore(
-      binPath: rootSingBin,
-      configPath: singConfigFile.path,
+    _xrayStarted = false;
+    _rootXrayProcess = await _startElevatedCore(
+      binPath: rootBin,
+      configPath: configFile.path,
       geoOrHomeDir: rootGeoDir ?? '',
       kind: '',
-      label: 'keqrnel',
-      log: _singboxLog,
-      onStarted: (p) => _singboxProcess = p,
+      label: 'xray',
+      log: _rootLog,
+      onStarted: (p) => _rootXrayProcess = p,
     );
+    _startRootLogTail();
 
     final ready = await _waitForTunCore(
-      process: _singboxProcess!,
-      log: _singboxLog,
+      process: _rootXrayProcess!,
+      log: _rootLog,
+      started: () => _xrayStarted,
     );
 
-    final coreLog = await _readRootCoreLog();
-    if (coreLog.trim().isNotEmpty) {
-      _singboxLog
-        ..writeln('=== keqrnel (core) ===')
-        ..writeln(coreLog);
-    }
-
     if (!ready) {
+      final coreLog = await _readRootCoreLog();
       final tail = coreLog.trim().isEmpty
-          ? _tail(_singboxLog)
+          ? _tail(_rootLog)
           : _tail(StringBuffer(coreLog));
       throw VpnStartException(tunStartFailureMessage(
         fallback: 'The TUN tunnel did not start.',
-        coreOutput: coreLog.trim().isEmpty ? _singboxLog.toString() : coreLog,
+        coreOutput: coreLog.trim().isEmpty ? _rootLog.toString() : coreLog,
         windows: false,
         tail: tail,
       ));
+    }
+  }
+
+  // вывод root-ядра обёртка пишет в файл, а не в наш pipe, а по его строкам работают Соединения и счётчик отказов
+  void _startRootLogTail() {
+    _stopRootLogTail();
+    _rootLogOffset = 0;
+    _rootLogPending = '';
+    _rootLogTimer = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => unawaited(_readRootLogTail()),
+    );
+  }
+
+  void _stopRootLogTail() {
+    _rootLogTimer?.cancel();
+    _rootLogTimer = null;
+  }
+
+  Future<void> _readRootLogTail() async {
+    final path = _coreLogPath;
+    if (_rootLogReading || path.isEmpty) return;
+    _rootLogReading = true;
+    RandomAccessFile? file;
+    try {
+      final length = await File(path).length();
+      if (length < _rootLogOffset) {
+        _rootLogOffset = 0;
+        _rootLogPending = '';
+      }
+      if (length == _rootLogOffset) return;
+      file = await File(path).open();
+      await file.setPosition(_rootLogOffset);
+      final bytes = await file.read(length - _rootLogOffset);
+      _rootLogOffset += bytes.length;
+      final lines = (_rootLogPending +
+              const Utf8Decoder(allowMalformed: true).convert(bytes))
+          .split('\n');
+      _rootLogPending = lines.removeLast();
+      for (final line in lines) {
+        _appendCoreLine(_xrayLog, line.trimRight());
+      }
+    } catch (_) {
+    } finally {
+      await file?.close();
+      _rootLogReading = false;
     }
   }
 
@@ -648,7 +657,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     _rootSentinel = sentinelFile;
     // маркер создаёт обёртка сразу после polkit: по нему отличаем ввод пароля от старта ядра
     final authMarker = File(p.join(_sessionDir!.path, 'core.auth'));
-    _keqrnelLaunchedAt = DateTime.now();
+    _rootCoreLaunchedAt = DateTime.now();
 
     // позиции аргументов это контракт с телом обёртки, менять только вместе с путём хелпера
     final coreArgs = <String>[
@@ -772,9 +781,11 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     );
   }
 
+  // у xray устройство появляется раньше маршрутов, готовность по его строке started
   Future<bool> _waitForTunCore({
     required Process process,
     required StringBuffer log,
+    bool Function()? started,
   }) async {
     var waited = 0;
     while (waited < 20000) {
@@ -782,9 +793,11 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       if (code != null) {
         throw VpnStartException(_elevationError(code, log));
       }
-      // строка только от sing-box: баннер встроенного xray печатается раньше tun-инбаунда
-      if (singboxTunReady(log.toString())) return true;
-      if (await _tunInterfaceExists()) return true;
+      if (started != null) {
+        if (started()) return true;
+      } else if (await _tunInterfaceExists()) {
+        return true;
+      }
       await Future<void>.delayed(const Duration(milliseconds: 300));
       waited += 300;
     }
@@ -794,7 +807,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       final coreLog = await File(_coreLogPath).readAsString();
       if (coreLog.trim().isNotEmpty) {
         log
-          ..writeln('=== keqrnel (core, timeout) ===')
+          ..writeln('=== core log (timeout) ===')
           ..writeln(coreLog);
       }
     } catch (_) {}
@@ -820,7 +833,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
         var coreTail = '';
         try {
           final coreLog = File(_coreLogPath);
-          final launchedAt = _keqrnelLaunchedAt;
+          final launchedAt = _rootCoreLaunchedAt;
           if (launchedAt != null &&
               !coreLog.lastModifiedSync().isBefore(launchedAt)) {
             coreTail = coreLog.readAsStringSync().trim();
@@ -836,7 +849,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
           return 'The tunnel core exited with code $code.\n'
               '${hint.message}\n$detail';
         }
-        return 'keqrnel exited with code $code (TUN/elevation failed?).\n'
+        return 'The tunnel core exited with code $code (TUN/elevation failed?).\n'
             '$detail';
     }
   }
@@ -891,7 +904,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     unawaited(process.exitCode.then((code) async {
       if (_stoppingSession) return;
       if (!identical(process, _xrayProcess) &&
-          !identical(process, _singboxProcess) &&
+          !identical(process, _rootXrayProcess) &&
           !identical(process, _mihomoProcess)) {
         return;
       }
@@ -933,7 +946,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     stopStatsLoop();
     if (emitStates) emit(const VpnState(status: VpnStatus.disconnecting));
 
-    if (_singboxProcess != null ||
+    if (_rootXrayProcess != null ||
         _xrayProcess != null ||
         _mihomoProcess != null) {
       await _dumpLogsToFile();
@@ -943,20 +956,19 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     await _restoreSystemProxy();
 
     // сначала ядро с TUN: трафик должен падать закрытым, а не в мёртвый socks
-    await _stopRootCore(_singboxProcess, 'keqrnel');
+    await _stopRootCore(_rootXrayProcess, 'keqrnel|$_rootXrayName');
+    _stopRootLogTail();
     if (_mihomoRunsAsRoot) {
       await _stopRootCore(_mihomoProcess, 'mihomo');
     } else {
       await _killProcess(_mihomoProcess);
     }
     await _killProcess(_xrayProcess);
-    _singboxProcess = null;
+    _rootXrayProcess = null;
     _mihomoProcess = null;
     _mihomoRunsAsRoot = false;
     _xrayProcess = null;
-    _xrayBinPath = null;
-    _keqrnelClashPort = null;
-    _keqrnelClashSecret = null;
+    _xrayMetricsPort = null;
 
     final dir = _sessionDir;
     _sessionDir = null;
@@ -978,7 +990,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
   Future<VpnState> getCurrentState() async {
     if (_xrayProcess != null ||
         _mihomoProcess != null ||
-        _singboxProcess != null) {
+        _rootXrayProcess != null) {
       return buildConnectedState(_activeMode);
     }
     return VpnState.disconnected;
@@ -1131,24 +1143,24 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     );
   }
 
-  static Map<String, String>? _coreProcessEnvironment(String? geoDir) {
-    if (geoDir == null) return null;
-    return {...Platform.environment, 'XRAY_LOCATION_ASSET': geoDir};
+  static final _xrayStartedLine = RegExp(r'\bXray \S+ started\b');
+
+  void _appendCoreLine(StringBuffer buffer, String line) {
+    if (!_xrayStarted && _xrayStartedLine.hasMatch(line)) _xrayStarted = true;
+    CoreDialFailures.observe(line);
+    XrayRouteDecisions.observe(line);
+    if (!XraySessionLog.keep(line, _xrayLogThreshold)) return;
+    buffer.writeln(line);
+    if (buffer.length > 64 * 1024) {
+      final trimmed = _tail(buffer, maxLines: 200);
+      buffer
+        ..clear()
+        ..writeln(trimmed);
+    }
   }
 
   void _pipeProcessOutput(Process process, StringBuffer buffer) {
-    void append(String line) {
-      CoreDialFailures.observe(line);
-      XrayRouteDecisions.observe(line);
-      if (!XraySessionLog.keep(line, _xrayLogThreshold)) return;
-      buffer.writeln(line);
-      if (buffer.length > 64 * 1024) {
-        final trimmed = _tail(buffer, maxLines: 200);
-        buffer
-          ..clear()
-          ..writeln(trimmed);
-      }
-    }
+    void append(String line) => _appendCoreLine(buffer, line);
 
     // allowMalformed: строка ядра не в UTF-8 иначе роняет весь пайп лога
     const decoder = Utf8Decoder(allowMalformed: true);
@@ -1317,10 +1329,8 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
       final port = api.port;
       return port == null ? null : queryClashTraffic(port, secret: api.secret);
     }
-    final port = _keqrnelClashPort;
-    return port == null
-        ? null
-        : queryClashTraffic(port, secret: _keqrnelClashSecret ?? '');
+    final port = _xrayMetricsPort;
+    return port == null ? null : queryXrayTraffic(port);
   }
 
   @override
@@ -1328,7 +1338,7 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
     if (!statsPollingEnabled && !force) return;
     if (_xrayProcess == null &&
         _mihomoProcess == null &&
-        _singboxProcess == null) {
+        _rootXrayProcess == null) {
       return;
     }
     try {
@@ -1358,26 +1368,14 @@ chown root:root '$_polkitRulePath' 2>/dev/null || true
         }
         inOctets = c.rx;
         outOctets = c.tx;
-      } else if (_keqrnelClashPort != null) {
-        final t = await queryClashTraffic(
-          _keqrnelClashPort!,
-          secret: _keqrnelClashSecret ?? '',
-        );
+      } else if (_xrayMetricsPort != null) {
+        final t = await queryXrayTraffic(_xrayMetricsPort!);
         if (t == null) {
           emitConnectedTelemetry(mode);
           return;
         }
         inOctets = t.down;
         outOctets = t.up;
-      } else if (_xrayProcess != null) {
-        final xrayBin = _xrayBinPath;
-        if (xrayBin == null) return;
-        final counters = await XraySessionStats.queryInboundCounters(
-          xrayExecutable: xrayBin,
-        );
-        if (counters == null) return;
-        inOctets = counters.download;
-        outOctets = counters.upload;
       } else {
         return;
       }

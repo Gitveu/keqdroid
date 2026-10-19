@@ -127,18 +127,15 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 # Core binaries next to the keqdroid executable. NOT Flutter assets (that bundled
 # them into every platform, incl. a ~150 MB Android APK). Installing them here
 # keeps the Linux build self-contained while the APK and Windows build skip them.
-# keqrnel is the UNIFIED core (xray + sing-box embedded) that runs everything
-# written in xray terms — proxy, TUN and the stats query. mihomo is the second
-# core: it runs Clash configs and, in TUN mode, owns the tun device itself.
-# Standalone xray/sing-box (~96 MB) were never executed here and are no longer
-# bundled (as on Windows). *.dat = geoip/geosite. Linux ELF cores have no
-# extension.
+# xray runs everything written in xray terms, proxy and TUN; mihomo runs Clash
+# configs. In TUN mode each core owns the tun device itself. *.dat =
+# geoip/geosite. Linux ELF cores have no extension.
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/../assets/bin/linux/"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime
   USE_SOURCE_PERMISSIONS
   FILES_MATCHING
-    PATTERN "keqrnel"
+    PATTERN "xray"
     PATTERN "mihomo"
     PATTERN "*.dat")
 

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-// без IPv6 на TUN весь IPv6-трафик утекает мимо туннеля, а при выключенном IPv6 sing-box падает (set ipv6 dns: Access is denied).
+// без IPv6 на TUN весь IPv6-трафик утекает мимо туннеля, а при выключенном IPv6 ядро не поднимает TUN с IPv6-адресом.
 // считаем только глобальные: fe80 есть всегда, за ULA нет интернета, Teredo и 6to4 это туннели поверх IPv4
 Future<bool> hostHasGlobalIpv6({String? excludeInterfaceName}) async {
   try {

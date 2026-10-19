@@ -9,7 +9,6 @@ import '../core/app_logger.dart';
 import '../tunnel/linux_core_paths.dart';
 import '../tunnel/windows_core_paths.dart';
 import '../tunnel/vpn_backend.dart';
-import '../utils/keqrnel_config.dart';
 import 'windows_desktop_service.dart';
 
 final _ansiEscape = RegExp(r'\x1B\[[0-9;]*[A-Za-z]');
@@ -45,8 +44,8 @@ class EphemeralXrayPing {
   EphemeralXrayPing._();
 
   static Future<String?> _resolveXray() {
-    if (Platform.isWindows) return WindowsCorePaths.keqrnelExecutable();
-    if (Platform.isLinux) return LinuxCorePaths.keqrnelExecutable();
+    if (Platform.isWindows) return WindowsCorePaths.xrayExecutable();
+    if (Platform.isLinux) return LinuxCorePaths.xrayExecutable();
     return Future<String?>.value(null);
   }
 
@@ -71,16 +70,14 @@ class EphemeralXrayPing {
 
   static String _coreConfig(String configJson, int port, VpnBackend core) {
     if (core == VpnBackend.mihomo) return _mihomoConfig(configJson, port);
-    if (!Platform.isWindows && !Platform.isLinux) return configJson;
-    final box = jsonDecode(KeqrnelConfig.wrapXray(configJson))
-        as Map<String, dynamic>;
-    final inbounds = box['inbounds'];
+    final config = jsonDecode(configJson) as Map<String, dynamic>;
+    final inbounds = config['inbounds'];
     if (inbounds is List) {
       for (final inbound in inbounds) {
-        if (inbound is Map<String, dynamic>) inbound['listen_port'] = port;
+        if (inbound is Map<String, dynamic>) inbound['port'] = port;
       }
     }
-    return jsonEncode(box);
+    return jsonEncode(config);
   }
 
   static String _mihomoConfig(String configJson, int port) {

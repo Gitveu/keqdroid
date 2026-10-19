@@ -7,18 +7,15 @@ import 'package:path/path.dart' as p;
 
 import '../core/app_logger.dart';
 import '../core/exceptions.dart';
-import '../models/tun_settings.dart';
 import '../services/core_dial_failures.dart';
 import '../services/xray_route_decisions.dart';
 import '../utils/xray_session_log.dart';
 import '../services/debug_log_service.dart';
 import '../services/ephemeral_xray_ping.dart';
 import '../services/windows_desktop_service.dart';
-import '../utils/keqrnel_config.dart';
 import '../utils/mihomo_api_session.dart';
-import '../utils/singbox_tun_config.dart';
+import '../utils/desktop_tun.dart';
 import 'connection_mode.dart';
-import 'core_capabilities.dart';
 import 'desktop_traffic_stats.dart';
 import 'local_port_plan.dart';
 import 'local_proxy_probe.dart';
@@ -29,7 +26,7 @@ import 'tunnel_session_request.dart';
 import 'tunnel_state.dart';
 import 'vpn_backend.dart';
 import 'windows_core_paths.dart';
-import 'xray_session_stats.dart';
+import 'xray_desktop_config.dart';
 
 class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   static const _method = MethodChannel('keqdis_vpn_channel');
@@ -41,8 +38,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
 
   final _stateCtrl = StreamController<VpnState>.broadcast();
   Process? _xrayProcess;
-  Process? _keqrnelProcess;
-  int? _keqrnelClashPort;
+  int? _xrayMetricsPort;
 
   int _xrayLogThreshold = 0;
 
@@ -53,10 +49,9 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   Process? _mihomoProcess;
 
   int? get clashApiPort =>
-      _keqrnelClashPort ?? (_mihomoProcess != null ? MihomoApiSession().port : null);
+      _mihomoProcess != null ? MihomoApiSession().port : null;
 
   Map<String, int> get activeCorePids => {
-    if (_keqrnelProcess != null) 'keqrnel': _keqrnelProcess!.pid,
     if (_mihomoProcess != null) 'mihomo': _mihomoProcess!.pid,
     if (_xrayProcess != null) 'xray': _xrayProcess!.pid,
   };
@@ -67,12 +62,12 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   @override
   ConnectionMode? get activeMode => _activeMode;
   final StringBuffer _xrayLog = StringBuffer();
-  final StringBuffer _singboxLog = StringBuffer();
+
+  // до фильтра уровня: при loglevel error строка Warning в буфер не попадает
+  bool _xrayStarted = false;
 
   // пока идёт штатный стоп, вотчдог не должен принять наш kill за смерть ядра
   bool _stoppingSession = false;
-
-  String? _xrayBinPath;
 
   @override
   Stream<VpnState> get stateStream => _stateCtrl.stream;
@@ -88,10 +83,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   }
 
   String exportSessionLogs({int maxLines = 400}) {
-    final combined = StringBuffer()
-      ..writeln(_xrayLog)
-      ..writeln(_singboxLog);
-    return _tail(combined, maxLines: maxLines);
+    return _tail(_xrayLog, maxLines: maxLines);
   }
 
   // на null попытку не блокируем, пусть ядро скажет своё
@@ -126,7 +118,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     emit(VpnState(status: VpnStatus.connecting, activeMode: request.mode));
     _activeMode = request.mode;
     _xrayLog.clear();
-    _singboxLog.clear();
     XrayRouteDecisions.reset();
 
     try {
@@ -151,7 +142,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         case VpnBackend.mihomo:
           await _startMihomoSession(request);
         case VpnBackend.xray:
-          await _startKeqrnelSession(request);
+          await _startXraySession(request);
       }
 
       startStatsLoop(request.mode);
@@ -160,7 +151,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       unawaited(_verifyChainReachable(request));
 
       // без вотчдога смерть ядра оставляла UI в Connected, а системный прокси на мёртвом порту
-      _watchProcessExit(_keqrnelProcess, 'keqrnel');
       _watchProcessExit(_mihomoProcess, 'mihomo');
       _watchProcessExit(_xrayProcess, 'xray');
     } catch (e, st) {
@@ -178,138 +168,80 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     }
   }
 
-  Future<void> _startKeqrnelSession(TunnelSessionRequest request) async {
-    if (request.mode == ConnectionMode.tun) {
-      await _startKeqrnelTunSession(request);
-    } else {
-      await _startKeqrnelProxySession(request);
-    }
-  }
-
-  Future<void> _startKeqrnelProxySession(TunnelSessionRequest request) async {
-    final bin = await WindowsCorePaths.keqrnelExecutable();
+  Future<void> _startXraySession(TunnelSessionRequest request) async {
+    final bin = await WindowsCorePaths.xrayExecutable();
     if (bin == null) {
       throw VpnStartException(
-        'keqrnel.exe not found. ${WindowsCorePaths.binariesHint}',
+        'xray.exe not found. ${WindowsCorePaths.binariesHint}',
       );
     }
+    final isTun = request.mode == ConnectionMode.tun;
+    if (isTun) {
+      await _ensureTunPrerequisites(bin, request);
+    } else {
+      await _ensurePortsAvailable(request);
+    }
 
-    final clashPort = await _freePort();
+    final metricsPort = await _freePort();
     final xrayLog = XraySessionLog.raise(request.xrayConfig);
     _xrayLogThreshold = xrayLog.threshold;
-    final merged = KeqrnelConfig.proxyWithStats(
-      xrayConfig: xrayLog.config,
-      socksPort: request.socksPort,
-      httpPort: request.httpPort,
-      clashPort: clashPort,
-      findProcess: request.debugMode,
-    );
-    _keqrnelClashPort = clashPort;
-    final configFile = File('${_sessionDir!.path}/keqrnel.json');
-    await configFile.writeAsString(merged);
+    final configFile = File('${_sessionDir!.path}/xray.json');
+    await configFile.writeAsString(withXrayDesktopSession(
+      xrayLog.config,
+      metricsPort: metricsPort,
+      processLog: !isTun && request.debugMode,
+    ));
+    _xrayMetricsPort = metricsPort;
+    _xrayStarted = false;
 
-    await _ensurePortsAvailable(request);
-
-    final workDir = p.dirname(bin);
-    final geoDir = await WindowsCorePaths.geoAssetDir();
-
-    _keqrnelProcess = await Process.start(
+    // wintun.dll ядро грузит по имени, то есть из своего каталога
+    _xrayProcess = await Process.start(
       bin,
-      [configFile.path],
-      workingDirectory: workDir,
-      environment: _coreProcessEnvironment(geoDir),
+      ['run', '-c', configFile.path],
+      workingDirectory: p.dirname(bin),
+      environment: _coreProcessEnvironment(
+        await WindowsCorePaths.geoAssetDir(),
+      ),
       mode: ProcessStartMode.normal,
     );
-    _pipeProcessOutput(_keqrnelProcess!, _xrayLog, 'keqrnel');
+    _pipeProcessOutput(_xrayProcess!, _xrayLog, 'xray');
 
-    final socksReady = await _waitForPort(
-      '127.0.0.1',
-      request.socksPort,
-      process: _keqrnelProcess,
-      log: _xrayLog,
-      processLabel: 'keqrnel',
-    );
-    if (!socksReady) {
-      throw VpnStartException(
-        'keqrnel SOCKS port ${request.socksPort} did not open.\n${_tail(_xrayLog)}',
-      );
-    }
-
-    if (request.systemProxy) {
-      final httpReady = await _waitForPort(
+    if (isTun) {
+      final ready = await _waitForXrayTun(_xrayProcess!);
+      if (!ready) throw VpnStartException(_tunStartError(_xrayLog));
+    } else {
+      final socksReady = await _waitForPort(
         '127.0.0.1',
-        request.httpPort,
-        process: _keqrnelProcess,
+        request.socksPort,
+        process: _xrayProcess,
         log: _xrayLog,
-        processLabel: 'keqrnel HTTP',
+        processLabel: 'xray',
       );
-      if (!httpReady) {
+      if (!socksReady) {
         throw VpnStartException(
-          'keqrnel HTTP port ${request.httpPort} did not open. '
-          'System proxy needs the HTTP inbound.\n${_tail(_xrayLog)}',
+          'xray SOCKS port ${request.socksPort} did not open.\n${_tail(_xrayLog)}',
         );
       }
-      await _applySystemProxy(request);
+      if (request.systemProxy) {
+        final httpReady = await _waitForPort(
+          '127.0.0.1',
+          request.httpPort,
+          process: _xrayProcess,
+          log: _xrayLog,
+          processLabel: 'xray HTTP',
+        );
+        if (!httpReady) {
+          throw VpnStartException(
+            'xray HTTP port ${request.httpPort} did not open. '
+            'System proxy needs the HTTP inbound.\n${_tail(_xrayLog)}',
+          );
+        }
+        await _applySystemProxy(request);
+      }
     }
 
     await WindowsDesktopService.registerSessionCoreProcesses(
-      xrayPid: _keqrnelProcess?.pid ?? 0,
-      singboxPid: 0,
-    );
-  }
-
-  Future<void> _startKeqrnelTunSession(TunnelSessionRequest request) async {
-    final bin = await WindowsCorePaths.keqrnelExecutable();
-    if (bin == null) {
-      throw VpnStartException(
-        'keqrnel.exe not found. ${WindowsCorePaths.binariesHint}',
-      );
-    }
-    final singConfig = request.singboxConfig;
-    if (singConfig == null || singConfig.isEmpty) {
-      throw const VpnStartException(
-        'singboxConfig is required for keqrnel TUN',
-      );
-    }
-
-    await _ensureTunPrerequisites(bin, request);
-
-    final clashPort = await _freePort();
-    final xrayLog = XraySessionLog.raise(request.xrayConfig);
-    _xrayLogThreshold = xrayLog.threshold;
-    final merged = KeqrnelConfig.fromChain(
-      singboxConfig: await _tunStackForCore(singConfig, bin),
-      xrayConfig: xrayLog.config,
-      windows: true,
-      clashApiPort: clashPort,
-    );
-    _keqrnelClashPort = clashPort;
-    final configFile = File('${_sessionDir!.path}/keqrnel.json');
-    await configFile.writeAsString(merged);
-
-    // рядом с wintun.dll, xray-ассеты через env
-    final workDir = p.dirname(bin);
-    final geoDir = await WindowsCorePaths.geoAssetDir();
-
-    _keqrnelProcess = await Process.start(
-      bin,
-      [configFile.path],
-      workingDirectory: workDir,
-      environment: _coreProcessEnvironment(geoDir),
-      mode: ProcessStartMode.normal,
-    );
-    _pipeProcessOutput(_keqrnelProcess!, _singboxLog, 'keqrnel');
-
-    final ready = await _waitForSingbox(
-      process: _keqrnelProcess!,
-      log: _singboxLog,
-    );
-    if (!ready) {
-      throw VpnStartException(_tunStartError(_singboxLog));
-    }
-
-    await WindowsDesktopService.registerSessionCoreProcesses(
-      xrayPid: _keqrnelProcess?.pid ?? 0,
+      xrayPid: _xrayProcess?.pid ?? 0,
       singboxPid: 0,
     );
   }
@@ -523,8 +455,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     if (process == null) return;
     unawaited(process.exitCode.then((code) async {
       if (_stoppingSession) return;
-      if (!identical(process, _keqrnelProcess) &&
-          !identical(process, _mihomoProcess) &&
+      if (!identical(process, _mihomoProcess) &&
           !identical(process, _xrayProcess)) {
         return;
       }
@@ -586,21 +517,18 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       _systemProxyApplied = false;
     }
 
-    // сначала владелец TUN и мягко, чтобы встроенный sing-box вернул адаптер, маршруты и DNS
-    await _killProcess(_keqrnelProcess, graceful: true);
+    // мягко, чтобы xray вернул адаптер, маршруты и weak host send
+    await _killProcess(_xrayProcess, graceful: true);
     // mihomo слушает сигналы, а не stdin, на Windows это жёсткий TerminateProcess.
     // уборку адаптера доделывает драйвер, её ждёт _awaitTunAdapterGone
     await _killProcess(_mihomoProcess);
-    await _killProcess(_xrayProcess);
     _xrayProcess = null;
-    _keqrnelProcess = null;
     _mihomoProcess = null;
-    _keqrnelClashPort = null;
-    _xrayBinPath = null;
+    _xrayMetricsPort = null;
 
     await WindowsDesktopService.clearSessionCoreProcesses();
 
-    // процесс мёртв, адаптер ещё нет: на занятом имени sing-tun делает OpenAdapter и настраивает умирающий.
+    // процесс мёртв, адаптер ещё нет: на занятом имени ядро делает OpenAdapter и настраивает умирающий.
     // ждём только после TUN: чужой sing-box рядом держит тот же 172.19.0.1
     if (wasTun) await _awaitTunAdapterGone();
 
@@ -636,16 +564,14 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       final port = api.port;
       return port == null ? null : queryClashTraffic(port, secret: api.secret);
     }
-    final port = _keqrnelClashPort;
-    if (_keqrnelProcess == null || port == null) return null;
-    return queryClashTraffic(port);
+    final port = _xrayMetricsPort;
+    if (_xrayProcess == null || port == null) return null;
+    return queryXrayTraffic(port);
   }
 
   @override
   Future<VpnState> getCurrentState() async {
-    if (_xrayProcess != null ||
-        _keqrnelProcess != null ||
-        _mihomoProcess != null) {
+    if (_xrayProcess != null || _mihomoProcess != null) {
       return buildConnectedState(_activeMode);
     }
     return VpnState.disconnected;
@@ -790,15 +716,17 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     );
   }
 
-  // с environment Process.start заменяет окружение целиком, поэтому мержим с родительским
-  static Map<String, String>? _coreProcessEnvironment(String? geoDir) {
-    if (geoDir == null) return null;
-    return {...Platform.environment, 'XRAY_LOCATION_ASSET': geoDir};
-  }
+  static Map<String, String> _coreProcessEnvironment(String? geoDir) => {
+        'XRAY_LOCATION_ASSET': ?geoDir,
+        kXrayStopOnStdinEof: '1',
+      };
 
   void _pipeProcessOutput(Process process, StringBuffer buffer, String tag) {
     // только буфер: лог на каждую строку ядра подтормаживал UI при подключении
     void append(String line) {
+      if (!_xrayStarted && _xrayStartedLine.hasMatch(line)) {
+        _xrayStarted = true;
+      }
       CoreDialFailures.observe(line);
       XrayRouteDecisions.observe(line);
       if (!XraySessionLog.keep(line, _xrayLogThreshold)) return;
@@ -832,8 +760,8 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     if (process == null) return;
     try {
       if (graceful) {
-        // kill на Windows это жёсткий TerminateProcess, и sing-box не вернул бы адаптер, маршруты и DNS.
-        // keqrnel мягко выходит по EOF на stdin
+        // kill на Windows это жёсткий TerminateProcess, и ядро не вернуло бы адаптер и маршруты.
+        // xray мягко выходит по EOF на stdin, tool/patches/xray-desktop-stdin-stop.patch
         try {
           await process.stdin.close();
         } catch (_) {}
@@ -854,41 +782,30 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
     } catch (_) {}
   }
 
-  Future<bool> _waitForSingbox({
-    required Process process,
-    StringBuffer? log,
-  }) async {
+  static final _xrayStartedLine = RegExp(r'\bXray \S+ started\b');
+
+  // core.Start пишет started после всех входов, у TUN к этому времени есть адрес и маршруты
+  Future<bool> _waitForXrayTun(Process process) async {
     var waited = 0;
     while (waited < _tunReadyBudgetMs) {
       final code = await _exitCodeOrNull(process);
       if (code != null) {
         throw VpnStartException(
-          'keqrnel exited with code $code before the tunnel came up.\n'
-          '${_tunStartError(log ?? StringBuffer())}',
+          'xray exited with code $code before the tunnel came up.\n'
+          '${_tunStartError(_xrayLog)}',
         );
       }
-      // строка только от sing-box: баннер встроенного xray печатается раньше tun-инбаунда
-      if (singboxTunReady((log ?? StringBuffer()).toString())) return true;
-      // адаптер не сразу: после kill прошлой сессии он живёт ещё пару секунд
-      if (waited >= 5000 && await _tunAdapterUp()) return true;
+      if (_xrayStarted) return true;
       await Future<void>.delayed(const Duration(milliseconds: 300));
       waited += 300;
     }
-    final stillRunning = await _exitCodeOrNull(process);
-    if (stillRunning == null) {
-      AppLogger.instance.warn(
-        'keqrnel TUN: no readiness signal in '
-        '${_tunReadyBudgetMs ~/ 1000}s, assuming it is up because the process '
-        'is alive.\n${_tail(log ?? StringBuffer())}',
-      );
-    }
-    return stillRunning == null;
+    return false;
   }
 
-  // 30 с: сюда входит разбор geo-баз встроенным xray и создание адаптера
+  // 30 с: сюда входит разбор geo-баз и создание адаптера
   static const _tunReadyBudgetMs = 30000;
 
-  String _tunStartError(StringBuffer log, {String core = 'keqrnel.exe'}) {
+  String _tunStartError(StringBuffer log, {String core = 'xray.exe'}) {
     final text = log.toString();
     return tunStartFailureMessage(
       fallback: 'The TUN tunnel did not start. Run the app as Administrator '
@@ -897,40 +814,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
       windows: true,
       tail: _tail(log),
     );
-  }
-
-  Future<String> _tunStackForCore(String singboxConfig, String binPath) async {
-    final result = applyTunStackFallback(
-      singboxConfig,
-      gvisorAvailable: await CoreCapabilities.hasGvisor(binPath),
-    );
-    if (result.downgradedFrom != null) {
-      AppLogger.instance.warn(
-        'TUN stack "${result.downgradedFrom}" needs a core built with '
-        '-tags with_gvisor; this keqrnel has none, falling back to "system". '
-        'On Windows the system stack needs an inbound Windows Firewall rule — '
-        'if there is no traffic at all, that rule is the first thing to check.',
-      );
-    } else if (result.config.contains('"stack": "${TunSettings.stackSystem}"')) {
-      AppLogger.instance.warn(
-        'TUN stack is "system": on Windows it terminates TCP with a listener on '
-        'the TUN interface address and therefore needs an inbound Windows '
-        'Firewall rule. sing-tun adds it itself but ignores the result — if the '
-        'tunnel comes up and no traffic flows at all, that rule (or a '
-        'third-party firewall blocking it) is the first suspect. The gVisor '
-        'stack does not depend on it.',
-      );
-    } else if (result.config.contains('"stack": "${TunSettings.stackMixed}"')) {
-      AppLogger.instance.warn(
-        'TUN stack is "mixed": on Windows its TCP goes through the system stack, '
-        'a listener on the TUN interface address that needs an inbound Windows '
-        'Firewall rule; only UDP goes through gVisor. sing-tun adds the rule '
-        'itself but ignores the result — if games and calls work but websites '
-        'and launchers do not, that rule (or a third-party firewall blocking '
-        'it) is the first suspect. The gVisor stack does not depend on it.',
-      );
-    }
-    return result.config;
   }
 
   Future<void> _awaitTunAdapterGone() async {
@@ -1032,11 +915,7 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
   @override
   Future<void> pollTrafficStats(ConnectionMode mode, {bool force = false}) async {
     if (!statsPollingEnabled && !force) return;
-    if (_xrayProcess == null &&
-        _keqrnelProcess == null &&
-        _mihomoProcess == null) {
-      return;
-    }
+    if (_xrayProcess == null && _mihomoProcess == null) return;
     try {
       final int inOctets;
       final int outOctets;
@@ -1055,15 +934,6 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         }
         inOctets = t.down;
         outOctets = t.up;
-      } else if (mode == ConnectionMode.proxy && _xrayProcess != null) {
-        final xrayBin = _xrayBinPath;
-        if (xrayBin == null) return;
-        final counters = await XraySessionStats.queryInboundCounters(
-          xrayExecutable: xrayBin,
-        );
-        if (counters == null) return;
-        inOctets = counters.download;
-        outOctets = counters.upload;
       } else if (mode == ConnectionMode.tun) {
         final result = await _method.invokeMethod<Map<Object?, Object?>>(
           'getTrafficStats',
@@ -1075,8 +945,8 @@ class WindowsTunnelBackend with DesktopTrafficStats implements TunnelBackend {
         }
         inOctets = (result['inOctets'] as num?)?.toInt() ?? 0;
         outOctets = (result['outOctets'] as num?)?.toInt() ?? 0;
-      } else if (mode == ConnectionMode.proxy && _keqrnelClashPort != null) {
-        final t = await queryClashTraffic(_keqrnelClashPort!);
+      } else if (mode == ConnectionMode.proxy && _xrayMetricsPort != null) {
+        final t = await queryXrayTraffic(_xrayMetricsPort!);
         if (t == null) {
           emitConnectedTelemetry(mode);
           return;

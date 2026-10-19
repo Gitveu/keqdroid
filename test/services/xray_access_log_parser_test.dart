@@ -72,6 +72,20 @@ void main() {
       expect(_byHost(snapshot, 'vk.com').outbound, 'direct');
     });
 
+    // TUN на ПК: программу дописывает патч xray-desktop-process, последней,
+    // потому что в пути бывают пробелы.
+    test('takes the program from the end of a TUN access line', () {
+      final entry = XrayAccessLogParser.parse(
+        '2026/10/19 12:00:00.000000 from tcp:172.19.0.1:50123 accepted '
+        'tcp:1.2.3.4:443 [tun-in -> proxy] '
+        'process: C:/Program Files/Mozilla Firefox/firefox.exe\n',
+      ).entries.single;
+      expect(entry.process, 'C:/Program Files/Mozilla Firefox/firefox.exe');
+      expect(entry.inbound, 'tun-in');
+      expect(entry.source, '172.19.0.1:50123');
+      expect(_byHost(XrayAccessLogParser.parse(_log), 'vk.com').process, '');
+    });
+
     test('newest connection comes first', () {
       final entries = XrayAccessLogParser.parse(_log).entries;
       expect(entries.first.host, 'doubleclick.net');

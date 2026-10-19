@@ -3,8 +3,11 @@ import 'dart:io' show InternetAddress;
 
 import '../models/app_settings.dart';
 import '../models/traffic_route.dart';
+import '../models/tun_settings.dart';
 import '../models/xray_core_settings.dart';
+import '../tunnel/app_routing_mode.dart';
 import '../utils/custom_xray_config.dart';
+import '../utils/desktop_tun.dart';
 import '../utils/exit_ip_probe.dart';
 import '../utils/fake_ip.dart';
 import '../utils/geo_asset_index.dart';
@@ -26,6 +29,7 @@ class ConfigGeneratorV2 {
     String? resolvedServerIp,
     bool localInboundsNoAuth = false,
     bool nativeTunInbound = false,
+    DesktopTunOptions? desktopTun,
     GeoAssetIndex? geoIndex,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
@@ -37,6 +41,7 @@ class ConfigGeneratorV2 {
         resolvedServerIp: resolvedServerIp,
         localInboundsNoAuth: localInboundsNoAuth,
         nativeTunInbound: nativeTunInbound,
+        desktopTun: desktopTun,
         geoIndex: geoIndex,
         routeServers: routeServers,
         appRoutes: appRoutes,
@@ -171,59 +176,66 @@ class ConfigGeneratorV2 {
     bool pingHttpInbound = false,
     bool localInboundsNoAuth = false,
     bool nativeTunInbound = false,
+    DesktopTunOptions? desktopTun,
     GeoAssetIndex? geoIndex,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
   }) {
     final trimmed = input.trim();
+    final pc = pingSocksPort == null ? desktopTun : null;
+    final tunInbound = nativeTunInbound || pc != null;
 
     final chain = ProxyChainConfig.tryParse(trimmed);
+    final custom = chain == null ? CustomXrayConfig.tryParse(trimmed) : null;
+    final Map<String, dynamic> config;
     if (chain != null) {
-      return _buildChainConfig(
+      config = _buildChainConfig(
         chain,
         settings,
         resolvedServerIp: resolvedServerIp,
         pingSocksPort: pingSocksPort,
         pingHttpInbound: pingHttpInbound,
         localInboundsNoAuth: localInboundsNoAuth,
-        nativeTunInbound: nativeTunInbound,
+        nativeTunInbound: tunInbound,
+        desktopTun: pc,
         routeServers: routeServers,
         appRoutes: appRoutes,
       );
-    }
-
-    final custom = CustomXrayConfig.tryParse(trimmed);
-    if (custom != null) {
-      return _buildCustomConfig(
+    } else if (custom != null) {
+      config = _buildCustomConfig(
         custom,
         settings,
         resolvedServerIp: resolvedServerIp,
         pingSocksPort: pingSocksPort,
         pingHttpInbound: pingHttpInbound,
         localInboundsNoAuth: localInboundsNoAuth,
-        nativeTunInbound: nativeTunInbound,
+        nativeTunInbound: tunInbound,
+        desktopTun: pc,
         geoIndex: geoIndex,
         routeServers: routeServers,
         appRoutes: appRoutes,
       );
+    } else {
+      final link = _buildLinkOutbound(trimmed, settings);
+      _applyMux(link.outbound, settings.xrayCore);
+
+      config = _wrapConfig(
+        [link.outbound],
+        settings,
+        resolvedServerIp ?? link.address,
+        link.port,
+        originalServerAddress: link.address,
+        pingSocksPort: pingSocksPort,
+        pingHttpInbound: pingHttpInbound,
+        localInboundsNoAuth: localInboundsNoAuth,
+        nativeTunInbound: tunInbound,
+        desktopTun: pc,
+        routeServers: routeServers,
+        appRoutes: appRoutes,
+      );
     }
-
-    final link = _buildLinkOutbound(trimmed, settings);
-    _applyMux(link.outbound, settings.xrayCore);
-
-    return _wrapConfig(
-      [link.outbound],
-      settings,
-      resolvedServerIp ?? link.address,
-      link.port,
-      originalServerAddress: link.address,
-      pingSocksPort: pingSocksPort,
-      pingHttpInbound: pingHttpInbound,
-      localInboundsNoAuth: localInboundsNoAuth,
-      nativeTunInbound: nativeTunInbound,
-      routeServers: routeServers,
-      appRoutes: appRoutes,
-    );
+    if (pc != null) _applyDesktopTunPolicy(config, pc);
+    return config;
   }
 
   static ({Map<String, dynamic> outbound, String address, int port})
@@ -354,7 +366,7 @@ class ConfigGeneratorV2 {
     outbound['streamSettings'] = stream;
   }
 
-  // выходной узел остаётся proxy: на этот тег смотрят все правила роутинга и sing-box
+  // выходной узел остаётся proxy: на этот тег смотрят все правила роутинга
   static const String _chainHopTagPrefix = 'chain-';
 
   static Map<String, dynamic> _buildChainConfig(
@@ -365,6 +377,7 @@ class ConfigGeneratorV2 {
     bool pingHttpInbound = false,
     bool localInboundsNoAuth = false,
     bool nativeTunInbound = false,
+    DesktopTunOptions? desktopTun,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
   }) {
@@ -407,6 +420,7 @@ class ConfigGeneratorV2 {
       pingHttpInbound: pingHttpInbound,
       localInboundsNoAuth: localInboundsNoAuth,
       nativeTunInbound: nativeTunInbound,
+      desktopTun: desktopTun,
       routeServers: routeServers,
       appRoutes: appRoutes,
     );
@@ -668,8 +682,7 @@ class ConfigGeneratorV2 {
       .where((e) => e.isNotEmpty && !isRuleListUrl(e))
       .toList();
 
-  // без условия на вход: в режиме прокси на ПК sing-box отдаёт соединение в xray без тега, и условие не совпало бы.
-  // цена: для этого хоста правила пользователя в xray не действуют
+  // цена правила без условия на вход: для этого хоста правила пользователя в xray не действуют
   static Map<String, dynamic> _exitIpProbeFields(String outboundTag) => {
         'domain': ['full:$kExitIpProbeHost'],
         'outboundTag': outboundTag,
@@ -697,8 +710,7 @@ class ConfigGeneratorV2 {
 
   static const _customDnsTag = 'keq-dns-out';
 
-  // keqrnel и xray для Android включают UDP по маршрутам каждого адреса, увидев этот выход:
-  // keqrnel bridge/xray/udp_exits.go, tool/patches/xray-android-udp-per-exit.patch
+  // xray включает UDP по маршрутам каждого адреса, увидев этот выход: tool/patches/xray-android-udp-per-exit.patch
   static const udpPerExitTag = 'keq-udp-per-exit';
 
   static Map<String, dynamic> _udpPerExitMark() => {'protocol': 'blackhole', 'tag': udpPerExitTag};
@@ -769,6 +781,7 @@ class ConfigGeneratorV2 {
     bool pingHttpInbound = false,
     bool localInboundsNoAuth = false,
     bool nativeTunInbound = false,
+    DesktopTunOptions? desktopTun,
     GeoAssetIndex? geoIndex,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
@@ -779,6 +792,7 @@ class ConfigGeneratorV2 {
       pingHttpInbound: pingHttpInbound,
       localInboundsNoAuth: localInboundsNoAuth,
       nativeTunInbound: nativeTunInbound,
+      desktopTun: desktopTun,
     );
 
     if (pingSocksPort != null) {
@@ -916,10 +930,27 @@ class ConfigGeneratorV2 {
     final authorRouting = custom.json['routing'];
     final resolvesForIpRules = authorRouting is Map &&
         authorRouting['domainStrategy'] == 'IPIfNonMatch';
+    Map<String, dynamic> customRule(String tag, Map<String, dynamic> fields) =>
+        {'type': 'field', 'ruleTag': tag, ...fields};
+    final desktopHead = desktopTun == null
+        ? const <Map<String, dynamic>>[]
+        : _desktopTunHeadRules(
+            desktopTun,
+            dnsOutTag: interceptDns ? dnsOutTag : null,
+            directTag: directTag,
+            rule: customRule,
+          );
     final appendRules = <Map<String, dynamic>>[
       ...dnsRules,
       ...userRules,
       ...resolverRules,
+      if (desktopTun != null)
+        ..._desktopTunTailRules(
+          desktopTun,
+          directTag: directTag,
+          blockTag: blockTag ?? _customBlockTag,
+          rule: customRule,
+        ),
       {
         'type': 'field',
         'ruleTag': 'final',
@@ -932,7 +963,8 @@ class ConfigGeneratorV2 {
     ];
 
     final usedTags = <String>{
-      for (final rule in appendRules) rule['outboundTag'] as String,
+      for (final rule in [...desktopHead, ...appendRules])
+        rule['outboundTag'] as String,
       if (settings.lanSharing) blockTag ?? _customBlockTag,
       if (routeServers.any((r) => r.address.trim().isNotEmpty)) directTag,
     };
@@ -944,6 +976,7 @@ class ConfigGeneratorV2 {
       dns: fallbackDns,
       // LAN-правила раньше авторских: иначе запрос снаружи уехал бы в туннель до запрета, и прокси стал бы открытым
       prependRules: [
+        ...desktopHead,
         ...lanRules,
         ...tunDnsRules,
         {
@@ -1754,7 +1787,7 @@ class ConfigGeneratorV2 {
 
   static Map<String, dynamic> _wrapConfig(
       List<Map<String, dynamic>> proxyOutbounds, AppSettings settings, String serverAddress, int serverPort,
-      {String? originalServerAddress, List<String> extraServerAddresses = const [], int? pingSocksPort, bool pingHttpInbound = false, bool localInboundsNoAuth = false, bool nativeTunInbound = false, List<RouteServerOutbound> routeServers = const [], List<RouteAppRules> appRoutes = const []}) {
+      {String? originalServerAddress, List<String> extraServerAddresses = const [], int? pingSocksPort, bool pingHttpInbound = false, bool localInboundsNoAuth = false, bool nativeTunInbound = false, DesktopTunOptions? desktopTun, List<RouteServerOutbound> routeServers = const [], List<RouteAppRules> appRoutes = const []}) {
 
     originalServerAddress ??= serverAddress;
     final isPingMode = pingSocksPort != null;
@@ -1857,6 +1890,15 @@ class ConfigGeneratorV2 {
           ...fields,
           if (!isPingMode) 'ruleTag': tag,
         };
+
+    if (desktopTun != null) {
+      rules.addAll(_desktopTunHeadRules(
+        desktopTun,
+        dnsOutTag: 'dns-out',
+        directTag: 'direct',
+        rule: rule,
+      ));
+    }
 
     rules.add(rule('block-special', {
       'ip': ['169.254.0.0/16', '224.0.0.0/4', '255.255.255.255/32'],
@@ -2016,6 +2058,14 @@ class ConfigGeneratorV2 {
     // и ловушка любая сеть его отменяла. домен, который не отрезолвился, уходит в первый выход
     final resolvesForIpRules =
         !isPingMode && effectiveDomainStrategy == 'IPIfNonMatch';
+    if (desktopTun != null) {
+      rules.addAll(_desktopTunTailRules(
+        desktopTun,
+        directTag: 'direct',
+        blockTag: 'block',
+        rule: rule,
+      ));
+    }
     rules.add(rule(
       'final',
       resolvesForIpRules
@@ -2035,6 +2085,7 @@ class ConfigGeneratorV2 {
       pingHttpInbound: pingHttpInbound,
       localInboundsNoAuth: localInboundsNoAuth,
       nativeTunInbound: nativeTunInbound,
+      desktopTun: desktopTun,
     );
     final fakeDns = _fakeDnsApplies(
       settings,
@@ -2092,6 +2143,130 @@ class ConfigGeneratorV2 {
     return flow.startsWith('xtls-rprx-vision') && !flow.endsWith('-udp443');
   }
 
+  // маршрут xray на Linux кладёт в main с метрикой 1, и default с метрикой 0 его перебивал бы: половинки /1 точнее
+  static Map<String, dynamic> _desktopTunSettings(DesktopTunOptions tun) {
+    final v6 = tun.captureIpv6;
+    return {
+      'name': kTunInterfaceName,
+      'mtu': tun.mtu,
+      'gateway': [kTunInterfacePrefix, if (v6) kTunInterfaceIpv6Prefix],
+      if (tun.windows) 'dns': [kTunDnsAddress],
+      if (tun.autoRoute)
+        'autoSystemRoutingTable': tun.windows
+            ? ['0.0.0.0/0', if (v6) '::/0']
+            : [
+                '0.0.0.0/1',
+                '128.0.0.0/1',
+                if (v6) ...['::/1', '8000::/1'],
+                ...tun.systemResolvers,
+              ],
+      'autoOutboundsInterface': 'auto',
+      // как strict_route у sing-box на Windows: DNS и семейство без маршрута в TUN мимо него не выходят
+      if (tun.windows && tun.strictRoute && tun.autoRoute)
+        'autoSystemWfpBlockLeak': ['dns', 'misconfigtun'],
+    };
+  }
+
+  // впереди всего, как решал sing-box до xray: сначала DNS любой программы в перехват, потом кому туннель вообще не положен
+  static List<Map<String, dynamic>> _desktopTunHeadRules(
+    DesktopTunOptions tun, {
+    required String? dnsOutTag,
+    required String directTag,
+    required Map<String, dynamic> Function(String tag, Map<String, dynamic> fields) rule,
+  }) {
+    Map<String, dynamic> fromTun(String tag, Map<String, dynamic> fields) =>
+        rule(tag, {
+          'inboundTag': [_tunInboundTag],
+          ...fields,
+        });
+    final app = tun.appProcessName.trim();
+    final selected = [
+      for (final name in tun.managedProcessNames)
+        if (name.trim().isNotEmpty) name.trim(),
+    ];
+    return [
+      if (dnsOutTag != null)
+        fromTun('tun-dns', {
+          'port': '53',
+          'network': 'tcp,udp',
+          'outboundTag': dnsOutTag,
+        }),
+      // временное ядро замера отдельным процессом: туннель забирал его соединение, и пинг мерил локальный конец
+      fromTun('tun-own', {
+        'process': [if (app.isNotEmpty) app, 'xray', 'mihomo'],
+        'outboundTag': directTag,
+      }),
+      if (tun.routingMode == AppRoutingMode.allProxy)
+        fromTun('tun-other-vpn', {
+          'process': [
+            'tailscaled',
+            'wireguard',
+            'openvpn',
+            if (tun.windows) 'openvpn-gui',
+          ],
+          'outboundTag': directTag,
+        }),
+      // !имя это патч tool/patches/xray-desktop-process.patch: невыбранные мимо туннеля целиком, как на Android
+      if (selected.isNotEmpty)
+        ?switch (tun.routingMode) {
+          AppRoutingMode.onlySelected => fromTun('tun-unselected', {
+              'process': [for (final name in selected) '!$name'],
+              'outboundTag': directTag,
+            }),
+          AppRoutingMode.allExceptSelected => fromTun('tun-excluded', {
+              'process': selected,
+              'outboundTag': directTag,
+            }),
+          AppRoutingMode.allProxy => null,
+        },
+    ];
+  }
+
+  static List<Map<String, dynamic>> _desktopTunTailRules(
+    DesktopTunOptions tun, {
+    required String directTag,
+    required String blockTag,
+    required Map<String, dynamic> Function(String tag, Map<String, dynamic> fields) rule,
+  }) {
+    final unnamedSelection = tun.routingMode == AppRoutingMode.onlySelected &&
+        tun.managedProcessNames.every((name) => name.trim().isEmpty);
+    return [
+      // закрываем, а не проксируем: закрытый выход Happy Eyeballs откатывает на IPv4 за миллисекунды
+      if (tun.captureIpv6)
+        rule('tun-ipv6', {
+          'inboundTag': [_tunInboundTag],
+          'ip': ['::/0'],
+          'outboundTag': blockTag,
+        }),
+      // только выбранные без единого имени: всё без правила напрямую, как у mihomo
+      if (unnamedSelection)
+        rule('tun-unselected', {
+          'inboundTag': [_tunInboundTag],
+          'network': 'tcp,udp',
+          'outboundTag': directTag,
+        }),
+    ];
+  }
+
+  // UDP из TUN идёт уровнем 1, tool/patches/xray-desktop-tun-udp-level.patch. уровень с одним connIdle
+  // обнулил бы остальные таймауты (ToCorePolicy), поэтому все четыре, прочие как в SessionDefault
+  static void _applyDesktopTunPolicy(
+    Map<String, dynamic> config,
+    DesktopTunOptions tun,
+  ) {
+    if (tun.udpTimeoutSec == TunSettings.defaultUdpTimeoutSec) return;
+    final policy = {...?(config['policy'] as Map?)?.cast<String, dynamic>()};
+    final levels = {...?(policy['levels'] as Map?)?.cast<String, dynamic>()};
+    levels['1'] = {
+      'handshake': 60,
+      'connIdle': tun.udpTimeoutSec,
+      'uplinkOnly': 1,
+      'downlinkOnly': 1,
+    };
+    policy['levels'] = levels;
+    config['policy'] = policy;
+  }
+
   static const _tunInboundTag = 'tun-in';
 
   static const appInboundTags = [
@@ -2109,6 +2284,7 @@ class ConfigGeneratorV2 {
     bool pingHttpInbound = false,
     bool localInboundsNoAuth = false,
     bool nativeTunInbound = false,
+    DesktopTunOptions? desktopTun,
   }) {
     final core = settings.xrayCore;
     final isPingMode = pingSocksPort != null;
@@ -2122,7 +2298,9 @@ class ConfigGeneratorV2 {
           'tag': 'tun-in',
           'port': 0,
           'protocol': 'tun',
-          'settings': {'name': _tunInterfaceName, 'mtu': _defaultTunMtu},
+          'settings': desktopTun == null
+              ? {'name': _tunInterfaceName, 'mtu': _defaultTunMtu}
+              : _desktopTunSettings(desktopTun),
           'sniffing': _fakeDnsApplies(
             settings,
             nativeTunInbound: nativeTunInbound,

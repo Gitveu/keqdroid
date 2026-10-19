@@ -20,7 +20,7 @@ String normalizeProcessPath(String raw, {bool? windows}) {
   return windowsProcessRules(windows) ? s.replaceAll('/', r'\') : s;
 }
 
-// регистр важен: sing-box сравнивает process_name map-lookup'ом без приведения.
+// регистр сохраняем: на Linux ядро сравнивает имя точно
 // .exe только на Windows, на Linux его снимаем: старая версия дописывала его везде
 String normalizeProcessName(String raw, {bool? windows}) {
   var s = raw.trim();
@@ -40,15 +40,7 @@ String normalizeProcessName(String raw, {bool? windows}) {
   return s;
 }
 
-List<String> processNameMatchVariants(String name) {
-  final trimmed = name.trim();
-  if (trimmed.isEmpty) return const [];
-  final lower = trimmed.toLowerCase();
-  return trimmed == lower ? [trimmed] : [trimmed, lower];
-}
-
-// всё, кроме латиницы и цифр, кодом \xNN: так понимают и regexp2 у mihomo, и RE2 у sing-box,
-// а запятые и скобки mihomo тогда не режут
+// всё, кроме латиницы и цифр, кодом \xNN: так понимает regexp2 у mihomo, а запятые и скобки он тогда не режет
 String processRegexLiteral(String text) {
   final out = StringBuffer();
   for (final rune in text.runes) {

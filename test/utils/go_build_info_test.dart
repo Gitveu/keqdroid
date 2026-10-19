@@ -201,21 +201,19 @@ void main() {
       checks(info!);
     }
 
-    // keqrnel собирается из рабочего дерева, поэтому своей версии у него нет
-    // (`(devel)`) — показывать про него можно только версии движков внутри.
-    test('keqrnel несёт версии xray и sing-box', () async {
+    // xray для ПК собран из того же дерева, что libxray: версия в `mod`.
+    test('xray.exe сам является xray-core', () async {
       await expectCore(
-        'assets/bin/windows/keqrnel.exe',
+        'assets/bin/windows/xray.exe',
         (info) {
           expect(info.goVersion, startsWith('go1.'));
-          expect(info.modulePath, 'github.com/Lemonochka/keqrnel');
-          expect(info.depVersion('xtls/xray-core'), startsWith('v'));
-          expect(info.depVersion('sagernet/sing-box'), startsWith('v'));
+          expect(info.modulePath, 'github.com/xtls/xray-core');
+          expect(info.moduleVersion, startsWith('v'));
         },
       );
     });
 
-    // А libxray — это сам xray-core, и его версия лежит в `mod`, не в `dep`.
+    // libxray тоже сам xray-core, и его версия лежит в `mod`, не в `dep`.
     test('libxray сам является xray-core', () async {
       await expectCore(
         'android/app/src/main/jniLibs/arm64-v8a/libxray.so',

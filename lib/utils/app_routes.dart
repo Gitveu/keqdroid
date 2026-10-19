@@ -1,19 +1,12 @@
 import '../models/traffic_route.dart';
 import '../tunnel/connection_mode.dart';
-import '../tunnel/vpn_backend.dart';
 import 'process_name_utils.dart';
 import 'route_servers.dart';
 import 'split_tunneling_entries.dart';
 import 'traffic_routes.dart';
 
-// одно правило на экран и на подключение. владельца соединения ядро узнаёт только у своего туннеля: mihomo на ПК сам,
-// на Android оба ядра спрашивают VpnService, а xray на ПК внутри keqrnel видит один выход на всех
-bool appRoutesRun({
-  required VpnBackend core,
-  required ConnectionMode mode,
-  required bool android,
-}) =>
-    mode == ConnectionMode.tun && (core == VpnBackend.mihomo || android);
+// одно правило на экран и на подключение. владельца соединения ядро узнаёт только у своего туннеля
+bool appRoutesRun(ConnectionMode mode) => mode == ConnectionMode.tun;
 
 class RouteAppRules {
   const RouteAppRules({

@@ -5,7 +5,6 @@ import 'package:keqdroid/models/app_settings.dart';
 import 'package:keqdroid/utils/config_gen.dart';
 import 'package:keqdroid/utils/mihomo_config_gen.dart';
 import 'package:keqdroid/utils/rule_lists.dart';
-import 'package:keqdroid/utils/singbox_tun_config.dart';
 import 'package:keqdroid/utils/socks5_credentials.dart';
 
 /// Списки по ссылке в полях маршрутизации. Сама ссылка ядру непонятна и в
@@ -49,15 +48,6 @@ rules:
   - MATCH,Proxy
 ''';
 
-String _singbox(AppSettings settings) => SingBoxTunConfigGen.generate(
-      localSocksPort: 2080,
-      socksUsername: 'u',
-      socksPassword: 'p',
-      serverIpToExclude: '198.51.100.10',
-      settings: settings,
-      windows: true,
-    );
-
 List<String> _rules(Map<String, dynamic> config) =>
     (config['rules'] as List).cast<String>();
 
@@ -77,10 +67,6 @@ void main() {
         MihomoConfigGen.generate(_server, _withUrls, socksPort: 2080),
         MihomoConfigGen.generate(_server, _plain, socksPort: 2080),
       );
-    });
-
-    test('sing-box TUN', () {
-      expect(_singbox(_withUrls), _singbox(_plain));
     });
   });
 
@@ -180,7 +166,7 @@ void main() {
     });
   });
 
-  group('xray и sing-box: домены дописываются в поля', () {
+  group('xray: домены дописываются в поля', () {
     const lists = RuleListDomains(blocked: ['ads-list.example']);
 
     test('xray блокирует домен из списка вместе с поддоменами', () {
@@ -195,10 +181,6 @@ void main() {
         block['domain'],
         ['domain:doubleclick.net', 'domain:ads-list.example'],
       );
-    });
-
-    test('sing-box видит домен из списка суффиксом', () {
-      expect(_singbox(lists.expand(_plain)), contains('ads-list.example'));
     });
 
     test('без списков настройки те же самые', () {

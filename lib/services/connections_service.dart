@@ -370,6 +370,9 @@ class XrayAccessLogParser {
     caseSensitive: false,
   );
 
+  // tool/patches/xray-desktop-process.patch, последним: в пути бывают пробелы
+  static final _process = RegExp(r'\sprocess:\s(.+)$');
+
   static final _detour = RegExp(
     r'(?:Hit route rule:\s*\[([^\]]*)\]\s*so\s*)?taking detour\s*'
     r'\[([^\]]*)\]\s*for\s*\[([a-z0-9]+):(.+?):(\d+)\]',
@@ -548,6 +551,7 @@ class XrayAccessLogParser {
         destPort: port,
         destIp: domain.isNotEmpty ? host : '',
         source: _plainAddress(source),
+        process: _process.firstMatch(line)?.group(1)?.trim() ?? '',
         inbound: inbound,
         outbound: outbound.isNotEmpty
             ? outbound

@@ -252,10 +252,15 @@ void main() {
 
     testWidgets('новый маршрут: по умолчанию свои сайты через VPN',
         (tester) async {
-      await _pump(tester, routes: const []);
+      // Ядро без своего туннеля приложений не различает, строки «Кто» тогда
+      // нет: выбирать не из чего.
+      await _pump(
+        tester,
+        routes: const [],
+        caps: const RouteCapabilities(servers: true),
+      );
       await openNew(tester);
       expect(find.text('Новый маршрут'), findsWidgets);
-      // Без отдельных приложений строки «Кто» нет: выбирать не из чего.
       expect(find.text('Кто'), findsNothing);
       expect(find.text('Свои сайты · пусто'), findsOneWidget);
       expect(find.text('Через VPN'), findsOneWidget);
@@ -386,7 +391,7 @@ void main() {
     // различает, и карточка обязана сказать, что маршрут не работает.
     testWidgets('маршрут приложений без поддержки ядра — с причиной',
         (tester) async {
-      await _pump(tester, routes: const [
+      await _pump(tester, caps: const RouteCapabilities(servers: true), routes: const [
         TrafficRoute(
           id: 'app',
           apps: ['chrome.exe'],

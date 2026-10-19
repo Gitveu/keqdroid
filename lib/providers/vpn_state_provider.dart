@@ -346,24 +346,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
     return out;
   }
 
-  // сайты маршрутов на другие серверы sing-box обязан отдать встроенному xray,
-  // иначе при всё остальное напрямую он отправил бы их мимо туннеля
-  static AppSettings _withRouteServersViaProxy(
-    AppSettings settings,
-    List<RouteServerOutbound> routeServers,
-  ) {
-    if (routeServers.isEmpty) return settings;
-    return settings.copyWith(
-      proxyRules: [
-        settings.proxyRules,
-        for (final server in routeServers) ...[
-          server.entries,
-          ...server.listDomains,
-        ],
-      ].where((e) => e.trim().isNotEmpty).join('\n'),
-    );
-  }
-
   Future<void> connect({bool autostartTunFallback = false}) async {
     if (_connectInFlight) {
       AppLogger.instance.debug('VPN connect() ignored: connect already in progress');
@@ -428,11 +410,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         mihomoAvailable: mihomoShipsHere,
       );
       // режим сохранённый: если автозапуск откатится в прокси, генератор без туннеля правил по процессам и так не напишет
-      final appsRun = appRoutesRun(
-        core: choice.backend,
-        mode: TunnelSessionBuilder.resolveMode(stored),
-        android: Platform.isAndroid,
-      );
+      final appsRun = appRoutesRun(TunnelSessionBuilder.resolveMode(stored));
       final routeServers = await _prepareRouteServers(
         routeServerOutbounds(
           routes: routes,
@@ -518,7 +496,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
             );
           } else {
             AppLogger.instance.warn(
-              'TUN mode: app is not elevated. sing-box may fail to create routes.',
+              'TUN mode: app is not elevated. The core may fail to create routes.',
             );
           }
         }
@@ -677,9 +655,16 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         }
       }
 
-      final nativeTun = Platform.isAndroid &&
-          connectionMode == ConnectionMode.tun &&
-          !mihomoPicked;
+      final desktop = Platform.isWindows || Platform.isLinux;
+      final xrayDesktopTun =
+          desktop && connectionMode == ConnectionMode.tun && !mihomoPicked;
+      final strictRoute =
+          settings.tun.strictRouteEnabled(windows: Platform.isWindows);
+      // IPv6-адрес на TUN при выключенном в системе IPv6 роняет ядро. строгий маршрут на Linux закрывал IPv6
+      // без маршрута (sing-tun, unreachable), теперь так же: захват и блок
+      final captureIpv6 = xrayDesktopTun &&
+          (settings.tun.blockIpv6Leak || (Platform.isLinux && strictRoute)) &&
+          await hostHasGlobalIpv6(excludeInterfaceName: kTunInterfaceName);
 
       final listedSettings =
           mihomoPicked ? settings : ruleLists.expand(settings);
@@ -692,18 +677,32 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
               resolvedServerIp: serverIp,
               localInboundsNoAuth: proxyModeNoAuth,
               geoIndex: customGeoIndex,
-              nativeTunInbound: nativeTun,
+              nativeTunInbound: Platform.isAndroid &&
+                  connectionMode == ConnectionMode.tun &&
+                  !mihomoPicked,
+              desktopTun: xrayDesktopTun
+                  ? DesktopTunOptions(
+                      windows: Platform.isWindows,
+                      mtu: settings.tun.mtu,
+                      autoRoute: settings.tun.autoRoute,
+                      strictRoute: strictRoute,
+                      captureIpv6: captureIpv6,
+                      udpTimeoutSec: settings.tun.udpTimeoutSec,
+                      routingMode: routingMode,
+                      managedProcessNames:
+                          routingMode == AppRoutingMode.allProxy
+                              ? const []
+                              : processNames,
+                      appProcessName: p.basename(Platform.resolvedExecutable),
+                      systemResolvers: Platform.isLinux
+                          ? linuxSystemResolvers(ipv6: captureIpv6)
+                          : const [],
+                    )
+                  : null,
               routeServers: routeServers,
               appRoutes: appRoutes,
             );
 
-      // IPv6-адрес на TUN при выключенном в системе IPv6 роняет sing-box (set ipv6 dns: Access is denied)
-      final hostHasIpv6 = connectionMode == ConnectionMode.tun &&
-              (Platform.isWindows || Platform.isLinux) &&
-              settings.tun.blockIpv6Leak &&
-              !mihomoPicked
-          ? await hostHasGlobalIpv6(excludeInterfaceName: kTunInterfaceName)
-          : false;
       if (mihomoPicked &&
           connectionMode == ConnectionMode.tun &&
           settings.tun.blockIpv6Leak &&
@@ -712,33 +711,17 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         AppLogger.instance.warn(
           'This machine has global IPv6, but the tunnel here belongs to the '
           'mihomo core, which keeps its own IPv6 handling — the TUN option '
-          '"keep IPv6 inside the tunnel" covers the xray/keqrnel core only. '
+          '"keep IPv6 inside the tunnel" covers the xray core only. '
           'IPv6 traffic can therefore bypass the tunnel; switch the core to '
           'xray in Settings → About if that matters.',
         );
       }
 
-      if (!mihomoPicked &&
-          !Platform.isAndroid &&
-          connectionMode == ConnectionMode.tun) {
-        final ignored = SingBoxTunConfigGen.ignoredCustomDnsServers(settings);
-        if (ignored.isNotEmpty) {
-          AppLogger.instance.warn(
-            'Custom DNS: in TUN mode the core runs a single resolver, so only '
-            'the first usable address is in effect. Not used: '
-            '${ignored.join(', ')}.',
-          );
-        }
-      }
-
       final session = TunnelSessionBuilder.build(
-        settings: _withRouteServersViaProxy(listedSettings, routeServers),
+        settings: listedSettings,
         xrayConfig: xrayConfig,
         vpnBackend: vpnBackend,
         mihomoConfig: mihomoConfig,
-        resolvedServerIp: serverIp,
-        socksUsername: creds.username,
-        socksPassword: creds.password,
         excludePackages: excludePkgs,
         includePackages: includePkgs,
         excludeProcesses: routingMode == AppRoutingMode.allExceptSelected
@@ -747,10 +730,8 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         includeProcesses: routingMode == AppRoutingMode.onlySelected
             ? processNames
             : const [],
-        routingMode: routingMode,
         serverName: server.displayName,
         modeOverride: connectionMode,
-        hostHasIpv6: hostHasIpv6,
       );
       await engine.startSession(session);
       _awaitingSessionStart = false;

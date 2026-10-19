@@ -5,7 +5,6 @@ import 'package:keqdroid/models/app_settings.dart';
 import 'package:keqdroid/models/xray_core_settings.dart';
 import 'package:keqdroid/utils/config_gen.dart';
 import 'package:keqdroid/utils/mihomo_config_gen.dart';
-import 'package:keqdroid/utils/singbox_tun_config.dart';
 import 'package:keqdroid/utils/socks5_credentials.dart';
 
 /// «Резолвер для отдельных доменов»: домен спрашивается там, где велели, и
@@ -110,18 +109,6 @@ void main() {
             (s['domains'] as List?)?.contains('full:home.lan') == true),
         isFalse,
       );
-    });
-
-    test('sing-box: свой сервер и правило на каждую запись', () {
-      final policies = SingBoxTunConfigGen.policyDnsServers(
-        _withPolicy('home.lan 192.168.1.1'),
-      );
-
-      expect(policies.length, 1);
-      expect(policies.single.mask, 'home.lan');
-      // Тег сервера и тег в правиле обязаны совпадать — иначе правило уводит
-      // запрос в несуществующий резолвер, и домен не резолвится вовсе.
-      expect(policies.single.server['tag'], policies.single.tag);
     });
   });
 }

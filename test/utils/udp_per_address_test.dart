@@ -3,16 +3,14 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/models/app_settings.dart';
 import 'package:keqdroid/models/xray_core_settings.dart';
-import 'package:keqdroid/tunnel/app_routing_mode.dart';
 import 'package:keqdroid/utils/config_gen.dart';
+import 'package:keqdroid/utils/desktop_tun.dart';
 import 'package:keqdroid/utils/mihomo_config_gen.dart';
-import 'package:keqdroid/utils/singbox_tun_config.dart';
 import 'package:keqdroid/utils/socks5_credentials.dart';
 
 /// Переключатель «UDP по маршрутам для каждого адреса»: ядра включают раздельные
-/// UDP-потоки по метке в конфиге (keqrnel и xray для Android — выход
-/// keq-udp-per-exit, mihomo — ключ keqdroid-udp-per-exit), sing-box на ПК
-/// отдаёт весь UDP встроенному xray. Выключен — конфиг прежний.
+/// UDP-потоки по метке в конфиге (xray — выход keq-udp-per-exit, mihomo —
+/// ключ keqdroid-udp-per-exit). Выключен — конфиг прежний.
 const _link = 'vless://00000000-0000-4000-8000-000000000000@198.51.100.10:443'
     '?type=tcp&security=reality&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
     '&sni=www.microsoft.com&fp=chrome&flow=xtls-rprx-vision#test';
@@ -21,25 +19,6 @@ const _on = AppSettings(xrayCore: XrayCoreSettings(udpPerAddress: true));
 
 List<Map<String, dynamic>> _xrayOutbounds(String json) =>
     ((jsonDecode(json) as Map)['outbounds'] as List).cast<Map<String, dynamic>>();
-
-List<Map<String, dynamic>> _singboxRules(AppSettings settings,
-    {AppRoutingMode mode = AppRoutingMode.allProxy}) {
-  final json = SingBoxTunConfigGen.generate(
-    localSocksPort: 2080,
-    socksUsername: 'u',
-    socksPassword: 'p',
-    serverIpToExclude: '198.51.100.10',
-    settings: settings,
-    routingMode: mode,
-    managedProcessNames: mode == AppRoutingMode.allProxy ? const [] : const ['game.exe'],
-    windows: true,
-  );
-  return ((jsonDecode(json) as Map)['route']['rules'] as List)
-      .cast<Map<String, dynamic>>();
-}
-
-bool _isUdpToXray(Map<String, dynamic> r) =>
-    r['network'] == 'udp' && r['outbound'] == 'proxy';
 
 void main() {
   setUp(() => Socks5Credentials().init('u', 'p'));
@@ -110,38 +89,16 @@ void main() {
     });
   });
 
-  group('sing-box на ПК', () {
-    test('выключен — правила нет', () {
-      expect(_singboxRules(const AppSettings()).any(_isUdpToXray), isFalse);
-    });
-
-    test('включён — весь UDP после правил по процессам уходит в xray', () {
-      final rules = _singboxRules(_on);
-      final udp = rules.indexWhere(_isUdpToXray);
-      expect(udp, greaterThan(0));
-      expect(rules[udp]['ip_version'], 4);
-      final lastProcess = rules.lastIndexWhere((r) => r.containsKey('process_name'));
-      expect(udp, greaterThan(lastProcess));
-      // раньше списков «напрямую», иначе первый же такой адрес снова склеил бы сокет
-      final firstList = rules.indexWhere((r) =>
-          r.containsKey('domain_suffix') ||
-          (r.containsKey('ip_cidr') && r['outbound'] == 'direct' &&
-              !(r['ip_cidr'] as List).contains('172.19.0.0/30')));
-      expect(firstList, anyOf(-1, greaterThan(udp)));
-    });
-
-    test('в режиме «только выбранные» не мешает: невыбранные идут мимо VPN', () {
-      expect(_singboxRules(_on, mode: AppRoutingMode.onlySelected).any(_isUdpToXray),
-          isFalse);
-    });
-
-    test('«все, кроме выбранных» — исключённые по-прежнему мимо, раньше правила', () {
-      final rules = _singboxRules(_on, mode: AppRoutingMode.allExceptSelected);
-      final udp = rules.indexWhere(_isUdpToXray);
-      final excluded = rules.indexWhere((r) =>
-          (r['process_name'] as List?)?.contains('game.exe') == true);
-      expect(excluded, greaterThan(-1));
-      expect(udp, greaterThan(excluded));
-    });
+  // TUN на ПК теперь у самого xray, метка та же, что на Android
+  test('xray TUN на ПК: метка на месте', () {
+    final json = ConfigGeneratorV2.generateConfig(
+      _link,
+      _on,
+      desktopTun: const DesktopTunOptions(windows: true, mtu: 9000),
+    );
+    expect(
+      _xrayOutbounds(json).any((o) => o['tag'] == ConfigGeneratorV2.udpPerExitTag),
+      isTrue,
+    );
   });
 }

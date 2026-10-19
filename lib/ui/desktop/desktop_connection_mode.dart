@@ -112,7 +112,7 @@ Future<void> applyDesktopConnectionMode(
   }
 }
 
-// перезапуск с правами просто зовёт PostQuitMessage: без остановки keqrnel жил дальше,
+// перезапуск с правами просто зовёт PostQuitMessage: без остановки ядро жило дальше,
 // а системный прокси смотрел на порт, который вот-вот исчезнет
 Future<void> stopSessionBeforeElevation({
   required VpnStateNotifier notifier,

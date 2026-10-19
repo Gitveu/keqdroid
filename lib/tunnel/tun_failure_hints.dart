@@ -56,6 +56,16 @@ TunFailureHint? tunFailureHint(String coreOutput, {required bool windows}) {
     );
   }
 
+  // строгий маршрут у xray это фильтры WFP: без них ядро TUN не поднимает, а не течёт молча
+  if (has('autosystemwfpblockleak')) {
+    return const TunFailureHint(
+      'wfp-refused',
+      'Windows refused the filters that keep DNS and the other IP version '
+          'inside the tunnel (Strict route). Turn Strict route off in Settings '
+          '→ TUN mode, or check that the Base Filtering Engine service runs.',
+    );
+  }
+
   if (hasAny([
         'already exists',
         'file exists',

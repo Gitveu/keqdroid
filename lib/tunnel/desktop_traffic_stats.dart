@@ -8,6 +8,7 @@ import '../core/app_logger.dart';
 import '../core/connections_poll_stats.dart';
 import 'connection_mode.dart';
 import 'tunnel_state.dart';
+import 'xray_desktop_config.dart';
 
 // без подчёркивания намеренно: pollTrafficStats живёт в бэкендах,
 // а приватное у mixin видно только в своей библиотеке
@@ -139,6 +140,35 @@ mixin DesktopTrafficStats {
     final client = _statsHttpClient;
     _statsHttpClient = null;
     client?.close(force: true);
+  }
+
+  Future<({int down, int up})?> queryXrayTraffic(int port) async {
+    final poll = ConnectionsPollStats.instance.begin();
+    var ok = false;
+    var chars = 0;
+    try {
+      final req = await statsHttp
+          .get('127.0.0.1', port, '/debug/vars')
+          .timeout(const Duration(seconds: 2));
+      final resp = await req.close().timeout(const Duration(seconds: 2));
+      if (resp.statusCode != 200) {
+        await resp.drain<void>();
+        return null;
+      }
+      final body = await resp
+          .transform(utf8.decoder)
+          .join()
+          .timeout(connectionsBodyTimeout);
+      chars = body.length;
+      final totals = xrayInboundTotals(jsonDecode(body) as Map<String, dynamic>);
+      ok = true;
+      return totals;
+    } catch (_) {
+      resetStatsHttp();
+      return null;
+    } finally {
+      ConnectionsPollStats.instance.end(poll, ok: ok, bodyChars: chars);
+    }
   }
 
   // у mihomo токен обязателен: без него 401, и счётчики молча нули

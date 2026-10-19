@@ -43,7 +43,7 @@ void main() {
   });
 
   group('normalizeProcessName прочее', () {
-    test('регистр сохраняется: sing-box сравнивает без приведения', () {
+    test('регистр сохраняется: на Linux ядро сравнивает имя точно', () {
       expect(normalizeProcessName('Telegram.exe', windows: true), 'Telegram.exe');
     });
 
@@ -123,23 +123,6 @@ void main() {
       expect(re.hasMatch(r'c:\apps\A.EXE'), isTrue);
       expect(re.hasMatch(r'C:\Apps\aXexe'), isFalse);
       expect(re.hasMatch(r'C:\Other\a.exe'), isFalse);
-    });
-  });
-
-  group('processNameMatchVariants', () {
-    test('имя в смешанном регистре едет двумя вариантами', () {
-      expect(processNameMatchVariants('Telegram.exe'), [
-        'Telegram.exe',
-        'telegram.exe',
-      ]);
-    });
-
-    test('имя и так в нижнем регистре — вариант один', () {
-      expect(processNameMatchVariants('telegram.exe'), ['telegram.exe']);
-    });
-
-    test('пусто вариантов не даёт', () {
-      expect(processNameMatchVariants('  '), isEmpty);
     });
   });
 }

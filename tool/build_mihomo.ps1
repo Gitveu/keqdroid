@@ -14,7 +14,7 @@
 #   linux   - assets/bin/linux/mihomo
 #
 # Desktop binaries are laid next to the app executable by CMake, exactly like
-# keqrnel; they are NOT declared as Flutter assets (Flutter packs assets into
+# xray; they are NOT declared as Flutter assets (Flutter packs assets into
 # every platform, and desktop cores once dragged ~150 MB into the APK).
 #
 # All targets carry -tags with_gvisor: the gVisor stack is what mihomo uses

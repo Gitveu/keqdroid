@@ -7,15 +7,13 @@ class WindowsCorePaths {
   WindowsCorePaths._();
 
   static const assetXray = 'assets/bin/windows/xray.exe';
-  static const assetSingbox = 'assets/bin/windows/sing-box.exe';
-  static const assetKeqrnel = 'assets/bin/windows/keqrnel.exe';
   static const assetMihomo = 'assets/bin/windows/mihomo.exe';
   static const assetGeoip = 'assets/bin/windows/geoip.dat';
   static const assetGeosite = 'assets/bin/windows/geosite.dat';
   static const geoFileNames = ['geoip.dat', 'geosite.dat'];
 
   static const binariesHint =
-      'Положите keqrnel.exe, mihomo.exe и '
+      'Положите xray.exe, mihomo.exe и '
       'wintun.dll (нужен для TUN) в assets/bin/windows/ (см. README) и '
       'пересоберите приложение, или рядом с keqdroid.exe.';
 
@@ -57,12 +55,6 @@ class WindowsCorePaths {
 
   static Future<String?> xrayExecutable() =>
       _resolveExecutable(assetXray, 'xray.exe');
-
-  static Future<String?> singboxExecutable() =>
-      _resolveExecutable(assetSingbox, 'sing-box.exe');
-
-  static Future<String?> keqrnelExecutable() =>
-      _resolveExecutable(assetKeqrnel, 'keqrnel.exe');
 
   static Future<String?> mihomoExecutable() =>
       _resolveExecutable(assetMihomo, 'mihomo.exe');

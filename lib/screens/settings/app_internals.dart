@@ -823,8 +823,8 @@ class _TunnelModeTile extends ConsumerWidget {
 
 const _selectableCores = <String, String>{
   'libxray.so': AppSettings.vpnCoreXray,
-  'keqrnel.exe': AppSettings.vpnCoreXray,
-  'keqrnel': AppSettings.vpnCoreXray,
+  'xray.exe': AppSettings.vpnCoreXray,
+  'xray': AppSettings.vpnCoreXray,
   'libmihomo.so': AppSettings.vpnCoreMihomo,
   'mihomo.exe': AppSettings.vpnCoreMihomo,
   'mihomo': AppSettings.vpnCoreMihomo,

@@ -102,11 +102,9 @@ final routeCapabilitiesProvider = Provider<RouteCapabilities>((ref) {
       (a) => TunnelSessionBuilder.resolveMode(a.value ?? const AppSettings()),
     ),
   );
-  bool runIn(ConnectionMode m) =>
-      appRoutesRun(core: core, mode: m, android: Platform.isAndroid);
   return RouteCapabilities(
-    apps: runIn(mode),
-    appsNeedTun: !runIn(mode) && runIn(ConnectionMode.tun),
+    apps: appRoutesRun(mode),
+    appsNeedTun: !appRoutesRun(mode),
     servers: true,
     core: core,
   );

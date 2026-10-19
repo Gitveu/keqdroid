@@ -1178,46 +1178,46 @@ class _XrayTunSection extends ConsumerWidget {
                 l10n.settingsTunSectionNote,
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Text(
-                l10n.settingsTunStackTitle,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(color: AppTheme.text(context)),
+            // TUN xray держит сам и только на gVisor, выбирать там нечего
+            if (!xray) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: Text(
+                  l10n.settingsTunStackTitle,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(color: AppTheme.text(context)),
+                ),
               ),
-            ),
-            RadioGroup<String>(
-              groupValue: tun.stack,
-              onChanged: (v) {
-                if (v != null) _saveXrayTun(ref, settings, tun.copyWith(stack: v));
-              },
-              child: Column(
-                children: [
-                  _xrayChoiceTile(
-                    context: context,
-                    value: TunSettings.stackSystem,
-                    accent: accent,
-                    title: 'system',
-                    subtitle: l10n.settingsTunStackSystemHint,
-                  ),
-                  _xrayChoiceTile(
-                    context: context,
-                    value: TunSettings.stackGvisor,
-                    accent: accent,
-                    title: 'gVisor',
-                    subtitle: l10n.settingsTunStackGvisorHint,
-                  ),
-                  _xrayChoiceTile(
-                    context: context,
-                    value: TunSettings.stackMixed,
-                    accent: accent,
-                    title: 'mixed',
-                    subtitle: l10n.settingsTunStackMixedHint,
-                  ),
-                  // уже выбранный mips виден и на xray, иначе у группы не останется выбранного
-                  if (!xray || tun.stack == TunSettings.stackMips)
+              RadioGroup<String>(
+                groupValue: tun.stack,
+                onChanged: (v) {
+                  if (v != null) _saveXrayTun(ref, settings, tun.copyWith(stack: v));
+                },
+                child: Column(
+                  children: [
+                    _xrayChoiceTile(
+                      context: context,
+                      value: TunSettings.stackSystem,
+                      accent: accent,
+                      title: 'system',
+                      subtitle: l10n.settingsTunStackSystemHint,
+                    ),
+                    _xrayChoiceTile(
+                      context: context,
+                      value: TunSettings.stackGvisor,
+                      accent: accent,
+                      title: 'gVisor',
+                      subtitle: l10n.settingsTunStackGvisorHint,
+                    ),
+                    _xrayChoiceTile(
+                      context: context,
+                      value: TunSettings.stackMixed,
+                      accent: accent,
+                      title: 'mixed',
+                      subtitle: l10n.settingsTunStackMixedHint,
+                    ),
                     _xrayChoiceTile(
                       context: context,
                       value: TunSettings.stackMips,
@@ -1225,9 +1225,10 @@ class _XrayTunSection extends ConsumerWidget {
                       title: 'Mips',
                       subtitle: l10n.settingsTunStackMipsHint,
                     ),
-                ],
+                  ],
+                ),
               ),
-            ),
+            ],
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Row(
