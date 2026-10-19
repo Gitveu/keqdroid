@@ -10,7 +10,9 @@ had to take over what sing-box's process rules did. Three things were missing:
   for mihomo's NOT.
 - Windows names and paths ignore case, and the path a file dialog returns can
   differ in case from the one the system reports. On Windows names, paths,
-  folders and the .exe suffix now compare without case.
+  folders and the .exe suffix now compare without case. The suffix is cut
+  without case from the name the system reports too: xray cut only a
+  lowercase .exe, and a rule for winword missed WINWORD.EXE.
 - Each process rule searched the system tables again for the same connection,
   and the access log needs the program too. common/net.FindProcessCached keeps
   one result per source for 2 seconds. Not on Android: there the app keeps
@@ -96,7 +98,7 @@ index cae9735..ecfe41d 100644
  			if inTag == "" {
  				accessMessage.Detour = tag
 diff --git a/app/router/condition.go b/app/router/condition.go
-index 99ab6eb..51a3fe0 100644
+index 99ab6eb..d1ae091 100644
 --- a/app/router/condition.go
 +++ b/app/router/condition.go
 @@ -296,6 +296,10 @@ type ProcessNameMatcher struct {
@@ -123,14 +125,12 @@ index 99ab6eb..51a3fe0 100644
  		if name == "self/" {
  			matchXraySelf = true
  			continue
-@@ -329,19 +338,75 @@ func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
+@@ -329,19 +338,81 @@ func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
  			continue
  		}
  		// curl.exe or curl
-+		if runtime.GOOS == "windows" && len(name) > 4 && strings.EqualFold(name[len(name)-4:], ".exe") {
-+			name = name[:len(name)-4]
-+		}
- 		processNames = append(processNames, strings.TrimSuffix(name, ".exe"))
+-		processNames = append(processNames, strings.TrimSuffix(name, ".exe"))
++		processNames = append(processNames, trimExe(name))
  	}
 -	return &ProcessNameMatcher{
 +	m := &ProcessNameMatcher{
@@ -143,12 +143,12 @@ index 99ab6eb..51a3fe0 100644
 +		m.Negated = NewProcessNameMatcher(negated)
 +	}
 +	return m
-+}
-+
-+func (m *ProcessNameMatcher) positive() bool {
-+	return m.MatchXraySelf || len(m.ProcessNames) > 0 || len(m.AbsPaths) > 0 || len(m.Folders) > 0
  }
  
++func (m *ProcessNameMatcher) positive() bool {
++	return m.MatchXraySelf || len(m.ProcessNames) > 0 || len(m.AbsPaths) > 0 || len(m.Folders) > 0
++}
++
 +// a process the system tables do not know is outside the list, as for mihomo's NOT
  func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 +	pid, name, absPath, found := lookupProcess(ctx)
@@ -161,6 +161,15 @@ index 99ab6eb..51a3fe0 100644
 +		}
 +	}
 +	return found && m.matches(pid, name, absPath)
++}
++
++// FindProcess on Windows cuts only a lowercase ".exe", and Office ships
++// WINWORD.EXE and OUTLOOK.EXE: rule names and found names go through here
++func trimExe(name string) string {
++	if runtime.GOOS == "windows" && len(name) > 4 && strings.EqualFold(name[len(name)-4:], ".exe") {
++		return name[:len(name)-4]
++	}
++	return strings.TrimSuffix(name, ".exe")
 +}
 +
 +// Windows names and paths ignore case, and the path a file dialog gives differs
@@ -201,7 +210,7 @@ index 99ab6eb..51a3fe0 100644
  	}
  
  	srcPort := uint16(ctx.GetSourcePort())
-@@ -354,7 +419,7 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+@@ -354,7 +425,7 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
  	case net.Network_UDP:
  		network = "udp"
  	default:
@@ -210,7 +219,7 @@ index 99ab6eb..51a3fe0 100644
  	}
  
  	var dstIP string
-@@ -373,30 +438,14 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+@@ -373,30 +444,14 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
  		dstPort = uint16(ctx.GetTargetPort())
  	}
  
@@ -221,8 +230,7 @@ index 99ab6eb..51a3fe0 100644
  			errors.LogError(context.Background(), "Unables to find local process name: ", err)
  		}
 -		return false
-+		return 0, "", "", false
- 	}
+-	}
 -	if m.MatchXraySelf {
 -		if pid == os.Getpid() {
 -			return true
@@ -238,9 +246,10 @@ index 99ab6eb..51a3fe0 100644
 -		if strings.HasPrefix(absPath, f) {
 -			return true
 -		}
--	}
++		return 0, "", "", false
+ 	}
 -	return false
-+	return pid, name, absPath, true
++	return pid, trimExe(name), absPath, true
  }
  
  // originalTargetIP is the address the connection was opened to, before
@@ -342,6 +351,39 @@ index 0000000..c831f7b
 +	exe, _ := os.Executable()
 +	if !NewProcessNameMatcher([]string{strings.ToUpper(filepath.ToSlash(exe))}).Apply(ctx) {
 +		t.Fatal("the path in another case did not match")
++	}
++}
+diff --git a/app/router/condition_trim_exe_test.go b/app/router/condition_trim_exe_test.go
+new file mode 100644
+index 0000000..afa994d
+--- /dev/null
++++ b/app/router/condition_trim_exe_test.go
+@@ -0,0 +1,27 @@
++package router
++
++import (
++	"runtime"
++	"testing"
++)
++
++// keqdroid patch, see tool/patches/xray-desktop-process.patch
++func TestTrimExe(t *testing.T) {
++	cases := map[string]string{
++		"curl.exe":  "curl",
++		"curl":      "curl",
++		"a.exe.exe": "a.exe",
++		".exe":      "",
++	}
++	if runtime.GOOS == "windows" {
++		cases["WINWORD.EXE"] = "WINWORD"
++		cases["Outlook.Exe"] = "Outlook"
++	} else {
++		cases["WINWORD.EXE"] = "WINWORD.EXE"
++	}
++	for in, want := range cases {
++		if got := trimExe(in); got != want {
++			t.Errorf("trimExe(%q) = %q, want %q", in, got, want)
++		}
 +	}
 +}
 diff --git a/common/log/access.go b/common/log/access.go
