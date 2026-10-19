@@ -10,6 +10,7 @@ import 'package:keqdroid/app/app.dart';
 import 'package:keqdroid/core/app_logger.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:keqdroid/platform/platform_bootstrap.dart';
+import 'package:keqdroid/platform/windows_cert_trust.dart';
 import 'package:keqdroid/services/background_service.dart';
 import 'package:keqdroid/services/card_image_service.dart';
 import 'package:keqdroid/services/desktop_background_service.dart';
@@ -37,6 +38,7 @@ Future<void> main() async {
     WidgetsFlutterBinding.ensureInitialized();
     // до всего остального: ошибка до runApp иначе не оставит следа
     await AppLogger.instance.enableFileLog();
+    if (Platform.isWindows) HttpOverrides.global = WindowsSystemTrust();
     await PrefsRecovery.prepare();
 
     var crashlyticsReady = false;
