@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-/// Окно праздничного оформления: с 24 октября по 2 ноября включительно, по
+/// Окно праздничного оформления: с 20 октября по 2 ноября включительно, по
 /// местному времени устройства.
 ///
 /// Год задан намеренно. Без него тема возвращалась бы каждый октябрь в сборке,
@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart';
 abstract final class HalloweenSeason {
   static const int year = 2026;
 
-  static DateTime get start => DateTime(year, 10, 24);
+  static DateTime get start => DateTime(year, 10, 20);
 
   /// Первый момент после окна: полночь на 3 ноября.
   static DateTime get end => DateTime(year, 11, 3);
