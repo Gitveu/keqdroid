@@ -27,6 +27,11 @@ void main() {
       );
     });
 
+    test('можно уменьшить до 70%', () {
+      expect(const AppSettings().copyWith(uiScale: 0.7).uiScale, 0.7);
+      expect(AppSettings.fromJson({'uiScale': 0.7}).uiScale, 0.7);
+    });
+
     test('мусор вместо числа не ломает разбор настроек', () {
       expect(AppSettings.fromJson(const {}).uiScale, 1.0);
       expect(AppSettings.fromJson(const {'uiScale': 'большой'}).uiScale, 1.0);

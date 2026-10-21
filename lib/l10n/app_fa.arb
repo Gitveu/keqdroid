@@ -857,7 +857,7 @@
   "appearanceCustomColorVariantExact": "دقیق",
   "appearanceCustomColorVariantHint": "اشباع و روشنایی فقط در حالت «دقیق» اثر دارند؛ دو حالت دیگر خودشان آن‌ها را انتخاب می‌کنند.",
   "appearanceUiScaleTitle": "اندازهٔ رابط کاربری",
-  "appearanceUiScaleSubtitle": "روی اندازهٔ متن سیستم. فقط متن و سطرهای فهرست.",
+  "appearanceUiScaleSubtitle": "کل رابط کاربری، روی مقیاس سیستم.",
   "appearanceIconShapeTitle": "شکل آیکون‌ها",
   "appearanceIconShapeCircle": "دایره",
   "subscriptionCardThemeTitle": "پس‌زمینه",

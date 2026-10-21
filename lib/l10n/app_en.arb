@@ -1382,7 +1382,7 @@
   "appearanceCustomColorVariantExact": "Exact",
   "appearanceCustomColorVariantHint": "Saturation and brightness only tell on Exact: the other two pick them for you.",
   "appearanceUiScaleTitle": "Interface size",
-  "appearanceUiScaleSubtitle": "On top of the system text size. Text and list rows only.",
+  "appearanceUiScaleSubtitle": "The whole interface, on top of the system scale.",
   "appearanceIconShapeTitle": "Icon shape",
   "appearanceIconShapeCircle": "Circle",
   "subscriptionCardThemeTitle": "Backdrop",

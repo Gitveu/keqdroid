@@ -2730,7 +2730,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get appearanceUiScaleTitle => 'اندازهٔ رابط کاربری';
 
   @override
-  String get appearanceUiScaleSubtitle => 'روی اندازهٔ متن سیستم. فقط متن و سطرهای فهرست.';
+  String get appearanceUiScaleSubtitle => 'کل رابط کاربری، روی مقیاس سیستم.';
 
   @override
   String get appearanceIconShapeTitle => 'شکل آیکون‌ها';

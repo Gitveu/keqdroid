@@ -2735,7 +2735,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get appearanceUiScaleTitle => 'Oberflächengröße';
 
   @override
-  String get appearanceUiScaleSubtitle => 'Zusätzlich zur Textgröße des Systems. Nur Text und Zeilenhöhen.';
+  String get appearanceUiScaleSubtitle => 'Die gesamte Oberfläche, zusätzlich zur Skalierung des Systems.';
 
   @override
   String get appearanceIconShapeTitle => 'Symbolform';

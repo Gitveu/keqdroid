@@ -635,18 +635,33 @@ class _AppearanceThemesTab extends StatelessWidget {
   }
 }
 
-class _UiScalePicker extends StatelessWidget {
+class _UiScalePicker extends StatefulWidget {
   final double value;
   final ValueChanged<double> onChanged;
 
   const _UiScalePicker({required this.value, required this.onChanged});
 
+  @override
+  State<_UiScalePicker> createState() => _UiScalePickerState();
+}
+
+class _UiScalePickerState extends State<_UiScalePicker> {
   static const _step = 0.05;
+
+  // масштаб применяется по отпусканию: иначе экран сжимается под пальцем и ползунок уезжает
+  double? _dragging;
+
+  @override
+  void didUpdateWidget(_UiScalePicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value != oldWidget.value) _dragging = null;
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final accent = AppTheme.accent(context);
+    final value = _dragging ?? widget.value;
     final percent = (value * 100).round();
     final divisions =
         ((AppSettings.maxUiScale - AppSettings.minUiScale) / _step).round();
@@ -670,7 +685,8 @@ class _UiScalePicker extends StatelessWidget {
                 divisions: divisions,
                 activeColor: accent,
                 label: '$percent%',
-                onChanged: onChanged,
+                onChanged: (v) => setState(() => _dragging = v),
+                onChangeEnd: widget.onChanged,
               ),
             ),
             SizedBox(

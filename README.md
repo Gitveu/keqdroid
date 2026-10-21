@@ -80,7 +80,7 @@ The app **does not provide servers**. Bring your own subscription or configs. Co
 - traffic speed and volume under the connect button, VPN and direct separately on mihomo
 - color presets, dark and light, Material You palette on Android
 - subscription cards with a palette or your own picture, carried over into that subscription's servers
-- interface size, on top of the system text size
+- interface size from 70% to 140%: the whole interface scales, not just the text
 - a phone in landscape or a tablet gets a navigation rail and a two-pane servers screen
 - **About**: core versions, geo databases and the current session, copied as one report
 - backup and restore: settings, servers, subscriptions with their images, split-tunnel lists
@@ -307,7 +307,7 @@ Version and tag `vX.Y.Z` come from `pubspec.yaml`. When uploading manually, incl
 - скорость и объём трафика под кнопкой подключения, на mihomo отдельно для VPN и для прямых соединений
 - цветовые пресеты, тёмная и светлая тема, палитра Material You на Android
 - карточки подписок с палитрой или своей картинкой, оформление переносится на их серверы
-- размер интерфейса, поверх системного размера текста
+- размер интерфейса от 70% до 140%: меняется весь интерфейс, а не только текст
 - на телефоне боком и на планшете — навигационная рейка и экран серверов в две панели
 - **О приложении**: версии ядер, geo-базы и текущая сессия одним отчётом
 - резервная копия и восстановление: настройки, серверы, подписки вместе с их картинками, списки split tunnel

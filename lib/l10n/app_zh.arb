@@ -1306,7 +1306,7 @@
   "appearanceCustomColorVariantExact": "精确",
   "appearanceCustomColorVariantHint": "饱和度和明度只在“精确”下起作用，另外两种会自行调配。",
   "appearanceUiScaleTitle": "界面大小",
-  "appearanceUiScaleSubtitle": "在系统文字大小之上生效，仅影响文字和列表行高",
+  "appearanceUiScaleSubtitle": "缩放整个界面，在系统缩放之上生效",
   "appearanceIconShapeTitle": "图标形状",
   "appearanceIconShapeCircle": "圆形",
   "subscriptionCardThemeTitle": "背景",

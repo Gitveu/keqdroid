@@ -5156,7 +5156,7 @@ abstract class AppLocalizations {
   /// No description provided for @appearanceUiScaleSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'On top of the system text size. Text and list rows only.'**
+  /// **'The whole interface, on top of the system scale.'**
   String get appearanceUiScaleSubtitle;
 
   /// No description provided for @appearanceIconShapeTitle.

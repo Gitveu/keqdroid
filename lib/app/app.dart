@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:ui' as ui show DisplayFeature;
 
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import 'package:material_color_utilities/material_color_utilities.dart' as mcu;
 import '../models/app_font.dart';
 import '../models/app_settings.dart';
 import '../models/icon_shape.dart';
+import '../platform/platform_bootstrap.dart';
 import '../platform/vpn_native_bridge.dart';
 import '../providers/providers.dart';
 import '../shared/ui/expressive.dart';
@@ -466,14 +468,9 @@ class _ThemedApp extends ConsumerWidget {
                 flavor: preset.kawaii ?? KawaiiFlavor.sakura,
                 child: child,
               );
-        final gated = _VisibilityTickerGate(child: content);
-        if (settings.uiScale == 1.0) return gated;
-        final mq = MediaQuery.of(context);
-        return MediaQuery(
-          data: mq.copyWith(
-            textScaler: _ScaledTextScaler(mq.textScaler, settings.uiScale),
-          ),
-          child: gated,
+        return _UiZoom(
+          scale: settings.uiScale * _baseUiScale,
+          child: _VisibilityTickerGate(child: content),
         );
       },
       locale: locale,
@@ -492,30 +489,53 @@ class _ThemedApp extends ConsumerWidget {
   }
 }
 
-// оборачиваем системный масштаб: на Android 14+ он нелинейный
-// без ==/hashCode MediaQuery пересобирает всё дерево на каждом кадре
-class _ScaledTextScaler extends TextScaler {
-  const _ScaledTextScaler(this.base, this.factor);
+// на телефоне 100% ползунка рисуются как 0.85: системный масштаб у многих и так крупный
+double get _baseUiScale =>
+    PlatformBootstrap.isDesktop || PlatformBootstrap.isTelevision ? 1.0 : 0.85;
 
-  final TextScaler base;
-  final double factor;
-
-  @override
-  double scale(double fontSize) => base.scale(fontSize) * factor;
+class _UiZoom extends StatelessWidget {
+  final double scale;
+  final Widget child;
+  const _UiZoom({required this.scale, required this.child});
 
   @override
-  // ignore: deprecated_member_use
-  double get textScaleFactor => base.textScaleFactor * factor;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _ScaledTextScaler &&
-          other.base == base &&
-          other.factor == factor;
-
-  @override
-  int get hashCode => Object.hash(base, factor);
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest / scale;
+        return FittedBox(
+          fit: BoxFit.fill,
+          alignment: Alignment.topLeft,
+          child: SizedBox.fromSize(
+            size: size,
+            child: MediaQuery(
+              data: mq.copyWith(
+                size: size,
+                devicePixelRatio: mq.devicePixelRatio * scale,
+                padding: mq.padding / scale,
+                viewPadding: mq.viewPadding / scale,
+                viewInsets: mq.viewInsets / scale,
+                systemGestureInsets: mq.systemGestureInsets / scale,
+                displayFeatures: [
+                  for (final f in mq.displayFeatures)
+                    ui.DisplayFeature(
+                      bounds: Rect.fromPoints(
+                        f.bounds.topLeft / scale,
+                        f.bounds.bottomRight / scale,
+                      ),
+                      type: f.type,
+                      state: f.state,
+                    ),
+                ],
+              ),
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _VisibilityTickerGate extends ConsumerWidget {

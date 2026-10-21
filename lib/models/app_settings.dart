@@ -79,7 +79,7 @@ class AppSettings {
 
   final double uiScale;
 
-  static const minUiScale = 0.8;
+  static const minUiScale = 0.7;
   static const maxUiScale = 1.4;
 
   static double clampUiScale(double v) =>

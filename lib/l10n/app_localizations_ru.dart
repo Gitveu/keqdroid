@@ -2751,7 +2751,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get appearanceUiScaleTitle => 'Размер интерфейса';
 
   @override
-  String get appearanceUiScaleSubtitle => 'Поверх системного размера текста. Только текст и строки списка.';
+  String get appearanceUiScaleSubtitle => 'Весь интерфейс целиком, поверх системного масштаба.';
 
   @override
   String get appearanceIconShapeTitle => 'Форма иконок';

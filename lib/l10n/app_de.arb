@@ -1306,7 +1306,7 @@
   "appearanceCustomColorVariantExact": "Exakt",
   "appearanceCustomColorVariantHint": "Sättigung und Helligkeit wirken nur bei „Exakt“ – die anderen beiden wählen sie selbst.",
   "appearanceUiScaleTitle": "Oberflächengröße",
-  "appearanceUiScaleSubtitle": "Zusätzlich zur Textgröße des Systems. Nur Text und Zeilenhöhen.",
+  "appearanceUiScaleSubtitle": "Die gesamte Oberfläche, zusätzlich zur Skalierung des Systems.",
   "appearanceIconShapeTitle": "Symbolform",
   "appearanceIconShapeCircle": "Kreis",
   "subscriptionCardThemeTitle": "Hintergrund",

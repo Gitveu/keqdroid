@@ -2728,7 +2728,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appearanceUiScaleTitle => '界面大小';
 
   @override
-  String get appearanceUiScaleSubtitle => '在系统文字大小之上生效，仅影响文字和列表行高';
+  String get appearanceUiScaleSubtitle => '缩放整个界面，在系统缩放之上生效';
 
   @override
   String get appearanceIconShapeTitle => '图标形状';

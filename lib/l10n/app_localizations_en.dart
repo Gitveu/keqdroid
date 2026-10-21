@@ -2735,7 +2735,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appearanceUiScaleTitle => 'Interface size';
 
   @override
-  String get appearanceUiScaleSubtitle => 'On top of the system text size. Text and list rows only.';
+  String get appearanceUiScaleSubtitle => 'The whole interface, on top of the system scale.';
 
   @override
   String get appearanceIconShapeTitle => 'Icon shape';

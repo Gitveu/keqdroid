@@ -1308,7 +1308,7 @@
   "appearanceCustomColorVariantExact": "Точная",
   "appearanceCustomColorVariantHint": "Насыщенность и яркость слышно только на «Точной»: остальные две подбирают их сами.",
   "appearanceUiScaleTitle": "Размер интерфейса",
-  "appearanceUiScaleSubtitle": "Поверх системного размера текста. Только текст и строки списка.",
+  "appearanceUiScaleSubtitle": "Весь интерфейс целиком, поверх системного масштаба.",
   "appearanceIconShapeTitle": "Форма иконок",
   "appearanceIconShapeCircle": "Круг",
   "subscriptionCardThemeTitle": "Подложка",
