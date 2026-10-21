@@ -8,6 +8,8 @@
          приезжало от плагинов, но полагаться на чужую транзитивную зависимость
          в том, без чего фича молча перестаёт работать, нельзя. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- без него requestNetwork отказывает, и подложка на HyperOS молча не ставится -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- список всех приложений для раздельного туннелирования и маршрутов, <queries> его не даёт -->

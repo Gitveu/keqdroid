@@ -591,6 +591,7 @@ class KeqdisVpnService : VpnService() {
             )
             startStatsLoop()
             startNetworkWatch()
+            startHyperOsUnderlyingWatch()
 
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) {
@@ -696,6 +697,7 @@ class KeqdisVpnService : VpnService() {
         networkCallback = null
         synchronized(liveNetworks) { liveNetworks.clear() }
         watchStartedAt = 0L
+        stopHyperOsUnderlyingWatch()
     }
 
     // переезд только когда рядом уже была живая сеть: старая никуда не делась, и её соединения рвать нам
@@ -846,6 +848,7 @@ class KeqdisVpnService : VpnService() {
 
         applyAppFilter(b, inc, exc)
         applyHuaweiUnderlying(b)
+        applyHyperOsUnderlying(b)
 
         val tun = b.establish()
         if (tun == null) {
@@ -915,13 +918,87 @@ class KeqdisVpnService : VpnService() {
         return manufacturer == "HUAWEI" || manufacturer == "HONOR"
     }
 
-    // везде, кроме Huawei/Honor, подложку не трогаем: наш вызов её только ломает, так туннель и стал подложкой себе.
+    // везде, кроме Huawei/Honor и HyperOS, подложку не трогаем: наш вызов её только ломает, так туннель и стал подложкой себе.
     // где задали руками, обновляем руками, иначе первая сеть сессии залипает
     private fun applyHuaweiUnderlying(network: Network) {
         if (!needsExplicitUnderlying()) return
         if (tunInterface == null) return   // режим прокси: establish() не звался
         runCatching { setUnderlyingNetworks(arrayOf(network)) }
             .onFailure { NativeLog.w("KEQDIS", "handover: setUnderlyingNetworks failed: ${it.message}") }
+    }
+
+    // HyperOS 4, Xiaomi 17 Ultra (20.10.2026): без подложки исключённые из VPN приложения через пару минут виснут,
+    // с ней работают, как в Incy. признак ro.mi.os.version.name (OS1.0 на первой), через getprop, не скрытый SystemProperties
+    private val hyperOsVersion: String? by lazy {
+        val vendor = listOf(Build.MANUFACTURER, Build.BRAND).map { it.orEmpty().lowercase() }
+        if (vendor.none { it == "xiaomi" || it == "redmi" || it == "poco" }) return@lazy null
+        runCatching {
+            val p = ProcessBuilder("getprop", "ro.mi.os.version.name").start()
+            val out = p.inputStream.bufferedReader().use { it.readText() }.trim()
+            p.waitFor()
+            out.ifEmpty { null }
+        }.getOrNull()
+    }
+    @Volatile private var hyperOsUnderlyingCallback: ConnectivityManager.NetworkCallback? = null
+    @Volatile private var hyperOsUnderlyingNet: Network? = null
+
+    private fun isPhysicalInternet(caps: android.net.NetworkCapabilities) =
+        caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+            !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)
+
+    private fun applyHyperOsUnderlying(b: Builder) {
+        val version = hyperOsVersion ?: return
+        runCatching {
+            val cm = getSystemService(ConnectivityManager::class.java)
+            val net = cm?.activeNetwork?.takeIf { n ->
+                cm.getNetworkCapabilities(n)?.let { isPhysicalInternet(it) } == true
+            }
+            hyperOsUnderlyingNet = net
+            if (net != null) b.setUnderlyingNetworks(arrayOf(net))
+            NativeLog.i("KEQDIS", "underlying: HyperOS $version, start on ${net ?: "system default"}")
+        }.onFailure { NativeLog.w("KEQDIS", "underlying: HyperOS start failed: ${it.message}") }
+    }
+
+    // requestNetwork, а не registerNetworkCallback: приходит одна лучшая сеть, а не все живые подряд
+    private fun startHyperOsUnderlyingWatch() {
+        if (hyperOsVersion == null || tunInterface == null || hyperOsUnderlyingCallback != null) return
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: Network, caps: android.net.NetworkCapabilities) {
+                if (!isPhysicalInternet(caps) || network == hyperOsUnderlyingNet) return
+                hyperOsUnderlyingNet = network
+                setHyperOsUnderlying(network)
+            }
+
+            override fun onLost(network: Network) {
+                if (network != hyperOsUnderlyingNet) return
+                hyperOsUnderlyingNet = null
+                setHyperOsUnderlying(null)
+            }
+        }
+        val request = android.net.NetworkRequest.Builder()
+            .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        runCatching { cm.requestNetwork(request, cb) }
+            .onSuccess { hyperOsUnderlyingCallback = cb }
+            .onFailure { NativeLog.w("KEQDIS", "underlying: requestNetwork failed: ${it.message}") }
+    }
+
+    private fun stopHyperOsUnderlyingWatch() {
+        hyperOsUnderlyingCallback?.let { cb ->
+            runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) }
+        }
+        hyperOsUnderlyingCallback = null
+        hyperOsUnderlyingNet = null
+    }
+
+    // null отдаёт выбор системе. пустой массив значил бы, что у VPN нет сети вовсе
+    private fun setHyperOsUnderlying(network: Network?) {
+        if (tunInterface == null) return
+        val applied = runCatching { setUnderlyingNetworks(network?.let { arrayOf(it) }) }.getOrDefault(false)
+        NativeLog.i("KEQDIS", "underlying: $network, applied=$applied")
     }
 
     // для случая, когда ядро исчезло молча: убитый процесс прощания не пишет, а logcat на Android 13+ приложению закрыт.
