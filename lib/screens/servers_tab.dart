@@ -606,40 +606,11 @@ class _ServersTabState extends ConsumerState<ServersTab>
       onJumpToActive: _jumpToActiveServer,
     );
 
-    // градиент в одном Stack со списком: по измеренной высоте шапки он отставал на кадр
-    final listArea = Stack(
-      fit: StackFit.expand,
-      clipBehavior: Clip.none,
-      children: [
-        _ServersListPanel(
-          key: _listKey,
-          topPadding: _listTopFadeHeight - _listTopFadeTileOverlap,
-          onSelectServer: _selectServer,
-          emptyState: _emptyState(),
-        ),
-        Positioned(
-          top: -_listTopFadeUpExtension,
-          left: 0,
-          right: 0,
-          height: _listTopFadeOverlayHeight,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppTheme.bg(context),
-                    AppTheme.bg(context).withValues(alpha: 1.0),
-                    AppTheme.bg(context).withValues(alpha: 0.0),
-                  ],
-                  stops: const [0.0, _listTopFadeSolidStop, 1.0],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+    final listArea = _ServersListPanel(
+      key: _listKey,
+      topPadding: _listTopPadding,
+      onSelectServer: _selectServer,
+      emptyState: _emptyState(),
     );
 
     if (twoPane) {

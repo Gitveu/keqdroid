@@ -240,15 +240,7 @@ class _ServerGroupEntry {
   });
 }
 
-const _listTopFadeHeight = 56.0;
-
-const _listTopFadeTileOverlap = 34.0;
-
-const _listTopFadeUpExtension = 8.0;
-const _listTopFadeOverlayHeight = _listTopFadeHeight + _listTopFadeUpExtension;
-const _listTopFadeSolidStop =
-    (_listTopFadeUpExtension + 0.45 * _listTopFadeHeight) /
-    _listTopFadeOverlayHeight;
+const _listTopPadding = 22.0;
 
 const _subCardRowHeight = ServerRow.height;
 
