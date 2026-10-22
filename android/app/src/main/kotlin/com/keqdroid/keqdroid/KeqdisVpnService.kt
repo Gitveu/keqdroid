@@ -928,16 +928,25 @@ class KeqdisVpnService : VpnService() {
     }
 
     // HyperOS 4, Xiaomi 17 Ultra (20.10.2026): без подложки исключённые из VPN приложения через пару минут виснут,
-    // с ней работают, как в Incy. признак ro.mi.os.version.name (OS1.0 на первой), через getprop, не скрытый SystemProperties
+    // с ней работают, как в Incy. ro.mi.os.version.name OS2.0 и code 2 на POCO M6 Pro, code 4 на HyperOS 4; бренд Xiaomi бывает и с AOSP.
+    // номер сборки OS2.0.201.0... на случай, если прошивка не даст прочитать свойства; getprop, а не скрытый SystemProperties
     private val hyperOsVersion: String? by lazy {
-        val vendor = listOf(Build.MANUFACTURER, Build.BRAND).map { it.orEmpty().lowercase() }
-        if (vendor.none { it == "xiaomi" || it == "redmi" || it == "poco" }) return@lazy null
-        runCatching {
-            val p = ProcessBuilder("getprop", "ro.mi.os.version.name").start()
-            val out = p.inputStream.bufferedReader().use { it.readText() }.trim()
+        val props = runCatching {
+            val p = ProcessBuilder("sh", "-c", "getprop ro.mi.os.version.name; getprop ro.mi.os.version.code").start()
+            val out = p.inputStream.bufferedReader().use { it.readText() }
             p.waitFor()
-            out.ifEmpty { null }
-        }.getOrNull()
+            out.lines().map { it.trim() }
+        }.getOrDefault(emptyList())
+        val name = props.getOrNull(0).orEmpty()
+        val code = props.getOrNull(1).orEmpty()
+        val build = Build.VERSION.INCREMENTAL.orEmpty()
+        val xiaomi = listOf(Build.MANUFACTURER, Build.BRAND).any { it.orEmpty().lowercase() in setOf("xiaomi", "redmi", "poco") }
+        when {
+            name.isNotEmpty() -> "$name (name)"
+            code.isNotEmpty() -> "code $code"
+            xiaomi && Regex("^OS\\d").containsMatchIn(build) -> "$build (build)"
+            else -> null
+        }
     }
     @Volatile private var hyperOsUnderlyingCallback: ConnectivityManager.NetworkCallback? = null
     @Volatile private var hyperOsUnderlyingNet: Network? = null
