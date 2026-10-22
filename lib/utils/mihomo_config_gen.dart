@@ -1805,8 +1805,6 @@ class MihomoConfigGen {
   // первым правилом, раньше авторских
   static String? outsideVpnRule(OwnerGuard guard) => switch (guard) {
         OwnerGuard.off => null,
-        OwnerGuard.connections =>
-          'AND,((IN-TYPE,TUN),(PROCESS-NAME,$kOutsideVpnOwner),(NOT,((DST-PORT,853)))),REJECT',
         OwnerGuard.all =>
           'AND,((IN-TYPE,TUN),(PROCESS-NAME,$kOutsideVpnOwner)),REJECT',
       };

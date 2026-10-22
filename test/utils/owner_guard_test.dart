@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/models/app_settings.dart';
-import 'package:keqdroid/tunnel/app_routing_mode.dart';
 import 'package:keqdroid/utils/config_gen.dart';
 import 'package:keqdroid/utils/desktop_tun.dart';
 import 'package:keqdroid/utils/mihomo_config_gen.dart';
@@ -139,26 +138,10 @@ String _m(
     );
 
 void main() {
-  test('режим по сплиту: только выбранные пропускают DNS системы', () {
-    expect(
-      ownerGuardFor(enabled: false, routingMode: AppRoutingMode.onlySelected),
-      OwnerGuard.off,
-    );
-    expect(
-      ownerGuardFor(enabled: true, routingMode: AppRoutingMode.onlySelected),
-      OwnerGuard.connections,
-    );
-    expect(
-      ownerGuardFor(
-        enabled: true,
-        routingMode: AppRoutingMode.allExceptSelected,
-      ),
-      OwnerGuard.all,
-    );
-    expect(
-      ownerGuardFor(enabled: true, routingMode: AppRoutingMode.allProxy),
-      OwnerGuard.all,
-    );
+  // DNS самого Android в режиме только выбранные пропускает мост по адресу, правило от режима не зависит
+  test('защита включается переключателем', () {
+    expect(ownerGuardFor(enabled: false), OwnerGuard.off);
+    expect(ownerGuardFor(enabled: true), OwnerGuard.all);
   });
 
   group('xray', () {
@@ -220,12 +203,21 @@ void main() {
       expect(_x(c, inbound: 'http-in'), isNot('block'));
     });
 
-    test('только выбранные: DNS и DoT мимо защиты, остальное блок', () {
-      final c = _xray(OwnerGuard.connections);
-      expect(_x(c, ip: '172.19.0.2', port: 53, network: 'udp'), 'dns-out');
-      expect(_x(c, ip: '1.1.1.1', port: 853), 'proxy');
-      expect(_x(c), 'block');
-      expect(_x(c, port: 80), 'block');
+    // мост не называет маркером DNS самого Android, и такой запрос идёт как без защиты
+    test('DNS без владельца идёт к нашему DNS и Частному DNS как раньше', () {
+      final on = _xray(OwnerGuard.all);
+      final off = _xray(OwnerGuard.off);
+      expect(_x(on, ip: '1.1.1.1', port: 853), 'block');
+      for (final (ip, port, network) in [
+        ('172.19.0.2', 53, 'udp'),
+        ('172.19.0.2', 853, 'tcp'),
+        ('1.1.1.1', 853, 'tcp'),
+      ]) {
+        expect(
+          _x(on, process: '', ip: ip, port: port, network: network),
+          _x(off, process: '', ip: ip, port: port, network: network),
+        );
+      }
     });
 
     test('готовый конфиг: блок раньше авторских правил', () {
@@ -284,9 +276,6 @@ void main() {
       expect(on['find-process-mode'], 'strict');
       expect((on['rules'] as List).first, startsWith('AND,((IN-TYPE,TUN)'));
 
-      final selected = _mihomo(OwnerGuard.connections);
-      expect(selected[MihomoConfigGen.ownerGuardKey], 'connections');
-
       final off = _mihomo(OwnerGuard.off);
       expect(off.containsKey(MihomoConfigGen.ownerGuardKey), isFalse);
       expect(off['find-process-mode'], 'off');
@@ -302,12 +291,6 @@ void main() {
       for (final process in [_chrome, '']) {
         expect(_m(on, process: process), _m(off, process: process));
       }
-    });
-
-    test('только выбранные: DoT мимо защиты', () {
-      final c = _mihomo(OwnerGuard.connections);
-      expect(_m(c), 'REJECT');
-      expect(_m(c, port: 853), isNot('REJECT'));
     });
 
     test('готовый Clash: правило раньше авторских', () {

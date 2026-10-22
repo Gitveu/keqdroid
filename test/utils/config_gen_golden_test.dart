@@ -316,16 +316,6 @@ void main() {
       );
     });
 
-    // только выбранные: DNS и DoT системы приходят без владельца, их правило пропускает
-    _golden('vless-native-tun-outside-vpn-selected', () {
-      return ConfigGeneratorV2.generateConfig(
-        'vless://$_uuid@198.51.100.25:443?type=tcp&security=none#nativetun',
-        _settings,
-        nativeTunInbound: true,
-        ownerGuard: OwnerGuard.connections,
-      );
-    });
-
     // у автора нет blackhole: блок уходит в дописанный keq-block, правило раньше авторских
     _golden('custom-json-native-tun-outside-vpn', () {
       return ConfigGeneratorV2.generateConfig(

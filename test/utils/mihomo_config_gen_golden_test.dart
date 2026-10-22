@@ -256,18 +256,6 @@ void main() {
       );
     });
 
-    // только выбранные: DoT системы приходит без владельца, DNS ядро перехватывает без проверки
-    _golden('android-tun-outside-vpn-selected', () {
-      return MihomoConfigGen.generate(
-        'vless://$_uuid@198.51.100.22:443?type=tcp&security=none#androidtun',
-        _settings,
-        socksPort: 2080,
-        httpPort: 2081,
-        tun: _androidTun,
-        ownerGuard: OwnerGuard.connections,
-      );
-    });
-
     _golden('android-tun-custom-clash-outside-vpn', () {
       return MihomoConfigGen.generate(
         _clashYaml,

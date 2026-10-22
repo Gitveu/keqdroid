@@ -27,6 +27,9 @@ class ConnectionOwnerServer(private val context: Context) {
 
     @Volatile private var closed = false
 
+    // режим только выбранные: сам Android тут вне VPN, и его DNS приходит в туннель без владельца
+    @Volatile var systemOutsideVpn = false
+
     // время ответа в микросекундах, для замера цены поиска на телефоне
     private val timings = ArrayList<Long>()
     private var answered = 0L
@@ -80,10 +83,20 @@ class ConnectionOwnerServer(private val context: Context) {
             InetSocketAddress(InetAddresses.parseNumericAddress(dstIp), dstPort.toInt()),
         )
         // так система отвечает и про приложение вне VPN, привязавшее сокет к tun0: это имя ловит правило защиты адреса сервера
-        if (uid == Process.INVALID_UID) return OUTSIDE_VPN
+        if (uid == Process.INVALID_UID) {
+            return if (systemOutsideVpn && isSystemDns(dstIp, dstPort.toInt())) "" else OUTSIDE_VPN
+        }
         return packages.getOrPut(uid) {
             context.packageManager.getPackagesForUid(uid)?.firstOrNull() ?: ""
         }
+    }
+
+    // сам Android ходит только на наш DNS в туннеле и на сервер строгого Частного DNS, чьих адресов приложению не выдают
+    private fun isSystemDns(dstIp: String, dstPort: Int): Boolean = when {
+        dstPort != 53 && dstPort != 853 -> false
+        dstIp == KeqdisVpnService.TUN_DNS_ADDRESS -> true
+        dstPort == 853 -> cm.getLinkProperties(cm.activeNetwork)?.privateDnsServerName != null
+        else -> false
     }
 
     private fun record(micros: Long, outsideVpn: Boolean) {

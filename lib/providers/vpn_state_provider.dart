@@ -560,7 +560,6 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         enabled: Platform.isAndroid &&
             connectionMode == ConnectionMode.tun &&
             settings.protectServerAddress,
-        routingMode: routingMode,
       );
 
       final mihomoApi = MihomoApiSession();

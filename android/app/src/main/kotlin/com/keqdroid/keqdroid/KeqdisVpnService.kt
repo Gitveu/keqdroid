@@ -179,6 +179,7 @@ class KeqdisVpnService : VpnService() {
     @Volatile private var quickCoreDeaths:    Int                   = 0
     @Volatile private var tunInterface:       ParcelFileDescriptor? = null
     @Volatile private var ownerServer:        ConnectionOwnerServer? = null
+    @Volatile private var tunOnlySelected:    Boolean               = false
     @Volatile private var cleanupDone:       Boolean              = false
     @Volatile private var activeSocksPort:   Int                  = 2080
 
@@ -869,6 +870,7 @@ class KeqdisVpnService : VpnService() {
 
     // свой пакет мимо туннеля: ядро работает под нашим uid, без protect() его сокеты зациклились бы
     private fun applyAppFilter(b: Builder, inc: List<String>, exc: List<String>) {
+        tunOnlySelected = false
         if (inc.isNotEmpty()) {
             // считаем добавленные: если невалидны все, establish() на Huawei/Honor возвращает null
             var addedInc = 0
@@ -884,6 +886,7 @@ class KeqdisVpnService : VpnService() {
                 NativeLog.w("KEQDIS", "buildTun: include list produced 0 valid apps, falling back to full tunnel")
                 runCatching { b.addDisallowedApplication(packageName) }
             }
+            tunOnlySelected = addedInc > 0
         } else {
             runCatching { b.addDisallowedApplication(packageName) }
             exc.forEach { pkg ->
@@ -1237,6 +1240,7 @@ class KeqdisVpnService : VpnService() {
         } else {
             null
         }
+        owner?.systemOutsideVpn = tunOnlySelected
         val pid = NativeHelper.startCore(
             binary, sessionConfigFor(config, coreKind), filesDir.absolutePath,
             CORE_LOG_FILE, coreKind, tunFd, owner?.name ?: "",

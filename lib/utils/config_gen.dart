@@ -2299,7 +2299,6 @@ class ConfigGeneratorV2 {
     return {
       'inboundTag': [_tunInboundTag],
       'process': [kOutsideVpnOwner],
-      if (guard == OwnerGuard.connections) 'port': '1-52,54-852,854-65535',
       'outboundTag': blockTag,
     };
   }

@@ -18,10 +18,11 @@ rule. Without the key it stays an unknown owner, as before.
 With keqdroid-owner-guard: all the DNS hijack asks as well. It answers before
 any rule runs, and it sends TXT and CH queries upstream through the server:
 "whoami.cloudflare TXT CH" sent into the tun came back with the server
-address. "connections" leaves DNS alone: with "only selected apps" the
-system's own DNS and Private DNS (DoT from AID_DNS) come with no owner the
-VPN may see, and rejecting them would take DNS away from the selected apps.
-keqdroid lets port 853 through in the rule then too.
+address. "connections" leaves DNS alone; keqdroid no longer writes it. With
+"only selected apps" the system's own DNS and Private DNS (DoT from AID_DNS)
+come with no owner the VPN may see, and rejecting them would take DNS away
+from the selected apps. The app knows them by address (its own DNS in the
+tun, or port 853 while strict Private DNS is on) and answers empty for them.
 
 No answer from the app (socket closed, app gone) lets the connection
 through: the guard rejects only what the system named as not the VPN's.
