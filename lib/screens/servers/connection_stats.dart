@@ -28,18 +28,20 @@ String _formatVpnDuration(Duration? d) {
 }
 
 class _ConnectionStats extends ConsumerWidget {
-  const _ConnectionStats({super.key, this.fill = false});
+  const _ConnectionStats({super.key, this.fill = false, this.withTime = true});
 
   final bool fill;
+  final bool withTime;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final (showTraffic, showTime, showSplit) = ref.watch(
+    final (showTraffic, timeSetting, showSplit) = ref.watch(
       settingsNotifierProvider.select((async) {
         final s = async.value ?? const AppSettings();
         return (s.showTrafficStats, s.showConnectionTime, s.showTrafficSplit);
       }),
     );
+    final showTime = withTime && timeSetting;
     final showAnyTraffic = showTraffic || showSplit;
     if (!showAnyTraffic && !showTime) return const SizedBox.shrink();
 

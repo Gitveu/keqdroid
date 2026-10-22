@@ -125,6 +125,7 @@ class _ModernConnectPanel extends ConsumerWidget {
                             ),
                             if (activeServer != null)
                               _ServerTags(server: activeServer),
+                            if (isConnected) const _UptimeLine(),
                           ],
                         ),
                       ),
@@ -154,7 +155,11 @@ class _ModernConnectPanel extends ConsumerWidget {
                     curve: Curves.easeOutCubic,
                     alignment: Alignment.topCenter,
                     child: isConnected
-                        ? const _ConnectionStats(key: ValueKey('stats'), fill: true)
+                        ? const _ConnectionStats(
+                            key: ValueKey('stats'),
+                            fill: true,
+                            withTime: false,
+                          )
                         : const SizedBox(
                             key: ValueKey('stats-hidden'),
                             width: double.infinity,
@@ -234,6 +239,50 @@ class _ModernConnectPanel extends ConsumerWidget {
                 style: textTheme
                     .emphasized(textTheme.titleMedium)
                     ?.copyWith(color: AppTheme.text(context)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// время под сервером: отдельной ячейкой оно занимало бы целую строку панели
+class _UptimeLine extends ConsumerWidget {
+  const _UptimeLine();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final show = ref.watch(
+      settingsNotifierProvider.select(
+        (async) => (async.value ?? const AppSettings()).showConnectionTime,
+      ),
+    );
+    if (!show) return const SizedBox.shrink();
+    final duration = ref.watch(
+      vpnStateProvider.select((a) => a.value?.duration),
+    );
+    final textTheme = Theme.of(context).textTheme;
+    final color = AppTheme.textLight(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: ExpressiveSpacing.small),
+      child: Semantics(
+        label: context.l10n.statsTimeLabel,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.schedule_rounded,
+              size: ExpressiveIconSize.inline,
+              color: color,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              ltrIsolate(_formatVpnDuration(duration)),
+              style: textTheme.labelLarge?.copyWith(
+                color: color,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ],

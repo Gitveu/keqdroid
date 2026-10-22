@@ -9,6 +9,7 @@ import 'package:keqdroid/providers/halloween_provider.dart';
 import 'package:keqdroid/providers/providers.dart';
 import 'package:keqdroid/screens/servers_tab.dart';
 import 'package:keqdroid/services/vpn_engine.dart';
+import 'package:keqdroid/shared/ui/stat_strip.dart';
 
 import '../helpers/fake_tunnel_backend.dart';
 import '../helpers/test_storage.dart';
@@ -41,9 +42,10 @@ class _FakeSettings extends SettingsNotifier {
 }
 
 class _FakeVpn extends VpnStateNotifier {
+  _FakeVpn(this._state);
+  final VpnState _state;
   @override
-  Future<VpnState> build() async =>
-      const VpnState(status: VpnStatus.disconnected);
+  Future<VpnState> build() async => _state;
 }
 
 class _NoHalloween extends HalloweenActiveNotifier {
@@ -53,7 +55,12 @@ class _NoHalloween extends HalloweenActiveNotifier {
 
 final _l10n = AppLocalizationsEn();
 
-Future<void> _pump(WidgetTester tester, {required bool modern}) async {
+Future<void> _pump(
+  WidgetTester tester, {
+  required bool modern,
+  VpnState vpn = const VpnState(status: VpnStatus.disconnected),
+  AppSettings settings = const AppSettings(),
+}) async {
   tester.view.physicalSize = const Size(412, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -64,12 +71,12 @@ Future<void> _pump(WidgetTester tester, {required bool modern}) async {
         storageProvider.overrideWithValue(storage!),
         serversProvider.overrideWith(_FakeServers.new),
         settingsNotifierProvider.overrideWith(
-          () => _FakeSettings(
-            const AppSettings().copyWith(modernConnectPanel: modern),
-          ),
+          () => _FakeSettings(settings.copyWith(modernConnectPanel: modern)),
         ),
-        vpnStateProvider.overrideWith(_FakeVpn.new),
+        vpnStateProvider.overrideWith(() => _FakeVpn(vpn)),
         halloweenActiveProvider.overrideWith(_NoHalloween.new),
+        // настоящий запрос IP выхода повторяется через 3 и 10 секунд и переживает тест
+        exitIpProvider.overrideWith((ref) async => null),
         vpnEngineProvider.overrideWithValue(
           VpnEngine.withBackend(FakeTunnelBackend()),
         ),
@@ -95,6 +102,25 @@ void main() {
     expect(find.text('Poland'), findsNWidgets(2));
     expect(find.textContaining('44 ms'), findsNWidgets(2));
     expect(find.text(_l10n.vpnTapToConnect('Poland')), findsNothing);
+  });
+
+  testWidgets('время работы стоит под сервером, а не строкой во всю ширину', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      modern: true,
+      vpn: const VpnState(
+        status: VpnStatus.connected,
+        duration: Duration(minutes: 5, seconds: 31),
+      ),
+      settings: const AppSettings().copyWith(
+        showTrafficStats: false,
+        showConnectionTime: true,
+      ),
+    );
+    expect(find.textContaining('5m 31s'), findsOneWidget);
+    expect(find.byType(StatStrip), findsNothing);
   });
 
   testWidgets('«Легаси» остаётся прежней шапкой', (tester) async {
