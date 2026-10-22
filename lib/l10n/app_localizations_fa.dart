@@ -1764,12 +1764,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get splitTunnelingReconnectHint => 'تغییرات بعد از اتصال دوبارهٔ VPN اعمال می‌شوند';
 
   @override
-  String get splitProtectServerAddress => 'محافظت از آدرس سرور در برابر برنامه‌های بیرون از VPN';
-
-  @override
-  String get splitProtectServerAddressHint => 'وگرنه برنامه‌ای که بیرون از VPN است می‌تواند از راه تونل وصل شود و آدرس سرور را ببیند';
-
-  @override
   String serversDeleteConfirm(Object name) {
     return 'مطمئنید که «$name» حذف شود؟';
   }
@@ -2344,7 +2338,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get connectionsAppNamesHint => 'نام برنامه را سیستم می‌دهد و فقط اتصال‌های زنده را می‌شناسد؛ اتصال‌های بسته نامی ندارند.';
 
   @override
-  String get connectionsSplitTunnelNote => 'برنامه‌هایی که بیرون تونل مانده‌اند اینجا نمی‌آیند: اندروید آن‌ها را از کنار تونل رد می‌کند و ترافیکشان اصلاً به هسته نمی‌رسد.';
+  String get connectionsSplitTunnelNote => 'برنامه‌هایی که بیرون تونل مانده‌اند اینجا نمی‌آیند: اندروید آن‌ها را از کنار تونل رد می‌کند. ردیفی با قانون outside-vpn یعنی چنین برنامه‌ای خودش اتصالی را به تونل فرستاده و هسته آن را رد کرده است.';
 
   @override
   String subscriptionsExpiredOn(String date) {

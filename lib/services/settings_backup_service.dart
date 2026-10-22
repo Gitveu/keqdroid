@@ -133,7 +133,6 @@ class SettingsBackupService {
     'xrayCore',
     'vpnCore',
     'fakeIp',
-    'protectServerAddress',
     'autoConnectLastServer',
     'shareDeviceHwid',
     'notifySubscriptionUpdates',

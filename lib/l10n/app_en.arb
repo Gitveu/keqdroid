@@ -997,8 +997,6 @@
   "hotkeyNoPingData": "No ping results yet, run a ping test first",
   "clipboardNoSubscriptionLink": "Clipboard has no subscription link (http/https)",
   "splitTunnelingReconnectHint": "Changes apply after reconnecting the VPN",
-  "splitProtectServerAddress": "Protect server address from apps outside VPN",
-  "splitProtectServerAddressHint": "Otherwise an app outside VPN can connect through the tunnel and see the server address",
   "serversDeleteConfirm": "Are you sure you want to delete \"{name}\"?",
   "@serversDeleteConfirm": {
     "placeholders": {
@@ -1204,7 +1202,7 @@
   "connectionsVerdictBlock": "BLOCKED",
   "connectionsClosed": "closed",
   "connectionsAppNamesHint": "App names come from the system, and it knows only live connections, so closed ones stay unnamed.",
-  "connectionsSplitTunnelNote": "Apps kept out of the tunnel are not listed here: Android routes them past it, so their traffic never reaches the core.",
+  "connectionsSplitTunnelNote": "Apps kept out of the tunnel are not listed here: Android routes them past it. A row with the outside-vpn rule means such an app pushed a connection into the tunnel itself and the core refused it.",
   "subscriptionsExpiredOn": "Subscription expired on {date}",
   "@subscriptionsExpiredOn": {
     "placeholders": {

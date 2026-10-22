@@ -1778,12 +1778,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get splitTunnelingReconnectHint => 'Изменения применятся после переподключения VPN';
 
   @override
-  String get splitProtectServerAddress => 'Защищать адрес сервера от приложений вне VPN';
-
-  @override
-  String get splitProtectServerAddressHint => 'Иначе приложение мимо VPN может подключиться через туннель и увидеть адрес сервера';
-
-  @override
   String serversDeleteConfirm(Object name) {
     return 'Удалить сервер «$name»?';
   }
@@ -2360,7 +2354,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get connectionsAppNamesHint => 'Название приложения сообщает система, а она знает только живые соединения, поэтому у закрытых имени не будет.';
 
   @override
-  String get connectionsSplitTunnelNote => 'Приложения, выведенные из туннеля, здесь не появятся: Android пускает их мимо, и до ядра их трафик не доходит.';
+  String get connectionsSplitTunnelNote => 'Приложения, выведенные из туннеля, здесь не появятся: Android пускает их мимо. Строка с правилом outside-vpn значит, что такое приложение само полезло в туннель, и ядро его не пустило.';
 
   @override
   String subscriptionsExpiredOn(String date) {

@@ -1768,12 +1768,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get splitTunnelingReconnectHint => 'Änderungen gelten nach dem erneuten Verbinden des VPN';
 
   @override
-  String get splitProtectServerAddress => 'Serveradresse vor Apps außerhalb des VPN schützen';
-
-  @override
-  String get splitProtectServerAddressHint => 'Sonst kann sich eine App außerhalb des VPN durch den Tunnel verbinden und die Serveradresse sehen';
-
-  @override
   String serversDeleteConfirm(Object name) {
     return 'Server „$name“ wirklich löschen?';
   }
@@ -2348,7 +2342,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get connectionsAppNamesHint => 'App-Namen liefert das System, und es kennt nur offene Verbindungen – geschlossene bleiben ohne Namen.';
 
   @override
-  String get connectionsSplitTunnelNote => 'Apps außerhalb des Tunnels stehen hier nicht: Android leitet sie daran vorbei, ihr Datenverkehr erreicht den Kern nie.';
+  String get connectionsSplitTunnelNote => 'Apps außerhalb des Tunnels stehen hier nicht: Android leitet sie daran vorbei. Eine Zeile mit der Regel outside-vpn heißt, dass so eine App selbst eine Verbindung in den Tunnel geschickt und der Kern sie abgewiesen hat.';
 
   @override
   String subscriptionsExpiredOn(String date) {

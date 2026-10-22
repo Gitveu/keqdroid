@@ -557,9 +557,10 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       final mihomoPicked = vpnBackend == VpnBackend.mihomo;
 
       final ownerGuard = ownerGuardFor(
-        enabled: Platform.isAndroid &&
-            connectionMode == ConnectionMode.tun &&
-            settings.protectServerAddress,
+        android: Platform.isAndroid,
+        tun: connectionMode == ConnectionMode.tun,
+        routingMode: routingMode,
+        sdkInt: await ref.read(androidSdkIntProvider.future),
       );
 
       final mihomoApi = MihomoApiSession();

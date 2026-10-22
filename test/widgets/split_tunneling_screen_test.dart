@@ -5,7 +5,6 @@ import 'package:keqdroid/app/app.dart';
 import 'package:keqdroid/l10n/app_localizations.dart';
 import 'package:keqdroid/models/app_info.dart';
 import 'package:keqdroid/models/app_settings.dart';
-import 'package:keqdroid/platform/platform_bootstrap.dart';
 import 'package:keqdroid/providers/providers.dart';
 import 'package:keqdroid/screens/split_tunneling_screen.dart';
 import 'package:keqdroid/services/vpn_engine.dart';
@@ -45,15 +44,8 @@ class _FakeSplit extends SplitTunnelingNotifier {
 }
 
 class _FakeSettings extends SettingsNotifier {
-  _FakeSettings([this._initial = const AppSettings()]);
-
-  final AppSettings _initial;
-
   @override
-  Future<AppSettings> build() async => _initial;
-
-  @override
-  Future<void> save(AppSettings settings) async => state = AsyncData(settings);
+  Future<AppSettings> build() async => const AppSettings();
 }
 
 class _FakeVpn extends VpnStateNotifier {
@@ -118,8 +110,6 @@ Future<void> _pump(
   Size size = const Size(1080, 2160),
   double pixelRatio = 3,
   List<AppInfo>? apps,
-  AppSettings settings = const AppSettings(),
-  int? sdkInt,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = pixelRatio;
@@ -132,8 +122,7 @@ Future<void> _pump(
         splitTunnelingProvider.overrideWith(
           () => _FakeSplit(SplitTunnelingState(excludePackages: excludes)),
         ),
-        settingsNotifierProvider.overrideWith(() => _FakeSettings(settings)),
-        androidSdkIntProvider.overrideWith((ref) async => sdkInt),
+        settingsNotifierProvider.overrideWith(_FakeSettings.new),
         vpnStateProvider.overrideWith(() => _FakeVpn(status)),
         // Без этого экран поднимает НАСТОЯЩИЙ бэкенд туннеля (через него идут
         // иконки приложений), а на Linux его dispose зовёт gsettings — тест
@@ -359,50 +348,5 @@ void main() {
     final bar = tester.widget<SliverAppBar>(find.byType(SliverAppBar));
     expect(bar.expandedHeight, isNull);
     expect(bar.pinned, isTrue);
-  });
-  group('защита адреса сервера', () {
-    setUp(() => PlatformBootstrap.debugIsDesktopOverride = false);
-    tearDown(() => PlatformBootstrap.debugIsDesktopOverride = null);
-
-    final title = find.text('Защищать адрес сервера от приложений вне VPN');
-
-    testWidgets('Android 10+ в режиме VPN: строка есть и выключена', (tester) async {
-      await _pump(tester, sdkInt: 29, excludes: {'ru.sberbank.online'});
-
-      expect(tester.takeException(), isNull);
-      expect(title, findsOneWidget);
-      final toggle = find.descendant(
-        of: find.ancestor(of: title, matching: find.byType(ExpressiveGroupTile)),
-        matching: find.byType(Switch),
-      );
-      expect(tester.widget<Switch>(toggle).value, isFalse);
-
-      await tester.tap(title);
-      await tester.pumpAndSettle();
-      expect(tester.widget<Switch>(toggle).value, isTrue);
-    });
-
-    testWidgets('Android 9: владельцев система не называет, строки нет', (tester) async {
-      await _pump(tester, sdkInt: 28);
-      expect(title, findsNothing);
-    });
-
-    testWidgets('режим Прокси: туннеля нет, строки нет', (tester) async {
-      await _pump(
-        tester,
-        sdkInt: 34,
-        settings: const AppSettings(
-          connectionMode: 'proxy',
-          connectionModeChosen: true,
-        ),
-      );
-      expect(title, findsNothing);
-    });
-
-    testWidgets('на ПК строки нет', (tester) async {
-      PlatformBootstrap.debugIsDesktopOverride = true;
-      await _pump(tester, sdkInt: 34);
-      expect(title, findsNothing);
-    });
   });
 }

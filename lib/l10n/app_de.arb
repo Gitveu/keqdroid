@@ -942,8 +942,6 @@
   "hotkeyNoPingData": "Noch keine Ping-Ergebnisse, starte zuerst einen Ping-Test",
   "clipboardNoSubscriptionLink": "Die Zwischenablage enthält keinen Abonnement-Link (http/https)",
   "splitTunnelingReconnectHint": "Änderungen gelten nach dem erneuten Verbinden des VPN",
-  "splitProtectServerAddress": "Serveradresse vor Apps außerhalb des VPN schützen",
-  "splitProtectServerAddressHint": "Sonst kann sich eine App außerhalb des VPN durch den Tunnel verbinden und die Serveradresse sehen",
   "serversDeleteConfirm": "Server „{name}“ wirklich löschen?",
   "@serversDeleteConfirm": {
     "placeholders": {
@@ -1149,7 +1147,7 @@
   "connectionsVerdictBlock": "BLOCKIERT",
   "connectionsClosed": "geschlossen",
   "connectionsAppNamesHint": "App-Namen liefert das System, und es kennt nur offene Verbindungen – geschlossene bleiben ohne Namen.",
-  "connectionsSplitTunnelNote": "Apps außerhalb des Tunnels stehen hier nicht: Android leitet sie daran vorbei, ihr Datenverkehr erreicht den Kern nie.",
+  "connectionsSplitTunnelNote": "Apps außerhalb des Tunnels stehen hier nicht: Android leitet sie daran vorbei. Eine Zeile mit der Regel outside-vpn heißt, dass so eine App selbst eine Verbindung in den Tunnel geschickt und der Kern sie abgewiesen hat.",
   "subscriptionsExpiredOn": "Abonnement am {date} abgelaufen",
   "@subscriptionsExpiredOn": {
     "placeholders": {

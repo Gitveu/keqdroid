@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/models/app_settings.dart';
+import 'package:keqdroid/tunnel/app_routing_mode.dart';
 import 'package:keqdroid/utils/config_gen.dart';
 import 'package:keqdroid/utils/desktop_tun.dart';
 import 'package:keqdroid/utils/mihomo_config_gen.dart';
@@ -138,10 +139,24 @@ String _m(
     );
 
 void main() {
-  // DNS самого Android в режиме только выбранные пропускает мост по адресу, правило от режима не зависит
-  test('защита включается переключателем', () {
-    expect(ownerGuardFor(enabled: false), OwnerGuard.off);
-    expect(ownerGuardFor(enabled: true), OwnerGuard.all);
+  // переключателя нет: защита там, где сплит выводит приложения из VPN, на Android 10+ в режиме VPN
+  test('когда защита включена', () {
+    OwnerGuard on({
+      bool android = true,
+      bool tun = true,
+      AppRoutingMode mode = AppRoutingMode.allExceptSelected,
+      int? sdk = 37,
+    }) =>
+        ownerGuardFor(android: android, tun: tun, routingMode: mode, sdkInt: sdk);
+
+    expect(on(), OwnerGuard.all);
+    expect(on(mode: AppRoutingMode.onlySelected), OwnerGuard.all);
+    expect(on(sdk: 29), OwnerGuard.all);
+    expect(on(sdk: null), OwnerGuard.all);
+    expect(on(mode: AppRoutingMode.allProxy), OwnerGuard.off);
+    expect(on(sdk: 28), OwnerGuard.off);
+    expect(on(tun: false), OwnerGuard.off);
+    expect(on(android: false), OwnerGuard.off);
   });
 
   group('xray', () {

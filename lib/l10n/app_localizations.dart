@@ -3305,18 +3305,6 @@ abstract class AppLocalizations {
   /// **'Changes apply after reconnecting the VPN'**
   String get splitTunnelingReconnectHint;
 
-  /// No description provided for @splitProtectServerAddress.
-  ///
-  /// In en, this message translates to:
-  /// **'Protect server address from apps outside VPN'**
-  String get splitProtectServerAddress;
-
-  /// No description provided for @splitProtectServerAddressHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Otherwise an app outside VPN can connect through the tunnel and see the server address'**
-  String get splitProtectServerAddressHint;
-
   /// No description provided for @serversDeleteConfirm.
   ///
   /// In en, this message translates to:
@@ -4442,7 +4430,7 @@ abstract class AppLocalizations {
   /// No description provided for @connectionsSplitTunnelNote.
   ///
   /// In en, this message translates to:
-  /// **'Apps kept out of the tunnel are not listed here: Android routes them past it, so their traffic never reaches the core.'**
+  /// **'Apps kept out of the tunnel are not listed here: Android routes them past it. A row with the outside-vpn rule means such an app pushed a connection into the tunnel itself and the core refused it.'**
   String get connectionsSplitTunnelNote;
 
   /// No description provided for @subscriptionsExpiredOn.

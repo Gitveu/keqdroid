@@ -1764,12 +1764,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get splitTunnelingReconnectHint => '更改将在重新连接 VPN 后生效';
 
   @override
-  String get splitProtectServerAddress => '防止 VPN 外的应用获取服务器地址';
-
-  @override
-  String get splitProtectServerAddressHint => '否则 VPN 外的应用可以经隧道连接并看到服务器地址';
-
-  @override
   String serversDeleteConfirm(Object name) {
     return '确定要删除服务器“$name”吗？';
   }
@@ -2343,7 +2337,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectionsAppNamesHint => '应用名称由系统提供，而系统只知道仍在进行的连接，已关闭的连接不会显示名称。';
 
   @override
-  String get connectionsSplitTunnelNote => '被排除在隧道之外的应用不会列出：Android 让它们绕过隧道，其流量根本不会到达内核。';
+  String get connectionsSplitTunnelNote => '被排除在隧道之外的应用不会列出：Android 让它们绕过隧道。带有 outside-vpn 规则的条目表示这类应用自行把连接发进隧道，被内核拒绝。';
 
   @override
   String subscriptionsExpiredOn(String date) {

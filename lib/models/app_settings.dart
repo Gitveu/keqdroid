@@ -62,7 +62,6 @@ class AppSettings {
   final String vpnCore;
 
   final bool fakeIp;
-  final bool protectServerAddress;
   final Map<String, String> hotkeys;
   final bool serversTwoColumns;
   final int serversColumns;
@@ -132,7 +131,6 @@ class AppSettings {
     this.coreEngine = coreEngineKeqrnel,
     this.vpnCore = vpnCoreXray,
     this.fakeIp = false,
-    this.protectServerAddress = false,
     this.hotkeys = const {},
     this.serversTwoColumns = false,
     this.serversColumns = 2,
@@ -193,7 +191,6 @@ class AppSettings {
     'coreEngine': coreEngine,
     'vpnCore': vpnCore,
     'fakeIp': fakeIp,
-    'protectServerAddress': protectServerAddress,
     'hotkeys': hotkeys,
     'serversTwoColumns': serversTwoColumns,
     'serversColumns': serversColumns,
@@ -285,7 +282,6 @@ class AppSettings {
       vpnCore: normalizeVpnCore(json['vpnCore'] as String?),
       // mihomoFakeIp: старое имя ключа, до 26.09.2026
       fakeIp: json['fakeIp'] as bool? ?? json['mihomoFakeIp'] as bool? ?? false,
-      protectServerAddress: json['protectServerAddress'] as bool? ?? false,
       hotkeys: _readHotkeys(json['hotkeys']),
       serversTwoColumns: json['serversTwoColumns'] as bool? ?? false,
       serversColumns: normalizeServersColumns(json['serversColumns']),
@@ -445,7 +441,6 @@ class AppSettings {
     String? coreEngine,
     String? vpnCore,
     bool? fakeIp,
-    bool? protectServerAddress,
     Map<String, String>? hotkeys,
     bool? serversTwoColumns,
     int? serversColumns,
@@ -507,7 +502,6 @@ class AppSettings {
         coreEngine: coreEngine ?? this.coreEngine,
         vpnCore: vpnCore ?? this.vpnCore,
         fakeIp: fakeIp ?? this.fakeIp,
-        protectServerAddress: protectServerAddress ?? this.protectServerAddress,
         hotkeys: hotkeys ?? this.hotkeys,
         serversTwoColumns: serversTwoColumns ?? this.serversTwoColumns,
         serversColumns:
@@ -587,7 +581,6 @@ class AppSettings {
               coreEngine == other.coreEngine &&
               vpnCore == other.vpnCore &&
               fakeIp == other.fakeIp &&
-              protectServerAddress == other.protectServerAddress &&
               serversTwoColumns == other.serversTwoColumns &&
               serversColumns == other.serversColumns &&
               modernConnectPanel == other.modernConnectPanel &&
@@ -657,7 +650,6 @@ class AppSettings {
     coreEngine,
     vpnCore,
     fakeIp,
-    protectServerAddress,
     serversTwoColumns,
     serversColumns,
     modernConnectPanel,

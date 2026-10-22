@@ -17,7 +17,6 @@ import 'package:keqdroid/shared/ui/tv_focus.dart';
 
 import '../models/app_info.dart';
 import '../providers/providers.dart';
-import '../services/tunnel_session_builder.dart';
 import '../platform/platform_bootstrap.dart';
 import '../tunnel/connection_mode.dart';
 import '../tunnel/tunnel_state.dart';
@@ -304,12 +303,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
     final proxyModeOnDesktop = _isDesktop &&
         settings?.connectionModeEnum == ConnectionMode.proxy;
     final appsLoaded = appsAsync.hasValue;
-    // без туннеля закрывать нечего, а Android ниже 10 владельцев не называет
-    final showGuard = !_isDesktop &&
-        settings != null &&
-        TunnelSessionBuilder.resolveMode(settings, isAndroid: true) ==
-            ConnectionMode.tun &&
-        (ref.watch(androidSdkIntProvider).value ?? 0) >= 29;
     final vpnStatus = ref.watch(
       vpnStateProvider.select((a) => a.value?.status),
     );
@@ -365,10 +358,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
                 sliver: SliverList.list(
                   children: [
                     _ModeSelector(current: _mode, onChanged: _setMode),
-                    if (showGuard) ...[
-                      const SizedBox(height: ExpressiveSpacing.medium),
-                      const _ServerAddressGuardTile(),
-                    ],
                     if (tunnelActive) ...[
                       const SizedBox(height: ExpressiveSpacing.medium),
                       ExpressiveNotice(
@@ -499,62 +488,6 @@ class _SplitTunnelingScreenState extends ConsumerState<SplitTunnelingScreen>
           child: Text(l10n.splitClear),
         ),
     ];
-  }
-}
-
-class _ServerAddressGuardTile extends ConsumerWidget {
-  const _ServerAddressGuardTile();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context)!;
-    final theme = Theme.of(context);
-    final on = ref.watch(
-      settingsNotifierProvider.select((a) => a.value?.protectServerAddress ?? false),
-    );
-
-    Future<void> toggle(bool v) async {
-      final s = await ref.read(settingsNotifierProvider.future);
-      await ref
-          .read(settingsNotifierProvider.notifier)
-          .save(s.copyWith(protectServerAddress: v));
-    }
-
-    return ExpressiveGroup(
-      children: [
-        ExpressiveGroupTile(
-          padding: const EdgeInsets.all(16),
-          onTap: () => toggle(!on),
-          child: Row(
-            children: [
-              const ExpressiveIconBadge(
-                icon: Icons.vpn_lock_rounded,
-                accent: ExpressiveAccent.secondary,
-              ),
-              const SizedBox(width: ExpressiveSpacing.large),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.splitProtectServerAddress,
-                      style: theme.textTheme.titleMedium
-                          ?.copyWith(color: AppTheme.text(context)),
-                    ),
-                    Text(
-                      l10n.splitProtectServerAddressHint,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: AppTheme.textLight(context)),
-                    ),
-                  ],
-                ),
-              ),
-              Switch(value: on, onChanged: toggle),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 }
 

@@ -942,8 +942,6 @@
   "hotkeyNoPingData": "暂无延迟数据，请先进行延迟测试",
   "clipboardNoSubscriptionLink": "剪贴板中没有订阅链接（http/https）",
   "splitTunnelingReconnectHint": "更改将在重新连接 VPN 后生效",
-  "splitProtectServerAddress": "防止 VPN 外的应用获取服务器地址",
-  "splitProtectServerAddressHint": "否则 VPN 外的应用可以经隧道连接并看到服务器地址",
   "serversDeleteConfirm": "确定要删除服务器“{name}”吗？",
   "@serversDeleteConfirm": {
     "placeholders": {
@@ -1149,7 +1147,7 @@
   "connectionsVerdictBlock": "已阻止",
   "connectionsClosed": "已关闭",
   "connectionsAppNamesHint": "应用名称由系统提供，而系统只知道仍在进行的连接，已关闭的连接不会显示名称。",
-  "connectionsSplitTunnelNote": "被排除在隧道之外的应用不会列出：Android 让它们绕过隧道，其流量根本不会到达内核。",
+  "connectionsSplitTunnelNote": "被排除在隧道之外的应用不会列出：Android 让它们绕过隧道。带有 outside-vpn 规则的条目表示这类应用自行把连接发进隧道，被内核拒绝。",
   "subscriptionsExpiredOn": "订阅已于 {date} 到期",
   "@subscriptionsExpiredOn": {
     "placeholders": {
