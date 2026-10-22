@@ -1,0 +1,180 @@
+Answer DNS that the app cannot tie to an owner with addresses only.
+
+With "only selected apps" in keqdroid's VPN the system's own DNS arrives in
+the tun with no owner the VPN may see (OEM firmware sending app queries as
+AID_DNS, the network stack resolving the Private DNS server name). The app
+recognizes it by address, our DNS in the tun, and answers empty so the guard
+lets it through (mihomo-uid-owner-guard.patch). An app outside the VPN can
+send its own query to the same address, and the hijack relayed it upstream
+through the server: "whoami.cloudflare TXT CH" came back with the server
+address (checked on a Pixel 6a on 2026-10-22).
+
+Such queries now get A and AAAA answered and everything else refused, the
+way xray's dns outbound treats all of them. Queries with a known owner are
+untouched. The flag rides the context into resolver.relayDnsPacket, which
+all three hijack paths (TCP and both UDP ones) go through.
+
+Applies after mihomo-uid-owner-handshake.patch; the name keeps it sorted
+after it.
+
+diff --git a/component/resolver/relay.go b/component/resolver/relay.go
+--- a/component/resolver/relay.go
++++ b/component/resolver/relay.go
+@@ -85,12 +85,35 @@ func RelayDnsConn(ctx context.Context, conn net.Conn, readTimeout time.Duration)
+ 	return nil
+ }
+ 
++type addressesOnlyKey struct{}
++
++// WithAddressesOnly makes the relay answer only A and AAAA questions and
++// refuse the rest, as xray's dns outbound does. keqdroid, see
++// tool/patches/mihomo-uid-owner-hijack-addresses.patch.
++func WithAddressesOnly(ctx context.Context) context.Context {
++	return context.WithValue(ctx, addressesOnlyKey{}, true)
++}
++
++func asksAddressOnly(msg *D.Msg) bool {
++	if len(msg.Question) != 1 || msg.Question[0].Qclass != D.ClassINET {
++		return false
++	}
++	qtype := msg.Question[0].Qtype
++	return qtype == D.TypeA || qtype == D.TypeAAAA
++}
++
+ func relayDnsPacket(ctx context.Context, payload []byte, target []byte, maxSize int) ([]byte, error) {
+ 	msg := &D.Msg{}
+ 	if err := msg.Unpack(payload); err != nil {
+ 		return nil, err
+ 	}
+ 
++	if only, _ := ctx.Value(addressesOnlyKey{}).(bool); only && !asksAddressOnly(msg) {
++		m := new(D.Msg)
++		m.SetRcode(msg, D.RcodeRefused)
++		return m.PackBuffer(target)
++	}
++
+ 	r, err := ServeMsg(ctx, msg)
+ 	if err != nil {
+ 		m := new(D.Msg)
+diff --git a/component/resolver/relay_addresses_only_test.go b/component/resolver/relay_addresses_only_test.go
+new file mode 100644
+--- /dev/null
++++ b/component/resolver/relay_addresses_only_test.go
+@@ -0,0 +1,54 @@
++package resolver
++
++import (
++	"context"
++	"testing"
++
++	D "github.com/miekg/dns"
++)
++
++// keqdroid: queries the app could not tie to an owner get addresses only,
++// see tool/patches/mihomo-uid-owner-hijack-addresses.patch
++func TestRelayAddressesOnly(t *testing.T) {
++	ask := func(name string, qtype, qclass uint16) []byte {
++		m := new(D.Msg)
++		m.SetQuestion(D.Fqdn(name), qtype)
++		m.Question[0].Qclass = qclass
++		b, err := m.Pack()
++		if err != nil {
++			t.Fatal(err)
++		}
++		return b
++	}
++	rcode := func(ctx context.Context, q []byte) int {
++		out, err := relayDnsPacket(ctx, q, make([]byte, SafeDnsPacketSize), SafeDnsPacketSize)
++		if err != nil {
++			t.Fatal(err)
++		}
++		m := new(D.Msg)
++		if err := m.Unpack(out); err != nil {
++			t.Fatal(err)
++		}
++		return m.Rcode
++	}
++	only := WithAddressesOnly(context.Background())
++
++	for _, q := range [][]byte{
++		ask("whoami.cloudflare", D.TypeTXT, D.ClassCHAOS),
++		ask("o-o.myaddr.l.google.com", D.TypeTXT, D.ClassINET),
++		ask("example.com", D.TypeHTTPS, D.ClassINET),
++	} {
++		if got := rcode(only, q); got != D.RcodeRefused {
++			t.Errorf("addresses only: want REFUSED, got %s", D.RcodeToString[got])
++		}
++		// no resolver in the test: past the gate a query fails with SERVFAIL
++		if got := rcode(context.Background(), q); got == D.RcodeRefused {
++			t.Error("without the flag the gate must not refuse")
++		}
++	}
++	for _, qtype := range []uint16{D.TypeA, D.TypeAAAA} {
++		if got := rcode(only, ask("example.com", qtype, D.ClassINET)); got == D.RcodeRefused {
++			t.Errorf("%s must pass the gate", D.TypeToString[qtype])
++		}
++	}
++}
+diff --git a/listener/sing_tun/dns.go b/listener/sing_tun/dns.go
+--- a/listener/sing_tun/dns.go
++++ b/listener/sing_tun/dns.go
+@@ -37,6 +37,9 @@ func (h *ListenerHandler) NewConnection(ctx context.Context, conn net.Conn, meta
+ 			_ = conn.Close()
+ 			return errOutsideVPN
+ 		}
++		if dnsWithoutOwner("tcp", metadata) {
++			ctx = resolver.WithAddressesOnly(ctx)
++		}
+ 		log.Debugln("[DNS] hijack tcp:%s", metadata.Destination.String())
+ 		return resolver.RelayDnsConn(ctx, conn, resolver.DefaultDnsReadTimeout)
+ 	}
+@@ -50,6 +53,9 @@ func (h *ListenerHandler) NewPacket(ctx context.Context, key netip.AddrPort, buf
+ 			buffer.Release()
+ 			return
+ 		}
++		if dnsWithoutOwner("udp", metadata) {
++			ctx = resolver.WithAddressesOnly(ctx)
++		}
+ 		log.Debugln("[DNS] hijack udp:%s from %s", metadata.Destination.String(), metadata.Source.String())
+ 		writer := init(nil)
+ 		rwOptions := network.ReadWaitOptions{
+@@ -69,6 +75,9 @@ func (h *ListenerHandler) NewPacketConnection(ctx context.Context, conn network.
+ 			_ = conn.Close()
+ 			return errOutsideVPN
+ 		}
++		if dnsWithoutOwner("udp", metadata) {
++			ctx = resolver.WithAddressesOnly(ctx)
++		}
+ 		log.Debugln("[DNS] hijack udp:%s from %s", metadata.Destination.String(), metadata.Source.String())
+ 		defer func() { _ = conn.Close() }()
+ 		mutex := sync.Mutex{}
+diff --git a/listener/sing_tun/owner_android.go b/listener/sing_tun/owner_android.go
+--- a/listener/sing_tun/owner_android.go
++++ b/listener/sing_tun/owner_android.go
+@@ -123,3 +123,16 @@ func dnsFromOutsideVPN(network string, metadata M.Metadata) bool {
+ 	pkg, err := askOwnerOf(network, metadata.Source.AddrPort(), metadata.Destination.AddrPort())
+ 	return err == nil && pkg == outsideVPNOwner
+ }
++
++// keqdroid: with only selected apps in the VPN the system's own DNS arrives
++// with no owner the VPN may see, and the app answers empty for it so the
++// guard lets it through. An app outside the VPN can send its query to the
++// same address, so such queries get addresses only: "whoami.cloudflare TXT
++// CH" relayed through the server came back with the server address.
++func dnsWithoutOwner(network string, metadata M.Metadata) bool {
++	if ownerSocket == "" || ownerGuardMode() == "" {
++		return false
++	}
++	pkg, err := askOwnerOf(network, metadata.Source.AddrPort(), metadata.Destination.AddrPort())
++	return err == nil && pkg == ""
++}
+diff --git a/listener/sing_tun/owner_other.go b/listener/sing_tun/owner_other.go
+--- a/listener/sing_tun/owner_other.go
++++ b/listener/sing_tun/owner_other.go
+@@ -6,4 +6,6 @@ import M "github.com/metacubex/sing/common/metadata"
+ 
+ func dnsFromOutsideVPN(string, M.Metadata) bool { return false }
+ 
++func dnsWithoutOwner(string, M.Metadata) bool { return false }
++
+ func (h *ListenerHandler) RejectTCPBeforeHandshake(M.Socksaddr, M.Socksaddr) bool { return false }
