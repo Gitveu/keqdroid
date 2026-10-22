@@ -2820,6 +2820,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appearanceSectionUnderButton => '连接按钮下方';
 
   @override
+  String get appearanceSectionConnectPanel => '服务器页顶部';
+
+  @override
+  String get appearanceConnectPanelLegacy => '经典';
+
+  @override
+  String get appearanceConnectPanelModern => '现代';
+
+  @override
   String get appearanceSectionFeel => '触摸反馈';
 
   @override

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:androidx_graphics_shapes/material_shapes.dart';
+import 'package:androidx_graphics_shapes/shapes.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +23,7 @@ import 'package:keqdroid/shared/ui/haptics.dart';
 import 'package:keqdroid/shared/ui/server_group_anchors.dart';
 import 'package:keqdroid/shared/ui/scroll_hidden_fab.dart';
 import 'package:keqdroid/shared/ui/scroll_jump_overlay.dart';
+import 'package:keqdroid/shared/ui/server_avatar.dart';
 import 'package:keqdroid/shared/ui/server_row.dart';
 import 'package:keqdroid/shared/ui/shape_morph.dart';
 import 'package:keqdroid/shared/ui/shape_loading_indicator.dart';
@@ -70,6 +73,7 @@ part 'servers/server_groups.dart';
 part 'servers/server_tile.dart';
 part 'servers/connection_stats.dart';
 part 'servers/connect_button.dart';
+part 'servers/connect_panel.dart';
 part 'servers/wave_header.dart';
 
 Widget _serversStatusText(
@@ -146,6 +150,19 @@ class _ConnectHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final modern = ref.watch(
+      settingsNotifierProvider.select(
+        (a) => a.value?.modernConnectPanel ?? false,
+      ),
+    );
+    if (modern) {
+      return _ModernConnectPanel(
+        stateCtrl: stateCtrl,
+        waveCtrl: waveCtrl,
+        onToggle: onToggle,
+        onJumpToActive: onJumpToActive,
+      );
+    }
     final vpnStatus = ref.watch(
       vpnStateProvider.select((a) => a.value?.status ?? VpnStatus.disconnected),
     );

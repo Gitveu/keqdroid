@@ -2843,6 +2843,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get appearanceSectionUnderButton => 'Под кнопкой подключения';
 
   @override
+  String get appearanceSectionConnectPanel => 'Верх экрана серверов';
+
+  @override
+  String get appearanceConnectPanelLegacy => 'Легаси';
+
+  @override
+  String get appearanceConnectPanelModern => 'Модерн';
+
+  @override
   String get appearanceSectionFeel => 'Нажатия';
 
   @override

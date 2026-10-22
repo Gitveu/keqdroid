@@ -65,6 +65,7 @@ class AppSettings {
   final Map<String, String> hotkeys;
   final bool serversTwoColumns;
   final int serversColumns;
+  final bool modernConnectPanel;
   final bool amoledBlack;
   final bool seasonalDecor;
   final bool hapticFeedback;
@@ -133,6 +134,7 @@ class AppSettings {
     this.hotkeys = const {},
     this.serversTwoColumns = false,
     this.serversColumns = 2,
+    this.modernConnectPanel = false,
     this.amoledBlack = false,
     this.seasonalDecor = true,
     this.hapticFeedback = true,
@@ -192,6 +194,7 @@ class AppSettings {
     'hotkeys': hotkeys,
     'serversTwoColumns': serversTwoColumns,
     'serversColumns': serversColumns,
+    'modernConnectPanel': modernConnectPanel,
     'amoledBlack': amoledBlack,
     'seasonalDecor': seasonalDecor,
     'hapticFeedback': hapticFeedback,
@@ -282,6 +285,7 @@ class AppSettings {
       hotkeys: _readHotkeys(json['hotkeys']),
       serversTwoColumns: json['serversTwoColumns'] as bool? ?? false,
       serversColumns: normalizeServersColumns(json['serversColumns']),
+      modernConnectPanel: json['modernConnectPanel'] as bool? ?? false,
       amoledBlack: json['amoledBlack'] as bool? ?? false,
       seasonalDecor: json['seasonalDecor'] as bool? ?? true,
       hapticFeedback: json['hapticFeedback'] as bool? ?? true,
@@ -440,6 +444,7 @@ class AppSettings {
     Map<String, String>? hotkeys,
     bool? serversTwoColumns,
     int? serversColumns,
+    bool? modernConnectPanel,
     bool? amoledBlack,
     bool? seasonalDecor,
     bool? hapticFeedback,
@@ -501,6 +506,7 @@ class AppSettings {
         serversTwoColumns: serversTwoColumns ?? this.serversTwoColumns,
         serversColumns:
             normalizeServersColumns(serversColumns ?? this.serversColumns),
+        modernConnectPanel: modernConnectPanel ?? this.modernConnectPanel,
         amoledBlack: amoledBlack ?? this.amoledBlack,
         seasonalDecor: seasonalDecor ?? this.seasonalDecor,
         hapticFeedback: hapticFeedback ?? this.hapticFeedback,
@@ -577,6 +583,7 @@ class AppSettings {
               fakeIp == other.fakeIp &&
               serversTwoColumns == other.serversTwoColumns &&
               serversColumns == other.serversColumns &&
+              modernConnectPanel == other.modernConnectPanel &&
               amoledBlack == other.amoledBlack &&
               seasonalDecor == other.seasonalDecor &&
               hapticFeedback == other.hapticFeedback &&
@@ -645,6 +652,7 @@ class AppSettings {
     fakeIp,
     serversTwoColumns,
     serversColumns,
+    modernConnectPanel,
     amoledBlack,
     seasonalDecor,
     hapticFeedback,

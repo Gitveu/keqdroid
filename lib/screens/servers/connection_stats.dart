@@ -28,7 +28,9 @@ String _formatVpnDuration(Duration? d) {
 }
 
 class _ConnectionStats extends ConsumerWidget {
-  const _ConnectionStats({super.key});
+  const _ConnectionStats({super.key, this.fill = false});
+
+  final bool fill;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -55,6 +57,7 @@ class _ConnectionStats extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(top: ExpressiveSpacing.medium),
       child: StatStrip(
+        fill: fill,
         metrics: [
           if (showAnyTraffic) ...[
             if (split != null) ...[

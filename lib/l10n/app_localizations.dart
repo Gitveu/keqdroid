@@ -5333,6 +5333,24 @@ abstract class AppLocalizations {
   /// **'Under the connect button'**
   String get appearanceSectionUnderButton;
 
+  /// No description provided for @appearanceSectionConnectPanel.
+  ///
+  /// In en, this message translates to:
+  /// **'Top of the servers screen'**
+  String get appearanceSectionConnectPanel;
+
+  /// No description provided for @appearanceConnectPanelLegacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Legacy'**
+  String get appearanceConnectPanelLegacy;
+
+  /// No description provided for @appearanceConnectPanelModern.
+  ///
+  /// In en, this message translates to:
+  /// **'Modern'**
+  String get appearanceConnectPanelModern;
+
   /// No description provided for @appearanceSectionFeel.
   ///
   /// In en, this message translates to:

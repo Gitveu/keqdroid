@@ -151,6 +151,7 @@ class SettingsBackupService {
     'seasonalDecor',
     'serversTwoColumns',
     'serversColumns',
+    'modernConnectPanel',
     'serverIconThemeColors',
     'uiScale',
     'hapticFeedback',

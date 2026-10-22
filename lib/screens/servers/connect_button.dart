@@ -5,10 +5,15 @@ class _ConnectButton extends StatefulWidget {
   final bool isConnecting;
   final VoidCallback? onTap;
 
+  final double size;
+  final Color? idleColor;
+
   const _ConnectButton({
     required this.isConnected,
     required this.isConnecting,
     required this.onTap,
+    this.size = _ConnectButtonState._size,
+    this.idleColor,
   });
 
   @override
@@ -96,10 +101,13 @@ class _ConnectButtonState extends State<_ConnectButton>
 
   double get _phase => widget.isConnected ? 1 : 0;
 
+  // углы и значок вместе с кнопкой: на 88 те же 48 dp сделали бы квадрат кругом
+  double get _scale => widget.size / _size;
+
   @override
   Widget build(BuildContext context) {
     return TvFocusHighlight(
-      radius: BorderRadius.circular(_size / 2),
+      radius: BorderRadius.circular(widget.size / 2),
       child: Builder(builder: _buildButton),
     );
   }
@@ -107,7 +115,7 @@ class _ConnectButtonState extends State<_ConnectButton>
   Widget _buildButton(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final focusFill = TvFocusHighlight.containerOf(context);
-    final unselectedBg = scheme.surfaceContainer;
+    final unselectedBg = widget.idleColor ?? scheme.surfaceContainer;
     final selectedBg = scheme.primary;
 
     return TweenAnimationBuilder<double>(
@@ -144,8 +152,8 @@ class _ConnectButtonState extends State<_ConnectButton>
                     onTapCancel: () => _setPressed(false),
                     customBorder: shape,
                     child: SizedBox(
-                      width: _size,
-                      height: _size,
+                      width: widget.size,
+                      height: widget.size,
                       child: child,
                     ),
                   ),
@@ -166,7 +174,7 @@ class _ConnectButtonState extends State<_ConnectButton>
         child: AnimatedBuilder(
           animation: cycle,
           builder: (context, _) => CustomPaint(
-            size: const Size.square(_size),
+            size: Size.square(widget.size),
             painter: MorphPainter(
               morph: cycle.morph,
               progress: cycle.progress,
@@ -186,7 +194,7 @@ class _ConnectButtonState extends State<_ConnectButton>
     final rest = ShapeBorder.lerp(
       CircleBorder(side: side),
       RoundedRectangleBorder(
-        borderRadius: ExpressiveShape.radius(_selectedCorner),
+        borderRadius: ExpressiveShape.radius(_selectedCorner * _scale),
         side: side,
       ),
       selected,
@@ -194,7 +202,7 @@ class _ConnectButtonState extends State<_ConnectButton>
     return ShapeBorder.lerp(
       rest,
       RoundedRectangleBorder(
-        borderRadius: ExpressiveShape.radius(_pressedCorner),
+        borderRadius: ExpressiveShape.radius(_pressedCorner * _scale),
         side: side,
       ),
       press,
@@ -225,7 +233,7 @@ class _ConnectButtonState extends State<_ConnectButton>
                   ? Icons.pause_rounded
                   : Icons.play_arrow_outlined,
               key: ValueKey(widget.isConnected ? 'pause' : 'play'),
-              size: _iconSize,
+              size: _iconSize * _scale,
               color: widget.isConnected ? scheme.onPrimary : idleIcon,
             ),
     );

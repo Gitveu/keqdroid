@@ -2827,6 +2827,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appearanceSectionUnderButton => 'Under the connect button';
 
   @override
+  String get appearanceSectionConnectPanel => 'Top of the servers screen';
+
+  @override
+  String get appearanceConnectPanelLegacy => 'Legacy';
+
+  @override
+  String get appearanceConnectPanelModern => 'Modern';
+
+  @override
   String get appearanceSectionFeel => 'Touch feedback';
 
   @override

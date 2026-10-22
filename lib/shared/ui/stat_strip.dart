@@ -53,7 +53,11 @@ class StatMetric {
 class StatStrip extends StatelessWidget {
   final List<StatMetric> metrics;
 
-  const StatStrip({super.key, required this.metrics});
+  // во всю ширину: ячейки делят её поровну, значение прижато к значку, а не стоит
+  // посередине места под самое длинное значение
+  final bool fill;
+
+  const StatStrip({super.key, required this.metrics, this.fill = false});
 
   static const double _cellPadding = ExpressiveSpacing.medium;
   static const double _gap = 6;
@@ -82,30 +86,29 @@ class StatStrip extends StatelessWidget {
         for (var i = 0; i < metrics.length; i += columns) {
           rows.add(metrics.skip(i).take(columns).toList());
         }
+        final table = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var r = 0; r < rows.length; r++) ...[
+              if (r > 0)
+                Divider(
+                  height: _divider,
+                  thickness: _divider,
+                  indent: _cellPadding,
+                  endIndent: _cellPadding,
+                  color: scheme.outlineVariant,
+                ),
+              _buildRow(context, rows[r], cellWidth, columns),
+            ],
+          ],
+        );
 
         return DecoratedBox(
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHigh,
             borderRadius: ExpressiveShape.radius(ExpressiveShape.large),
           ),
-          child: IntrinsicWidth(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var r = 0; r < rows.length; r++) ...[
-                  if (r > 0)
-                    Divider(
-                      height: _divider,
-                      thickness: _divider,
-                      indent: _cellPadding,
-                      endIndent: _cellPadding,
-                      color: scheme.outlineVariant,
-                    ),
-                  _buildRow(context, rows[r], cellWidth, columns),
-                ],
-              ],
-            ),
-          ),
+          child: fill ? table : IntrinsicWidth(child: table),
         );
       },
     );
@@ -128,10 +131,17 @@ class StatStrip extends StatelessWidget {
               height: 20,
               color: scheme.outlineVariant,
             ),
-          SizedBox(
-            width: cellWidth,
-            child: i < row.length ? _buildCell(context, row[i]) : null,
-          ),
+          if (fill)
+            Expanded(
+              child: i < row.length
+                  ? _buildCell(context, row[i])
+                  : const SizedBox.shrink(),
+            )
+          else
+            SizedBox(
+              width: cellWidth,
+              child: i < row.length ? _buildCell(context, row[i]) : null,
+            ),
         ],
       ],
     );
@@ -159,7 +169,8 @@ class StatStrip extends StatelessWidget {
           vertical: 10,
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment:
+              fill ? MainAxisAlignment.start : MainAxisAlignment.center,
           children: [
             if (tagWidth > 0) ...[
               SizedBox(
@@ -193,7 +204,7 @@ class StatStrip extends StatelessWidget {
                           ltrIsolate(line.value),
                           style: valueStyle,
                           maxLines: 1,
-                          textAlign: TextAlign.center,
+                          textAlign: fill ? TextAlign.start : TextAlign.center,
                         ),
                       ),
                     ],

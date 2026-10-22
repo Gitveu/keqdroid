@@ -176,6 +176,30 @@ class _AppearanceGeneralTab extends ConsumerWidget {
               ),
             ],
           ),
+          ExpressiveSectionHeader(l10n.appearanceSectionConnectPanel),
+          ExpressiveGroup(
+            children: [
+              ExpressiveGroupTile(
+                padding: const EdgeInsets.all(12),
+                child: ExpressiveConnectedButtons<bool>(
+                  segments: [
+                    ExpressiveSegment(
+                      value: false,
+                      label: l10n.appearanceConnectPanelLegacy,
+                    ),
+                    ExpressiveSegment(
+                      value: true,
+                      label: l10n.appearanceConnectPanelModern,
+                    ),
+                  ],
+                  selected: current.modernConnectPanel,
+                  onChanged: (v) =>
+                      onSave(current.copyWith(modernConnectPanel: v)),
+                  height: 48,
+                ),
+              ),
+            ],
+          ),
           ExpressiveSectionHeader(l10n.appearanceSectionUnderButton),
           ExpressiveGroup(
             children: [

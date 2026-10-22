@@ -2827,6 +2827,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String get appearanceSectionUnderButton => 'Unter der Verbinden-Schaltfläche';
 
   @override
+  String get appearanceSectionConnectPanel => 'Oberer Bereich der Serverliste';
+
+  @override
+  String get appearanceConnectPanelLegacy => 'Klassisch';
+
+  @override
+  String get appearanceConnectPanelModern => 'Modern';
+
+  @override
   String get appearanceSectionFeel => 'Touch-Feedback';
 
   @override

@@ -2822,6 +2822,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String get appearanceSectionUnderButton => 'زیر دکمهٔ اتصال';
 
   @override
+  String get appearanceSectionConnectPanel => 'بالای صفحهٔ سرورها';
+
+  @override
+  String get appearanceConnectPanelLegacy => 'کلاسیک';
+
+  @override
+  String get appearanceConnectPanelModern => 'مدرن';
+
+  @override
   String get appearanceSectionFeel => 'بازخورد لمسی';
 
   @override
