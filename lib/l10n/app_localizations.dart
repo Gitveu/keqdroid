@@ -3305,6 +3305,18 @@ abstract class AppLocalizations {
   /// **'Changes apply after reconnecting the VPN'**
   String get splitTunnelingReconnectHint;
 
+  /// No description provided for @splitProtectServerAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Protect server address from apps outside VPN'**
+  String get splitProtectServerAddress;
+
+  /// No description provided for @splitProtectServerAddressHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Otherwise an app outside VPN can connect through the tunnel and see the server address'**
+  String get splitProtectServerAddressHint;
+
   /// No description provided for @serversDeleteConfirm.
   ///
   /// In en, this message translates to:

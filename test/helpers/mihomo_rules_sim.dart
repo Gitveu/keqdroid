@@ -21,6 +21,7 @@ class SimConn {
     this.ip = '',
     this.resolvesTo = '',
     this.inType = 'TUN',
+    this.port = 443,
   }) : _path = path;
 
   final String process;
@@ -29,6 +30,7 @@ class SimConn {
   final String ip;
   final String resolvesTo;
   final String inType;
+  final int port;
 
   String get path => _path ?? (process.isEmpty ? '' : 'C:\\Apps\\$process');
 }
@@ -249,6 +251,11 @@ class _Sim {
               (t == 'SOCKS' && conn.inType.startsWith('SOCKS'))),
       // Соединения симулятора — TCP.
       'NETWORK' => p.payload.toUpperCase() == 'TCP',
+      'DST-PORT' => p.payload.split('/').any((part) {
+          final range = part.trim().split('-');
+          return conn.port >= int.parse(range.first) &&
+              conn.port <= int.parse(range.last);
+        }),
       'PROCESS-NAME' => conn.process.toLowerCase() == p.payload.toLowerCase(),
       'PROCESS-NAME-REGEX' =>
         RegExp(p.payload, caseSensitive: false).hasMatch(conn.process),

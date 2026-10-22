@@ -944,6 +944,8 @@
   "hotkeyNoPingData": "Нет результатов пинга, сначала запустите проверку",
   "clipboardNoSubscriptionLink": "В буфере нет ссылки подписки (http/https)",
   "splitTunnelingReconnectHint": "Изменения применятся после переподключения VPN",
+  "splitProtectServerAddress": "Защищать адрес сервера от приложений вне VPN",
+  "splitProtectServerAddressHint": "Иначе приложение мимо VPN может подключиться через туннель и увидеть адрес сервера",
   "serversDeleteConfirm": "Удалить сервер «{name}»?",
   "@serversDeleteConfirm": {
     "placeholders": {

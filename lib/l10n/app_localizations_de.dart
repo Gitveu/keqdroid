@@ -1768,6 +1768,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get splitTunnelingReconnectHint => 'Änderungen gelten nach dem erneuten Verbinden des VPN';
 
   @override
+  String get splitProtectServerAddress => 'Serveradresse vor Apps außerhalb des VPN schützen';
+
+  @override
+  String get splitProtectServerAddressHint => 'Sonst kann sich eine App außerhalb des VPN durch den Tunnel verbinden und die Serveradresse sehen';
+
+  @override
   String serversDeleteConfirm(Object name) {
     return 'Server „$name“ wirklich löschen?';
   }

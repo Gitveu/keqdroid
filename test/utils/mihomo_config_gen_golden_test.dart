@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keqdroid/models/app_settings.dart';
 import 'package:keqdroid/models/xray_core_settings.dart';
 import 'package:keqdroid/utils/mihomo_config_gen.dart';
+import 'package:keqdroid/utils/owner_guard.dart';
 import 'package:keqdroid/utils/proxy_chain.dart';
 import 'package:keqdroid/utils/socks5_credentials.dart';
 
@@ -220,8 +221,90 @@ void main() {
         resolvedServerIp: '198.51.100.20',
       );
     });
+
+    // туннель Android: дескриптор держит VpnService, ядро его только читает
+    _golden('android-tun', () {
+      return MihomoConfigGen.generate(
+        'vless://$_uuid@198.51.100.22:443?type=tcp&security=none#androidtun',
+        _settings,
+        socksPort: 2080,
+        httpPort: 2081,
+        tun: _androidTun,
+      );
+    });
+
+    // авторские правила остаются после наших
+    _golden('android-tun-custom-clash', () {
+      return MihomoConfigGen.generate(
+        _clashYaml,
+        _settings,
+        socksPort: 2080,
+        httpPort: 2081,
+        tun: _androidTun,
+      );
+    });
+
+    // защита адреса сервера: правило первым, ключ включает проверку и у DNS-перехвата
+    _golden('android-tun-outside-vpn', () {
+      return MihomoConfigGen.generate(
+        'vless://$_uuid@198.51.100.22:443?type=tcp&security=none#androidtun',
+        _settings,
+        socksPort: 2080,
+        httpPort: 2081,
+        tun: _androidTun,
+        ownerGuard: OwnerGuard.all,
+      );
+    });
+
+    // только выбранные: DoT системы приходит без владельца, DNS ядро перехватывает без проверки
+    _golden('android-tun-outside-vpn-selected', () {
+      return MihomoConfigGen.generate(
+        'vless://$_uuid@198.51.100.22:443?type=tcp&security=none#androidtun',
+        _settings,
+        socksPort: 2080,
+        httpPort: 2081,
+        tun: _androidTun,
+        ownerGuard: OwnerGuard.connections,
+      );
+    });
+
+    _golden('android-tun-custom-clash-outside-vpn', () {
+      return MihomoConfigGen.generate(
+        _clashYaml,
+        _settings,
+        socksPort: 2080,
+        httpPort: 2081,
+        tun: _androidTun,
+        ownerGuard: OwnerGuard.all,
+      );
+    });
   });
 }
+
+const _androidTun = MihomoTunOptions(
+  fromFileDescriptor: true,
+  stack: 'gvisor',
+  autoRoute: false,
+);
+
+const _clashYaml = '''
+mode: rule
+proxies:
+  - name: "NL"
+    type: trojan
+    server: 198.51.100.23
+    port: 443
+    password: password
+    sni: nl.example
+proxy-groups:
+  - name: "Proxy"
+    type: select
+    proxies: ["NL"]
+rules:
+  - DOMAIN-SUFFIX,author.example,DIRECT
+  - DST-PORT,53,DIRECT
+  - MATCH,Proxy
+''';
 
 /// Один кейс: сгенерировать, сравнить с файлом, при `UPDATE_GOLDEN=1` —
 /// перезаписать.

@@ -157,6 +157,12 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
 final settingsNotifierProvider =
 AsyncNotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
 
+// владельца соединения Android называет с 10-й версии (getConnectionOwnerUid), ниже защите адреса сервера не на чем работать
+final androidSdkIntProvider = FutureProvider<int?>((ref) async {
+  if (!Platform.isAndroid) return null;
+  return (await VpnNativeBridge.getNativeInternals())['sdkInt'] as int?;
+});
+
 final activeVpnBackendProvider = Provider<VpnBackend>((ref) {
   final preference = ref.watch(
     settingsNotifierProvider.select(

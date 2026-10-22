@@ -7,6 +7,7 @@ import 'package:keqdroid/models/xray_core_settings.dart';
 import 'package:keqdroid/tunnel/app_routing_mode.dart';
 import 'package:keqdroid/utils/config_gen.dart';
 import 'package:keqdroid/utils/desktop_tun.dart';
+import 'package:keqdroid/utils/owner_guard.dart';
 import 'package:keqdroid/utils/socks5_credentials.dart';
 
 /// Побайтовая отсечка на форму конфига целиком.
@@ -296,6 +297,45 @@ void main() {
       );
     });
 
+    // готовый конфиг на туннеле Android: авторские правила между нашими головой и хвостом
+    _golden('custom-json-native-tun', () {
+      return ConfigGeneratorV2.generateConfig(
+        jsonEncode(_customNativeTun),
+        _settings,
+        nativeTunInbound: true,
+      );
+    });
+
+    // защита адреса сервера: чужое для VPN соединение из туннеля блокируется первым правилом
+    _golden('vless-native-tun-outside-vpn', () {
+      return ConfigGeneratorV2.generateConfig(
+        'vless://$_uuid@198.51.100.25:443?type=tcp&security=none#nativetun',
+        _settings,
+        nativeTunInbound: true,
+        ownerGuard: OwnerGuard.all,
+      );
+    });
+
+    // только выбранные: DNS и DoT системы приходят без владельца, их правило пропускает
+    _golden('vless-native-tun-outside-vpn-selected', () {
+      return ConfigGeneratorV2.generateConfig(
+        'vless://$_uuid@198.51.100.25:443?type=tcp&security=none#nativetun',
+        _settings,
+        nativeTunInbound: true,
+        ownerGuard: OwnerGuard.connections,
+      );
+    });
+
+    // у автора нет blackhole: блок уходит в дописанный keq-block, правило раньше авторских
+    _golden('custom-json-native-tun-outside-vpn', () {
+      return ConfigGeneratorV2.generateConfig(
+        jsonEncode(_customNativeTun),
+        _settings,
+        nativeTunInbound: true,
+        ownerGuard: OwnerGuard.all,
+      );
+    });
+
     _golden('lan-sharing-with-credentials', () {
       return ConfigGeneratorV2.generateConfig(
         'vless://$_uuid@198.51.100.17:443?type=tcp&security=none#lan',
@@ -447,3 +487,38 @@ void _golden(String name, String Function() generate, {bool compact = false}) {
     expect(actual.replaceAll('\r\n', '\n'), expected);
   });
 }
+
+const _customNativeTun = {
+  'outbounds': [
+    {
+      'tag': 'proxy',
+      'protocol': 'vless',
+      'settings': {
+        'vnext': [
+          {
+            'address': '198.51.100.24',
+            'port': 443,
+            'users': [
+              {'id': _uuid, 'encryption': 'none'},
+            ],
+          },
+        ],
+      },
+    },
+    {'tag': 'direct', 'protocol': 'freedom'},
+  ],
+  'routing': {
+    'rules': [
+      {
+        'type': 'field',
+        'domain': ['domain:author.example'],
+        'outboundTag': 'direct',
+      },
+      {
+        'type': 'field',
+        'port': '53',
+        'outboundTag': 'direct',
+      },
+    ],
+  },
+};

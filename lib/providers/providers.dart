@@ -58,6 +58,7 @@ import '../utils/host_ipv6.dart';
 import '../utils/process_name_utils.dart';
 import '../utils/mihomo_api_session.dart';
 import '../utils/mihomo_config_gen.dart';
+import '../utils/owner_guard.dart';
 import '../utils/proxy_chain.dart';
 import '../utils/route_servers.dart';
 import '../utils/routing_profiles.dart';

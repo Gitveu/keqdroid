@@ -1764,6 +1764,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get splitTunnelingReconnectHint => 'تغییرات بعد از اتصال دوبارهٔ VPN اعمال می‌شوند';
 
   @override
+  String get splitProtectServerAddress => 'محافظت از آدرس سرور در برابر برنامه‌های بیرون از VPN';
+
+  @override
+  String get splitProtectServerAddressHint => 'وگرنه برنامه‌ای که بیرون از VPN است می‌تواند از راه تونل وصل شود و آدرس سرور را ببیند';
+
+  @override
   String serversDeleteConfirm(Object name) {
     return 'مطمئنید که «$name» حذف شود؟';
   }

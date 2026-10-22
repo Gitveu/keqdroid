@@ -1764,6 +1764,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get splitTunnelingReconnectHint => '更改将在重新连接 VPN 后生效';
 
   @override
+  String get splitProtectServerAddress => '防止 VPN 外的应用获取服务器地址';
+
+  @override
+  String get splitProtectServerAddressHint => '否则 VPN 外的应用可以经隧道连接并看到服务器地址';
+
+  @override
   String serversDeleteConfirm(Object name) {
     return '确定要删除服务器“$name”吗？';
   }

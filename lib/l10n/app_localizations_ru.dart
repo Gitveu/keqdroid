@@ -1778,6 +1778,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get splitTunnelingReconnectHint => 'Изменения применятся после переподключения VPN';
 
   @override
+  String get splitProtectServerAddress => 'Защищать адрес сервера от приложений вне VPN';
+
+  @override
+  String get splitProtectServerAddressHint => 'Иначе приложение мимо VPN может подключиться через туннель и увидеть адрес сервера';
+
+  @override
   String serversDeleteConfirm(Object name) {
     return 'Удалить сервер «$name»?';
   }

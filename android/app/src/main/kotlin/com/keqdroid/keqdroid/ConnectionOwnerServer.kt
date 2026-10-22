@@ -30,6 +30,7 @@ class ConnectionOwnerServer(private val context: Context) {
     // время ответа в микросекундах, для замера цены поиска на телефоне
     private val timings = ArrayList<Long>()
     private var answered = 0L
+    private var outside = 0L
 
     init {
         Thread({ acceptLoop() }, "keqdis-owner").apply { isDaemon = true }.start()
@@ -65,7 +66,7 @@ class ConnectionOwnerServer(private val context: Context) {
             val pkg = runCatching { ownerOf(line) }.getOrDefault("")
             it.outputStream.write("$pkg\n".toByteArray())
             it.outputStream.flush()
-            record((SystemClock.elapsedRealtimeNanos() - started) / 1000)
+            record((SystemClock.elapsedRealtimeNanos() - started) / 1000, pkg == OUTSIDE_VPN)
         }
     }
 
@@ -78,26 +79,28 @@ class ConnectionOwnerServer(private val context: Context) {
             InetSocketAddress(InetAddresses.parseNumericAddress(srcIp), srcPort.toInt()),
             InetSocketAddress(InetAddresses.parseNumericAddress(dstIp), dstPort.toInt()),
         )
-        if (uid == Process.INVALID_UID) return ""
+        // так система отвечает и про приложение вне VPN, привязавшее сокет к tun0: это имя ловит правило защиты адреса сервера
+        if (uid == Process.INVALID_UID) return OUTSIDE_VPN
         return packages.getOrPut(uid) {
             context.packageManager.getPackagesForUid(uid)?.firstOrNull() ?: ""
         }
     }
 
-    private fun record(micros: Long) {
+    private fun record(micros: Long, outsideVpn: Boolean) {
         val report = synchronized(timings) {
             timings.add(micros)
             answered++
+            if (outsideVpn) outside++
             answered % 500 == 0L
         }
         if (report) logTimings()
     }
 
     private fun logTimings() {
-        val (sorted, total) = synchronized(timings) {
+        val (sorted, total, outsideTotal) = synchronized(timings) {
             val copy = timings.sorted()
             timings.clear()
-            copy to answered
+            Triple(copy, answered, outside)
         }
         if (sorted.isEmpty()) return
         NativeLog.i(
@@ -105,7 +108,12 @@ class ConnectionOwnerServer(private val context: Context) {
             "owner lookups: $total total, last ${sorted.size}: " +
                 "median ${sorted[sorted.size / 2]} us, " +
                 "p95 ${sorted[(sorted.size * 95 / 100).coerceAtMost(sorted.size - 1)]} us, " +
-                "max ${sorted.last()} us",
+                "max ${sorted.last()} us, outside VPN: $outsideTotal",
         )
+    }
+
+    companion object {
+        // то же имя в lib/utils/owner_guard.dart и tool/patches/mihomo-uid-owner-guard.patch
+        const val OUTSIDE_VPN = "keqdroid:outside-vpn"
     }
 }

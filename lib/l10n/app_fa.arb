@@ -549,6 +549,8 @@
   "hotkeyNoPingData": "هنوز نتیجهٔ پینگی نیست — اول یک بار پینگ بگیرید",
   "clipboardNoSubscriptionLink": "در کلیپ‌بورد لینک اشتراکی (http/https) نیست",
   "splitTunnelingReconnectHint": "تغییرات بعد از اتصال دوبارهٔ VPN اعمال می‌شوند",
+  "splitProtectServerAddress": "محافظت از آدرس سرور در برابر برنامه‌های بیرون از VPN",
+  "splitProtectServerAddressHint": "وگرنه برنامه‌ای که بیرون از VPN است می‌تواند از راه تونل وصل شود و آدرس سرور را ببیند",
   "serversDeleteConfirm": "مطمئنید که «{name}» حذف شود؟",
   "errorTunAdminMessage": "حالت TUN در ویندوز به دسترسی مدیر نیاز دارد.",
   "errorTunAdminAction": "برنامه را با دسترسی مدیر اجرا کنید یا در تنظیمات به حالت پروکسی بروید.",

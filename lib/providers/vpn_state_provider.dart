@@ -556,6 +556,13 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       final vpnBackend = choice.backend;
       final mihomoPicked = vpnBackend == VpnBackend.mihomo;
 
+      final ownerGuard = ownerGuardFor(
+        enabled: Platform.isAndroid &&
+            connectionMode == ConnectionMode.tun &&
+            settings.protectServerAddress,
+        routingMode: routingMode,
+      );
+
       final mihomoApi = MihomoApiSession();
       if (mihomoPicked) {
         await mihomoApi.renew();
@@ -611,6 +618,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
               ruleLists: ruleLists,
               routeServers: routeServers,
               appRoutes: appRoutes,
+              ownerGuard: ownerGuard,
             )
           : null;
 
@@ -701,6 +709,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
                   : null,
               routeServers: routeServers,
               appRoutes: appRoutes,
+              ownerGuard: ownerGuard,
             );
 
       if (mihomoPicked &&

@@ -1,0 +1,240 @@
+Reject what an app outside the VPN sends through the tun, behind
+keqdroid-owner-guard.
+
+An app excluded from the VPN (addDisallowedApplication) can still bind a
+socket to tun0: SO_BINDTODEVICE needs no rights since Linux 5.7. Its packets
+then come out of our tun, go through the server, and the app learns the
+server address. The system knows such a socket, but getConnectionOwnerUid
+answers INVALID_UID to the VPN app for any UID the VPN does not cover, so
+mihomo-android-uid-owner.patch got an empty owner and the connection went on
+like any other.
+
+The app now answers "keqdroid:outside-vpn" for INVALID_UID on Android 10+
+(ConnectionOwnerServer.kt). With keqdroid-owner-guard set, that answer is the
+process name, and keqdroid writes
+AND,((IN-TYPE,TUN),(PROCESS-NAME,keqdroid:outside-vpn)),REJECT as the first
+rule. Without the key it stays an unknown owner, as before.
+
+With keqdroid-owner-guard: all the DNS hijack asks as well. It answers before
+any rule runs, and it sends TXT and CH queries upstream through the server:
+"whoami.cloudflare TXT CH" sent into the tun came back with the server
+address. "connections" leaves DNS alone: with "only selected apps" the
+system's own DNS and Private DNS (DoT from AID_DNS) come with no owner the
+VPN may see, and rejecting them would take DNS away from the selected apps.
+keqdroid lets port 853 through in the rule then too.
+
+No answer from the app (socket closed, app gone) lets the connection
+through: the guard rejects only what the system named as not the VPN's.
+
+Applies after mihomo-android-uid-owner.patch and mihomo-udp-per-exit.patch,
+which touch the same files; the name keeps it sorted after both.
+
+diff --git a/config/config.go b/config/config.go
+index 1e14898..013c7b5 100644
+--- a/config/config.go
++++ b/config/config.go
+@@ -62,6 +62,7 @@ type General struct {
+ 	TCPConcurrent     bool                    `json:"tcp-concurrent"`
+ 	FindProcessMode   process.FindProcessMode `json:"find-process-mode"`
+ 	KeqdroidUDPPerExit bool                    `json:"-"`
++	KeqdroidOwnerGuard string                  `json:"-"`
+ 	Sniffing          bool                    `json:"sniffing"`
+ 	GlobalUA          string                  `json:"global-ua"`
+ 	ETagSupport       bool                    `json:"etag-support"`
+@@ -443,6 +444,7 @@ type RawConfig struct {
+ 	TCPConcurrent                 bool                    `yaml:"tcp-concurrent" json:"tcp-concurrent"`
+ 	FindProcessMode               process.FindProcessMode `yaml:"find-process-mode" json:"find-process-mode"`
+ 	KeqdroidUDPPerExit            bool                    `yaml:"keqdroid-udp-per-exit" json:"keqdroid-udp-per-exit"`
++	KeqdroidOwnerGuard            string                  `yaml:"keqdroid-owner-guard" json:"keqdroid-owner-guard"`
+ 	GlobalClientFingerprint       string                  `yaml:"global-client-fingerprint" json:"global-client-fingerprint"`
+ 	GlobalUA                      string                  `yaml:"global-ua" json:"global-ua"`
+ 	ETagSupport                   bool                    `yaml:"etag-support" json:"etag-support"`
+@@ -800,6 +802,7 @@ func parseGeneral(cfg *RawConfig) (*General, error) {
+ 		TCPConcurrent:     cfg.TCPConcurrent,
+ 		FindProcessMode:   cfg.FindProcessMode,
+ 		KeqdroidUDPPerExit: cfg.KeqdroidUDPPerExit,
++		KeqdroidOwnerGuard: cfg.KeqdroidOwnerGuard,
+ 		GlobalUA:          cfg.GlobalUA,
+ 		ETagSupport:       cfg.ETagSupport,
+ 		KeepAliveIdle:     cfg.KeepAliveIdle,
+diff --git a/hub/executor/executor.go b/hub/executor/executor.go
+index e972295..a373ce6 100644
+--- a/hub/executor/executor.go
++++ b/hub/executor/executor.go
+@@ -36,6 +36,7 @@ import (
+ 	authStore "github.com/metacubex/mihomo/listener/auth"
+ 	LC "github.com/metacubex/mihomo/listener/config"
+ 	"github.com/metacubex/mihomo/listener/inner"
++	"github.com/metacubex/mihomo/listener/sing_tun"
+ 	"github.com/metacubex/mihomo/listener/tproxy"
+ 	"github.com/metacubex/mihomo/log"
+ 	"github.com/metacubex/mihomo/ntp/ntp"
+@@ -394,6 +395,7 @@ func updateGeneral(general *config.General, logging bool) {
+ 	tunnel.SetMode(general.Mode)
+ 	tunnel.SetFindProcessMode(general.FindProcessMode)
+ 	tunnel.SetUDPPerExit(general.KeqdroidUDPPerExit)
++	sing_tun.SetOwnerGuard(general.KeqdroidOwnerGuard)
+ 	resolver.DisableIPv6 = !general.IPv6
+ 
+ 	dialer.SetTcpConcurrent(general.TCPConcurrent)
+diff --git a/listener/sing_tun/dns.go b/listener/sing_tun/dns.go
+index 3ae3981..6858a68 100644
+--- a/listener/sing_tun/dns.go
++++ b/listener/sing_tun/dns.go
+@@ -2,6 +2,7 @@ package sing_tun
+ 
+ import (
+ 	"context"
++	"errors"
+ 	"net"
+ 	"net/netip"
+ 	"sync"
+@@ -18,6 +19,9 @@ import (
+ 	"github.com/metacubex/sing/common/network"
+ )
+ 
++// keqdroid, see owner_android.go
++var errOutsideVPN = errors.New("dns from an app outside the VPN")
++
+ func (h *ListenerHandler) ShouldHijackDns(targetAddr netip.AddrPort) bool {
+ 	for _, addrPort := range h.DnsAddrPorts {
+ 		if addrPort == targetAddr || (addrPort.Addr().IsUnspecified() && targetAddr.Port() == 53) {
+@@ -29,6 +33,10 @@ func (h *ListenerHandler) ShouldHijackDns(targetAddr netip.AddrPort) bool {
+ 
+ func (h *ListenerHandler) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
+ 	if h.ShouldHijackDns(metadata.Destination.AddrPort()) {
++		if dnsFromOutsideVPN("tcp", metadata) {
++			_ = conn.Close()
++			return errOutsideVPN
++		}
+ 		log.Debugln("[DNS] hijack tcp:%s", metadata.Destination.String())
+ 		return resolver.RelayDnsConn(ctx, conn, resolver.DefaultDnsReadTimeout)
+ 	}
+@@ -37,6 +45,11 @@ func (h *ListenerHandler) NewConnection(ctx context.Context, conn net.Conn, meta
+ 
+ func (h *ListenerHandler) NewPacket(ctx context.Context, key netip.AddrPort, buffer *buf.Buffer, metadata M.Metadata, init func(natConn network.PacketConn) network.PacketWriter) {
+ 	if h.ShouldHijackDns(metadata.Destination.AddrPort()) {
++		if dnsFromOutsideVPN("udp", metadata) {
++			_ = init(nil)
++			buffer.Release()
++			return
++		}
+ 		log.Debugln("[DNS] hijack udp:%s from %s", metadata.Destination.String(), metadata.Source.String())
+ 		writer := init(nil)
+ 		rwOptions := network.ReadWaitOptions{
+@@ -52,6 +65,10 @@ func (h *ListenerHandler) NewPacket(ctx context.Context, key netip.AddrPort, buf
+ 
+ func (h *ListenerHandler) NewPacketConnection(ctx context.Context, conn network.PacketConn, metadata M.Metadata) error {
+ 	if h.ShouldHijackDns(metadata.Destination.AddrPort()) {
++		if dnsFromOutsideVPN("udp", metadata) {
++			_ = conn.Close()
++			return errOutsideVPN
++		}
+ 		log.Debugln("[DNS] hijack udp:%s from %s", metadata.Destination.String(), metadata.Source.String())
+ 		defer func() { _ = conn.Close() }()
+ 		mutex := sync.Mutex{}
+diff --git a/listener/sing_tun/owner_android.go b/listener/sing_tun/owner_android.go
+index 05ab1f1..5465b45 100644
+--- a/listener/sing_tun/owner_android.go
++++ b/listener/sing_tun/owner_android.go
+@@ -7,11 +7,14 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"net"
++	"net/netip"
+ 	"os"
+ 	"strings"
+ 	"time"
+ 
+ 	"github.com/metacubex/mihomo/constant"
++
++	M "github.com/metacubex/sing/common/metadata"
+ )
+ 
+ // keqdroid: the app that owns the VPN answers on this abstract socket, see
+@@ -29,13 +32,24 @@ func askOwner(metadata *constant.Metadata) (string, error) {
+ 	case *net.UDPAddr:
+ 		dst = raw.AddrPort()
+ 	}
++	pkg, err := askOwnerOf(metadata.NetWork.String(), src, dst)
++	if err != nil {
++		return "", err
++	}
++	if pkg == "" || (pkg == outsideVPNOwner && ownerGuardMode() == "") {
++		return "", errors.New("connection owner not found")
++	}
++	return pkg, nil
++}
++
++func askOwnerOf(network string, src, dst netip.AddrPort) (string, error) {
+ 	conn, err := net.DialTimeout("unix", "@"+ownerSocket, time.Second)
+ 	if err != nil {
+ 		return "", err
+ 	}
+ 	defer conn.Close()
+ 	_ = conn.SetDeadline(time.Now().Add(time.Second))
+-	_, err = fmt.Fprintf(conn, "%s %s %d %s %d\n", metadata.NetWork,
++	_, err = fmt.Fprintf(conn, "%s %s %d %s %d\n", network,
+ 		src.Addr().Unmap(), src.Port(), dst.Addr().Unmap(), dst.Port())
+ 	if err != nil {
+ 		return "", err
+@@ -44,9 +58,17 @@ func askOwner(metadata *constant.Metadata) (string, error) {
+ 	if err != nil {
+ 		return "", err
+ 	}
+-	pkg := strings.TrimSpace(line)
+-	if pkg == "" {
+-		return "", errors.New("connection owner not found")
++	return strings.TrimSpace(line), nil
++}
++
++// keqdroid: with keqdroid-owner-guard: all, DNS hijacked from the tun is
++// checked as well. The hijack answers before any rule runs, and through the
++// core's resolver an app outside the VPN could ask, via the server, who is
++// asking. No answer from the app lets the query through.
++func dnsFromOutsideVPN(network string, metadata M.Metadata) bool {
++	if ownerSocket == "" || ownerGuardMode() != "all" {
++		return false
+ 	}
+-	return pkg, nil
++	pkg, err := askOwnerOf(network, metadata.Source.AddrPort(), metadata.Destination.AddrPort())
++	return err == nil && pkg == outsideVPNOwner
+ }
+diff --git a/listener/sing_tun/owner_guard.go b/listener/sing_tun/owner_guard.go
+new file mode 100644
+index 0000000..90af972
+--- /dev/null
++++ b/listener/sing_tun/owner_guard.go
+@@ -0,0 +1,19 @@
++package sing_tun
++
++import "sync/atomic"
++
++// keqdroid: the app answers this for a connection the system says is not
++// the VPN's own, an app outside the VPN that bound its socket to the tun.
++const outsideVPNOwner = "keqdroid:outside-vpn"
++
++// keqdroid-owner-guard in the config. Empty: that answer counts as an unknown
++// owner, as before the guard. "connections": it becomes the process name, and
++// keqdroid's first rule rejects it. "all": the DNS hijack checks it too.
++var ownerGuard atomic.Value
++
++func SetOwnerGuard(mode string) { ownerGuard.Store(mode) }
++
++func ownerGuardMode() string {
++	mode, _ := ownerGuard.Load().(string)
++	return mode
++}
+diff --git a/listener/sing_tun/owner_other.go b/listener/sing_tun/owner_other.go
+new file mode 100644
+index 0000000..f6e7316
+--- /dev/null
++++ b/listener/sing_tun/owner_other.go
+@@ -0,0 +1,7 @@
++//go:build !android || cmfa
++
++package sing_tun
++
++import M "github.com/metacubex/sing/common/metadata"
++
++func dnsFromOutsideVPN(string, M.Metadata) bool { return false }

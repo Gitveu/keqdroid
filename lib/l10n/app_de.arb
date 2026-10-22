@@ -942,6 +942,8 @@
   "hotkeyNoPingData": "Noch keine Ping-Ergebnisse, starte zuerst einen Ping-Test",
   "clipboardNoSubscriptionLink": "Die Zwischenablage enthält keinen Abonnement-Link (http/https)",
   "splitTunnelingReconnectHint": "Änderungen gelten nach dem erneuten Verbinden des VPN",
+  "splitProtectServerAddress": "Serveradresse vor Apps außerhalb des VPN schützen",
+  "splitProtectServerAddressHint": "Sonst kann sich eine App außerhalb des VPN durch den Tunnel verbinden und die Serveradresse sehen",
   "serversDeleteConfirm": "Server „{name}“ wirklich löschen?",
   "@serversDeleteConfirm": {
     "placeholders": {

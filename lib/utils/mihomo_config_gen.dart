@@ -12,6 +12,7 @@ import 'exit_ip_probe.dart';
 import 'fake_ip.dart';
 import 'hysteria_uri.dart';
 import 'mieru_uri.dart';
+import 'owner_guard.dart';
 import 'process_name_utils.dart';
 import 'proxy_chain.dart';
 import 'route_servers.dart';
@@ -76,6 +77,7 @@ class MihomoConfigGen {
     RuleListDomains ruleLists = RuleListDomains.none,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
+    OwnerGuard ownerGuard = OwnerGuard.off,
   }) =>
       const JsonEncoder.withIndent('  ').convert(
         build(
@@ -95,6 +97,7 @@ class MihomoConfigGen {
           ruleLists: ruleLists,
           routeServers: routeServers,
           appRoutes: appRoutes,
+          ownerGuard: ownerGuard,
         ),
       );
 
@@ -116,12 +119,16 @@ class MihomoConfigGen {
     RuleListDomains ruleLists = RuleListDomains.none,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
+    OwnerGuard ownerGuard = OwnerGuard.off,
   }) {
     // сплит по процессам только на десктопном TUN: на Android его исполняет VpnService
     final processRules = tun != null && !tun.fromFileDescriptor;
     // на Android владельца ядро спрашивает у приложения (mihomo-android-uid-owner.patch)
     final appRules = tun != null ? appRoutes : const <RouteAppRules>[];
-    final findProcess = processRules || appRules.isNotEmpty;
+    final guard =
+        tun != null && tun.fromFileDescriptor ? ownerGuard : OwnerGuard.off;
+    final findProcess =
+        processRules || appRules.isNotEmpty || guard != OwnerGuard.off;
 
     // без правил по процессам режим только выбранные держит финал DIRECT, и в DIRECT уходило всё.
     // там, где процесс не найти, верный режим один: весь трафик
@@ -153,6 +160,7 @@ class MihomoConfigGen {
         ruleLists: ruleLists,
         routeServers: routeServers,
         appRoutes: appRules,
+        ownerGuard: guard,
       );
     }
 
@@ -177,6 +185,7 @@ class MihomoConfigGen {
       // поиск процесса стоит на каждой сессии, включаем только где без него не работают наши правила
       'find-process-mode': findProcess ? 'strict' : 'off',
       if (settings.xrayCore.udpPerAddress) udpPerExitKey: true,
+      if (guard != OwnerGuard.off) ownerGuardKey: guard.name,
       'sniffer': buildSniffer(settings.xrayCore),
       if (buildHosts(settings.xrayCore).isNotEmpty)
         'hosts': buildHosts(settings.xrayCore),
@@ -215,6 +224,7 @@ class MihomoConfigGen {
         ruleLists: ruleLists,
         routeServers: routeServers,
         appRoutes: appRules,
+        ownerGuard: guard,
       ),
     };
   }
@@ -253,6 +263,7 @@ class MihomoConfigGen {
     RuleListDomains ruleLists = RuleListDomains.none,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
+    OwnerGuard ownerGuard = OwnerGuard.off,
   }) {
     final authorProviders = clash.map['rule-providers'];
     final authorSubRules = clash.map['sub-rules'];
@@ -271,6 +282,7 @@ class MihomoConfigGen {
       dns: buildDns(settings, fakeIp: fakeIp),
       // правила по процессам раньше авторских: это решение человека о своей машине
       prependRules: [
+        ?outsideVpnRule(ownerGuard),
         exitIpProbeRule(clash.primaryTarget),
         if (processRules)
           ...buildProcessRules(
@@ -307,8 +319,10 @@ class MihomoConfigGen {
         if (!clash.map.containsKey('hosts') &&
             buildHosts(settings.xrayCore).isNotEmpty)
           'hosts': buildHosts(settings.xrayCore),
-        if (processRules || appRoutes.isNotEmpty) 'find-process-mode': 'strict',
+        if (processRules || appRoutes.isNotEmpty || ownerGuard != OwnerGuard.off)
+          'find-process-mode': 'strict',
         if (settings.xrayCore.udpPerAddress) udpPerExitKey: true,
+        if (ownerGuard != OwnerGuard.off) ownerGuardKey: ownerGuard.name,
         if (tun != null) 'tun': buildTun(tun),
         if (settings.lanSharing) 'listeners': buildLanListeners(settings),
         // наборы автора остаются: его правила на них ссылаются
@@ -1731,8 +1745,10 @@ class MihomoConfigGen {
     RuleListDomains ruleLists = RuleListDomains.none,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
+    OwnerGuard ownerGuard = OwnerGuard.off,
   }) {
     final rules = <String>[
+      ?outsideVpnRule(ownerGuard),
       exitIpProbeRule(proxyTarget),
       ...buildProcessRules(
         routingMode: routingMode,
@@ -1781,6 +1797,19 @@ class MihomoConfigGen {
 
   // читает только наш mihomo, tool/patches/mihomo-udp-per-exit.patch; чужой ключ ядро пропускает
   static const udpPerExitKey = 'keqdroid-udp-per-exit';
+
+  // читает только наш mihomo, tool/patches/mihomo-uid-owner-guard.patch: без ключа ядро не отличает приложение вне VPN,
+  // со значением all проверяет и DNS, который перехватывает раньше правил
+  static const ownerGuardKey = 'keqdroid-owner-guard';
+
+  // первым правилом, раньше авторских
+  static String? outsideVpnRule(OwnerGuard guard) => switch (guard) {
+        OwnerGuard.off => null,
+        OwnerGuard.connections =>
+          'AND,((IN-TYPE,TUN),(PROCESS-NAME,$kOutsideVpnOwner),(NOT,((DST-PORT,853)))),REJECT',
+        OwnerGuard.all =>
+          'AND,((IN-TYPE,TUN),(PROCESS-NAME,$kOutsideVpnOwner)),REJECT',
+      };
 
   static const tunInterfaceRange = '198.18.0.0/30';
 

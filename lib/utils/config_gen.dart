@@ -12,6 +12,7 @@ import '../utils/exit_ip_probe.dart';
 import '../utils/fake_ip.dart';
 import '../utils/geo_asset_index.dart';
 import '../utils/hysteria_uri.dart';
+import '../utils/owner_guard.dart';
 import '../utils/proxy_chain.dart';
 import '../utils/app_routes.dart';
 import '../utils/route_servers.dart';
@@ -33,6 +34,7 @@ class ConfigGeneratorV2 {
     GeoAssetIndex? geoIndex,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
+    OwnerGuard ownerGuard = OwnerGuard.off,
   }) {
     return const JsonEncoder.withIndent('  ').convert(
       _buildXrayConfig(
@@ -45,6 +47,7 @@ class ConfigGeneratorV2 {
         geoIndex: geoIndex,
         routeServers: routeServers,
         appRoutes: appRoutes,
+        ownerGuard: ownerGuard,
       ),
     );
   }
@@ -180,10 +183,14 @@ class ConfigGeneratorV2 {
     GeoAssetIndex? geoIndex,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
+    OwnerGuard ownerGuard = OwnerGuard.off,
   }) {
     final trimmed = input.trim();
     final pc = pingSocksPort == null ? desktopTun : null;
     final tunInbound = nativeTunInbound || pc != null;
+    final guard = pingSocksPort == null && nativeTunInbound && pc == null
+        ? ownerGuard
+        : OwnerGuard.off;
 
     final chain = ProxyChainConfig.tryParse(trimmed);
     final custom = chain == null ? CustomXrayConfig.tryParse(trimmed) : null;
@@ -200,6 +207,7 @@ class ConfigGeneratorV2 {
         desktopTun: pc,
         routeServers: routeServers,
         appRoutes: appRoutes,
+        ownerGuard: guard,
       );
     } else if (custom != null) {
       config = _buildCustomConfig(
@@ -214,6 +222,7 @@ class ConfigGeneratorV2 {
         geoIndex: geoIndex,
         routeServers: routeServers,
         appRoutes: appRoutes,
+        ownerGuard: guard,
       );
     } else {
       final link = _buildLinkOutbound(trimmed, settings);
@@ -232,6 +241,7 @@ class ConfigGeneratorV2 {
         desktopTun: pc,
         routeServers: routeServers,
         appRoutes: appRoutes,
+        ownerGuard: guard,
       );
     }
     if (pc != null) _applyDesktopTunPolicy(config, pc);
@@ -380,6 +390,7 @@ class ConfigGeneratorV2 {
     DesktopTunOptions? desktopTun,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
+    OwnerGuard ownerGuard = OwnerGuard.off,
   }) {
     if (chain.hops.isEmpty) {
       throw ArgumentError('Proxy chain has no nodes');
@@ -423,6 +434,7 @@ class ConfigGeneratorV2 {
       desktopTun: desktopTun,
       routeServers: routeServers,
       appRoutes: appRoutes,
+      ownerGuard: ownerGuard,
     );
   }
 
@@ -785,6 +797,7 @@ class ConfigGeneratorV2 {
     GeoAssetIndex? geoIndex,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
+    OwnerGuard ownerGuard = OwnerGuard.off,
   }) {
     final inbounds = _buildInbounds(
       settings,
@@ -816,8 +829,11 @@ class ConfigGeneratorV2 {
 
     final lanRules = <Map<String, dynamic>>[];
     var blockTag = _existingOutboundTag(custom, 'blackhole');
-    if (settings.lanSharing) {
+    if (settings.lanSharing || ownerGuard != OwnerGuard.off) {
       blockTag ??= _customBlockTag;
+    }
+    final outsideVpn = _outsideVpnRule(ownerGuard, blockTag ?? _customBlockTag);
+    if (settings.lanSharing) {
       lanRules.addAll([
         {
           'type': 'field',
@@ -966,6 +982,7 @@ class ConfigGeneratorV2 {
       for (final rule in [...desktopHead, ...appendRules])
         rule['outboundTag'] as String,
       if (settings.lanSharing) blockTag ?? _customBlockTag,
+      if (outsideVpn != null) outsideVpn['outboundTag'] as String,
       if (routeServers.any((r) => r.address.trim().isNotEmpty)) directTag,
     };
 
@@ -977,6 +994,7 @@ class ConfigGeneratorV2 {
       // LAN-правила раньше авторских: иначе запрос снаружи уехал бы в туннель до запрета, и прокси стал бы открытым
       prependRules: [
         ...desktopHead,
+        if (outsideVpn != null) customRule('outside-vpn', outsideVpn),
         ...lanRules,
         ...tunDnsRules,
         {
@@ -1787,7 +1805,7 @@ class ConfigGeneratorV2 {
 
   static Map<String, dynamic> _wrapConfig(
       List<Map<String, dynamic>> proxyOutbounds, AppSettings settings, String serverAddress, int serverPort,
-      {String? originalServerAddress, List<String> extraServerAddresses = const [], int? pingSocksPort, bool pingHttpInbound = false, bool localInboundsNoAuth = false, bool nativeTunInbound = false, DesktopTunOptions? desktopTun, List<RouteServerOutbound> routeServers = const [], List<RouteAppRules> appRoutes = const []}) {
+      {String? originalServerAddress, List<String> extraServerAddresses = const [], int? pingSocksPort, bool pingHttpInbound = false, bool localInboundsNoAuth = false, bool nativeTunInbound = false, DesktopTunOptions? desktopTun, List<RouteServerOutbound> routeServers = const [], List<RouteAppRules> appRoutes = const [], OwnerGuard ownerGuard = OwnerGuard.off}) {
 
     originalServerAddress ??= serverAddress;
     final isPingMode = pingSocksPort != null;
@@ -1899,6 +1917,9 @@ class ConfigGeneratorV2 {
         rule: rule,
       ));
     }
+
+    final outsideVpn = _outsideVpnRule(ownerGuard, 'block');
+    if (outsideVpn != null) rules.add(rule('outside-vpn', outsideVpn));
 
     rules.add(rule('block-special', {
       'ip': ['169.254.0.0/16', '224.0.0.0/4', '255.255.255.255/32'],
@@ -2268,6 +2289,20 @@ class ConfigGeneratorV2 {
   }
 
   static const _tunInboundTag = 'tun-in';
+
+  // первым правилом: и DNS-перехват, и exit-ip-probe ответили бы приложению вне VPN через сервер
+  static Map<String, dynamic>? _outsideVpnRule(
+    OwnerGuard guard,
+    String blockTag,
+  ) {
+    if (guard == OwnerGuard.off) return null;
+    return {
+      'inboundTag': [_tunInboundTag],
+      'process': [kOutsideVpnOwner],
+      if (guard == OwnerGuard.connections) 'port': '1-52,54-852,854-65535',
+      'outboundTag': blockTag,
+    };
+  }
 
   static const appInboundTags = [
     'socks-in',

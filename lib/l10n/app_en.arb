@@ -997,6 +997,8 @@
   "hotkeyNoPingData": "No ping results yet, run a ping test first",
   "clipboardNoSubscriptionLink": "Clipboard has no subscription link (http/https)",
   "splitTunnelingReconnectHint": "Changes apply after reconnecting the VPN",
+  "splitProtectServerAddress": "Protect server address from apps outside VPN",
+  "splitProtectServerAddressHint": "Otherwise an app outside VPN can connect through the tunnel and see the server address",
   "serversDeleteConfirm": "Are you sure you want to delete \"{name}\"?",
   "@serversDeleteConfirm": {
     "placeholders": {
