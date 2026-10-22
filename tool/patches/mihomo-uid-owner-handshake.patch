@@ -1,0 +1,111 @@
+Answer sing-tun's question before the TCP handshake: refuse a connection
+whose owner the app names as outside the VPN.
+
+With keqdroid-owner-guard set, ListenerHandler implements TCPRejecter from
+sing-tun-reject-before-handshake.patch and asks the app the same way the
+rules do. An app outside the VPN gets a reset instead of a connection that
+opens and dies at keqdroid's first rule. Without the key nothing is asked.
+
+The check before the handshake and the rule after it ask about the same
+connection, so answers are kept for two seconds, as in
+xray-android-uid-owner.patch.
+
+Applies after mihomo-uid-owner-guard.patch; the name keeps it sorted after it.
+
+diff --git a/listener/sing_tun/owner_android.go b/listener/sing_tun/owner_android.go
+--- a/listener/sing_tun/owner_android.go
++++ b/listener/sing_tun/owner_android.go
+@@ -10,6 +10,7 @@ import (
+ 	"net/netip"
+ 	"os"
+ 	"strings"
++	"sync"
+ 	"time"
+ 
+ 	"github.com/metacubex/mihomo/constant"
+@@ -42,16 +43,55 @@ func askOwner(metadata *constant.Metadata) (string, error) {
+ 	return pkg, nil
+ }
+ 
++type ownerAnswer struct {
++	pkg string
++	at  time.Time
++}
++
++// The check before the handshake and the rule after it ask about the same
++// connection; one answer serves both.
++const ownerTTL = 2 * time.Second
++
++var (
++	ownerMu    sync.Mutex
++	ownerCache = map[string]ownerAnswer{}
++)
++
+ func askOwnerOf(network string, src, dst netip.AddrPort) (string, error) {
++	request := fmt.Sprintf("%s %s %d %s %d", network,
++		src.Addr().Unmap(), src.Port(), dst.Addr().Unmap(), dst.Port())
++	now := time.Now()
++	ownerMu.Lock()
++	cached, ok := ownerCache[request]
++	ownerMu.Unlock()
++	if ok && now.Sub(cached.at) < ownerTTL {
++		return cached.pkg, nil
++	}
++	pkg, err := askOwnerSocket(request)
++	if err != nil {
++		return "", err
++	}
++	ownerMu.Lock()
++	if len(ownerCache) >= 1024 {
++		for k, a := range ownerCache {
++			if now.Sub(a.at) >= ownerTTL {
++				delete(ownerCache, k)
++			}
++		}
++	}
++	ownerCache[request] = ownerAnswer{pkg: pkg, at: now}
++	ownerMu.Unlock()
++	return pkg, nil
++}
++
++func askOwnerSocket(request string) (string, error) {
+ 	conn, err := net.DialTimeout("unix", "@"+ownerSocket, time.Second)
+ 	if err != nil {
+ 		return "", err
+ 	}
+ 	defer conn.Close()
+ 	_ = conn.SetDeadline(time.Now().Add(time.Second))
+-	_, err = fmt.Fprintf(conn, "%s %s %d %s %d\n", network,
+-		src.Addr().Unmap(), src.Port(), dst.Addr().Unmap(), dst.Port())
+-	if err != nil {
++	if _, err = fmt.Fprintf(conn, "%s\n", request); err != nil {
+ 		return "", err
+ 	}
+ 	line, err := bufio.NewReader(conn).ReadString('\n')
+@@ -61,6 +101,17 @@ func askOwnerOf(network string, src, dst netip.AddrPort) (string, error) {
+ 	return strings.TrimSpace(line), nil
+ }
+ 
++// keqdroid: sing-tun asks this before it completes a TCP handshake, see
++// sing-tun-reject-before-handshake.patch. An app outside the VPN gets a reset
++// instead of a connection that opens and then dies at the first rule.
++func (h *ListenerHandler) RejectTCPBeforeHandshake(source, destination M.Socksaddr) bool {
++	if ownerSocket == "" || ownerGuardMode() == "" {
++		return false
++	}
++	pkg, err := askOwnerOf("tcp", source.AddrPort(), destination.AddrPort())
++	return err == nil && pkg == outsideVPNOwner
++}
++
+ // keqdroid: with keqdroid-owner-guard: all, DNS hijacked from the tun is
+ // checked as well. The hijack answers before any rule runs, and through the
+ // core's resolver an app outside the VPN could ask, via the server, who is
+diff --git a/listener/sing_tun/owner_other.go b/listener/sing_tun/owner_other.go
+--- a/listener/sing_tun/owner_other.go
++++ b/listener/sing_tun/owner_other.go
+@@ -5,3 +5,5 @@ package sing_tun
+ import M "github.com/metacubex/sing/common/metadata"
+ 
+ func dnsFromOutsideVPN(string, M.Metadata) bool { return false }
++
++func (h *ListenerHandler) RejectTCPBeforeHandshake(M.Socksaddr, M.Socksaddr) bool { return false }

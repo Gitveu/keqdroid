@@ -1,0 +1,42 @@
+Let the handler refuse a TCP connection before the gVisor stack completes the
+handshake.
+
+keqdroid's mihomo on Android rejects connections from apps outside the VPN
+(mihomo-uid-owner-guard.patch): such an app can bind a socket to tun0 with no
+rights since Linux 5.7. The rule ran only after the forwarder had already
+answered the SYN, so the app saw a connection open and then close, which is
+proof that the tun answers. A handler that implements TCPRejecter is now asked
+first and a refusal gets a reset. A handler without the method sees no change.
+
+The answer comes from mihomo-uid-owner-handshake.patch.
+
+Applied to github.com/metacubex/sing-tun at the version mihomo's go.mod pins,
+by tool/build_mihomo.ps1, which points mihomo at the patched copy.
+
+diff --git a/stack_gvisor_tcp.go b/stack_gvisor_tcp.go
+--- a/stack_gvisor_tcp.go
++++ b/stack_gvisor_tcp.go
+@@ -77,7 +77,23 @@ func (f *TCPForwarder) HandlePacket(id stack.TransportEndpointID, pkt *stack.Pac
+ 	return f.forwarder.HandlePacket(id, pkt)
+ }
+ 
++// TCPRejecter is a handler that may refuse a connection before the handshake.
++// keqdroid, see tool/patches/sing-tun-reject-before-handshake.patch.
++type TCPRejecter interface {
++	RejectTCPBeforeHandshake(source M.Socksaddr, destination M.Socksaddr) bool
++}
++
+ func (f *TCPForwarder) Forward(r *tcp.ForwarderRequest) {
++	if rejecter, ok := f.handler.(TCPRejecter); ok {
++		id := r.ID()
++		if rejecter.RejectTCPBeforeHandshake(
++			M.SocksaddrFrom(AddrFromAddress(id.RemoteAddress), id.RemotePort),
++			M.SocksaddrFrom(AddrFromAddress(id.LocalAddress), id.LocalPort),
++		) {
++			r.Complete(true)
++			return
++		}
++	}
+ 	var wq waiter.Queue
+ 	var cancel context.CancelFunc
+ 	if parentDone := f.ctx.Done(); parentDone != nil {

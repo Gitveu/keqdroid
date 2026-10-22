@@ -1,0 +1,174 @@
+Reset, instead of accepting, a TCP connection that an app outside the VPN
+pushes into the tun on Android, behind keqdroid's outside-vpn rule.
+
+An app excluded from the VPN can still bind a socket to tun0 (SO_BINDTODEVICE
+needs no rights since Linux 5.7). keqdroid writes a first rule, tagged
+outside-vpn, that blocks connections the app names as outside the VPN (see
+xray-android-uid-owner.patch and ConnectionOwnerServer.kt). But the gVisor
+stack completes the TCP handshake before routing runs, so such an app saw a
+connection that opened and then closed: proof that the tun answers.
+
+proxy/tun now asks the router for that one rule before the handshake
+(Router.MatchRuleTag applies only the rule with the given tag, nothing above
+it) and answers a match with a reset. No outside-vpn rule in the config means
+no lookup and no change. The owner lookup goes through the finder's two
+second cache, so the routing that follows does not ask the app again. UDP has
+no handshake and keeps being dropped by the rule itself.
+
+Android only (owner_guard_android.go); other platforms get a stub.
+
+Built by tool/build_xray_cores.ps1. Checked against xray-core v26.10.10.
+
+diff --git a/app/router/router.go b/app/router/router.go
+--- a/app/router/router.go
++++ b/app/router/router.go
+@@ -53,6 +53,17 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
+ 	return r.ReloadRules(config, false)
+ }
+ 
++// MatchRuleTag applies only the rule tagged tag. keqdroid: the tun asks it
++// before a TCP handshake, see tool/patches/xray-owner-guard.patch.
++func (r *Router) MatchRuleTag(ctx routing.Context, tag string) bool {
++	for _, rule := range *r.rules.Load() {
++		if rule.RuleTag == tag {
++			return rule.Apply(ctx)
++		}
++	}
++	return false
++}
++
+ // PickRoute implements routing.Router.
+ func (r *Router) PickRoute(ctx routing.Context) (routing.Route, error) {
+ 	if r.script != nil {
+diff --git a/proxy/tun/stack_gvisor.go b/proxy/tun/stack_gvisor.go
+--- a/proxy/tun/stack_gvisor.go
++++ b/proxy/tun/stack_gvisor.go
+@@ -72,6 +72,14 @@ func (t *stackGVisor) Start() error {
+ 			var wq waiter.Queue
+ 			id := r.ID()
+ 
++			if t.handler.rejectBeforeHandshake(
++				net.TCPDestination(net.IPAddress(id.RemoteAddress.AsSlice()), net.Port(id.RemotePort)),
++				net.TCPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort)),
++			) {
++				r.Complete(true)
++				return
++			}
++
+ 			// Perform a TCP three-way handshake.
+ 			ep, err := r.CreateEndpoint(&wq)
+ 			if err != nil {
+diff --git a/app/router/match_rule_tag_test.go b/app/router/match_rule_tag_test.go
+new file mode 100644
+--- /dev/null
++++ b/app/router/match_rule_tag_test.go
+@@ -0,0 +1,59 @@
++package router_test
++
++import (
++	"context"
++	"testing"
++
++	"github.com/golang/mock/gomock"
++	. "github.com/xtls/xray-core/app/router"
++	"github.com/xtls/xray-core/common"
++	"github.com/xtls/xray-core/common/net"
++	"github.com/xtls/xray-core/common/session"
++	routing_session "github.com/xtls/xray-core/features/routing/session"
++	"github.com/xtls/xray-core/testing/mocks"
++)
++
++// keqdroid: the tun asks only the tagged rule before a handshake, so a rule
++// above it must not decide, see tool/patches/xray-owner-guard.patch.
++func TestMatchRuleTagAppliesOnlyThatRule(t *testing.T) {
++	config := &Config{
++		Rule: []*RoutingRule{
++			{
++				TargetTag: &RoutingRule_Tag{Tag: "direct"},
++				RuleTag:   "udp-first",
++				Networks:  []net.Network{net.Network_UDP},
++			},
++			{
++				TargetTag: &RoutingRule_Tag{Tag: "block"},
++				RuleTag:   "outside-vpn",
++				Networks:  []net.Network{net.Network_TCP},
++			},
++		},
++	}
++
++	mockCtl := gomock.NewController(t)
++	defer mockCtl.Finish()
++
++	r := new(Router)
++	common.Must(r.Init(context.TODO(), config, mocks.NewDNSClient(mockCtl), nil, nil))
++
++	routingCtx := func(dest net.Destination) *routing_session.Context {
++		ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{Target: dest}})
++		return routing_session.AsRoutingContext(ctx).(*routing_session.Context)
++	}
++	tcp := routingCtx(net.TCPDestination(net.ParseAddress("1.1.1.1"), 443))
++	udp := routingCtx(net.UDPDestination(net.ParseAddress("1.1.1.1"), 443))
++
++	if !r.MatchRuleTag(tcp, "outside-vpn") {
++		t.Error("tcp should match the outside-vpn rule")
++	}
++	if r.MatchRuleTag(udp, "outside-vpn") {
++		t.Error("udp matches only the rule above, not outside-vpn")
++	}
++	if r.MatchRuleTag(tcp, "udp-first") {
++		t.Error("udp-first must not match tcp")
++	}
++	if r.MatchRuleTag(tcp, "missing") {
++		t.Error("a tag with no rule matches nothing")
++	}
++}
+diff --git a/proxy/tun/owner_guard_android.go b/proxy/tun/owner_guard_android.go
+new file mode 100644
+--- /dev/null
++++ b/proxy/tun/owner_guard_android.go
+@@ -0,0 +1,33 @@
++//go:build android
++
++package tun
++
++import (
++	"github.com/xtls/xray-core/common/net"
++	"github.com/xtls/xray-core/common/session"
++	"github.com/xtls/xray-core/features/routing"
++	routing_session "github.com/xtls/xray-core/features/routing/session"
++)
++
++// keqdroid, see tool/patches/xray-owner-guard.patch: the rule keqdroid writes
++// first when it protects the server address from apps outside the VPN.
++const outsideVPNRuleTag = "outside-vpn"
++
++type ruleTagMatcher interface {
++	MatchRuleTag(ctx routing.Context, tag string) bool
++}
++
++// rejectBeforeHandshake answers before the stack completes a TCP handshake:
++// an app outside the VPN gets a reset, not a connection that opens and dies.
++func (t *Handler) rejectBeforeHandshake(src, dst net.Destination) bool {
++	if t.instance == nil {
++		return false
++	}
++	matcher, ok := t.instance.GetFeature(routing.RouterType()).(ruleTagMatcher)
++	if !ok {
++		return false
++	}
++	ctx := session.ContextWithInbound(t.ctx, &session.Inbound{Source: src, Tag: t.tag})
++	ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{Target: dst, OriginalTarget: dst}})
++	return matcher.MatchRuleTag(routing_session.AsRoutingContext(ctx), outsideVPNRuleTag)
++}
+diff --git a/proxy/tun/owner_guard_other.go b/proxy/tun/owner_guard_other.go
+new file mode 100644
+--- /dev/null
++++ b/proxy/tun/owner_guard_other.go
+@@ -0,0 +1,7 @@
++//go:build !android
++
++package tun
++
++import "github.com/xtls/xray-core/common/net"
++
++func (t *Handler) rejectBeforeHandshake(net.Destination, net.Destination) bool { return false }

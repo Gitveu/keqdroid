@@ -148,6 +148,57 @@ try {
 }
 finally { Pop-Location }
 
+# ---- Patched sing-tun ------------------------------------------------------
+# tool/patches/sing-tun-*.patch change mihomo's TUN library, not mihomo. It is
+# taken at the version mihomo's go.mod pins, from the module cache like mihomo
+# itself, patched, and wired in with a replace.
+$singTunPatches = Get-ChildItem (Join-Path $PSScriptRoot "patches") -Filter "sing-tun-*.patch" | Sort-Object Name
+if ($singTunPatches.Count -gt 0) {
+    $gomod = Get-Content (Join-Path $src "go.mod") -Raw
+    $m = [regex]::Match($gomod, 'github\.com/metacubex/sing-tun (v\S+)')
+    if (-not $m.Success) { Write-Error "mihomo $Version go.mod does not require github.com/metacubex/sing-tun" }
+    $singTunVersion = $m.Groups[1].Value
+    $singTunSrc = Join-Path $BuildDir "sing-tun-$singTunVersion"
+    if (Test-Path $singTunSrc) {
+        Get-ChildItem $singTunSrc -Recurse -Force | ForEach-Object { $_.Attributes = 'Normal' }
+        Remove-Item -Recurse -Force $singTunSrc
+    }
+
+    Push-Location $BuildDir
+    try {
+        & $go.Source mod download "github.com/metacubex/sing-tun@$singTunVersion"
+        if ($LASTEXITCODE -ne 0) { Write-Error "go mod download failed for sing-tun $singTunVersion" }
+    }
+    finally { Pop-Location }
+
+    $singTunCached = Join-Path $modCache "github.com\metacubex\sing-tun@$singTunVersion"
+    if (-not (Test-Path $singTunCached)) { Write-Error "module not found in cache: $singTunCached" }
+    Copy-Item -Recurse -Force $singTunCached $singTunSrc
+    Get-ChildItem $singTunSrc -Recurse -Force | ForEach-Object { $_.Attributes = 'Normal' }
+
+    Push-Location $singTunSrc
+    try {
+        foreach ($p in $singTunPatches) {
+            Write-Host ("Applying {0} ..." -f $p.Name)
+            & $git.Source apply --verbose --whitespace=nowarn $p.FullName
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error ("patch {0} does not apply to sing-tun {1} - rebase it before building" -f $p.Name, $singTunVersion)
+            }
+        }
+    }
+    finally { Pop-Location }
+
+    # two quoted arguments: PowerShell splits a bare -replace=... token at the dot.
+    # relative path: the replace lands in the binary's build info, and a full one
+    # would ship this machine's folders to every user
+    Push-Location $src
+    try {
+        & $go.Source mod edit '-replace' "github.com/metacubex/sing-tun=../sing-tun-$singTunVersion"
+        if ($LASTEXITCODE -ne 0) { Write-Error "go mod edit -replace failed for sing-tun" }
+    }
+    finally { Pop-Location }
+}
+
 # ---- Build -----------------------------------------------------------------
 # -checklinkname=0: mihomo's TLS stack reaches into runtime internals with
 # //go:linkname, which Go 1.23+ refuses by default.
