@@ -2,12 +2,14 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../models/app_settings.dart';
 import '../../models/server_item.dart';
 import '../../models/server_name_utils.dart';
 import '../../services/ping_service.dart';
 import '../../utils/bidi.dart';
 import 'app_theme.dart';
 import 'expressive.dart';
+import 'expressive_group.dart';
 import 'halloween/halloween_icons.dart';
 import 'server_avatar.dart';
 
@@ -56,7 +58,37 @@ class ServerRow extends StatelessWidget {
   static const double _inlineChrome = 124;
   static const double _inlineMinText = 140;
 
-  static const double cardGap = ExpressiveSpacing.small;
+  static bool fitsCard(double width, TextScaler textScaler) =>
+      width >= _cardChrome + textScaler.scale(16) / 16 * _cardMinText;
+
+  // 16 + флаг 40 + 12 слева, 16 справа. меньше 100 на текст: на Pixel 6a при 120% резались имена, при 140% и пинг
+  static const double _cardChrome = 84;
+  static const double _cardMinText = 100;
+
+  static const double listSideInset = 16;
+
+  static int wantedColumns(AppSettings settings) =>
+      settings.serversTwoColumns ? settings.serversColumns : 1;
+
+  static double columnCell(double listWidth, int columns) =>
+      (listWidth -
+          listSideInset * 2 -
+          ExpressiveListSegment.gap * (columns + 1)) /
+      columns;
+
+  static int fittingColumns(
+    double listWidth,
+    TextScaler textScaler,
+    int wanted,
+  ) {
+    for (var n = wanted; n > 1; n--) {
+      final cell = columnCell(listWidth, n);
+      if (fitsInline(cell, textScaler) || fitsCard(cell, textScaler)) return n;
+    }
+    return 1;
+  }
+
+  static const double cardGap = ExpressiveListSegment.gap;
 
   static const double _avatarSize = 40;
   static const double _cardVerticalPadding = ExpressiveSpacing.medium;

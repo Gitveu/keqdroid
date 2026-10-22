@@ -63,9 +63,9 @@ class _ServersListPanel extends ConsumerWidget {
 
 
     // параметром сверху: вотч внутри карточки перестроил бы уходящий при кросс-фейде список
-    final twoColumns = ref.watch(
+    final wantedColumns = ref.watch(
       settingsNotifierProvider.select(
-        (a) => a.value?.serversTwoColumns ?? false,
+        (a) => a.value == null ? 1 : ServerRow.wantedColumns(a.value!),
       ),
     );
     final textScaler = MediaQuery.textScalerOf(context);
@@ -74,12 +74,11 @@ class _ServersListPanel extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final layout = _ServerListLayout.resolve(
-          twoColumns: twoColumns,
+          wantedColumns: wantedColumns,
           width: constraints.maxWidth,
           textScaler: textScaler,
         );
-        final rowExtent =
-            layout == _ServerListLayout.cards ? cardHeight : ServerRow.height;
+        final rowExtent = layout.isCards ? cardHeight : ServerRow.height;
 
         final list = ServerGroupAnchorScope(
           leadingInset: topPadding + 12,
@@ -253,31 +252,46 @@ const _listTopFadeSolidStop =
 
 const _subCardRowHeight = ServerRow.height;
 
-const _listSideInset = 16.0;
+const _listSideInset = ServerRow.listSideInset;
 
-enum _ServerListLayout {
-  list,
-  grid,
-  cards;
+enum _RowKind { list, grid, cards }
 
-  int get columns => this == list ? 1 : 2;
+class _ServerListLayout {
+  const _ServerListLayout._(this.kind, this.columns);
 
-  double get gap =>
-      this == cards ? ServerRow.cardGap : ExpressiveListSegment.gap;
+  static const list = _ServerListLayout._(_RowKind.list, 1);
+
+  final _RowKind kind;
+  final int columns;
+
+  bool get isCards => kind == _RowKind.cards;
+
+  double get gap => ExpressiveListSegment.gap;
 
   ServerRowLayout get rowLayout =>
-      this == cards ? ServerRowLayout.card : ServerRowLayout.inline;
+      isCards ? ServerRowLayout.card : ServerRowLayout.inline;
 
   static _ServerListLayout resolve({
-    required bool twoColumns,
+    required int wantedColumns,
     required double width,
     required TextScaler textScaler,
   }) {
-    if (!twoColumns) return list;
-    final segment = (width - _listSideInset * 2) / 2 -
-        ExpressiveListSegment.gap * 1.5;
-    return ServerRow.fitsInline(segment, textScaler) ? grid : cards;
+    final columns = ServerRow.fittingColumns(width, textScaler, wantedColumns);
+    if (columns == 1) return list;
+    final cell = ServerRow.columnCell(width, columns);
+    final kind =
+        ServerRow.fitsInline(cell, textScaler) ? _RowKind.grid : _RowKind.cards;
+    return _ServerListLayout._(kind, columns);
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _ServerListLayout &&
+      other.kind == kind &&
+      other.columns == columns;
+
+  @override
+  int get hashCode => Object.hash(kind, columns);
 }
 
 const _subCardHeaderIconSize = 32.0;
@@ -929,9 +943,7 @@ class _SubCardState extends ConsumerState<_SubCard> {
         layout: layout.rowLayout,
         height: widget.rowExtent,
         accent: accent,
-        radius: layout == _ServerListLayout.cards
-            ? ExpressiveShape.radius(ExpressiveShape.medium)
-            : ExpressiveListSegment.segmentRadius(
+        radius: ExpressiveListSegment.segmentRadius(
                 index: index,
                 count: servers.length,
                 columns: columns,

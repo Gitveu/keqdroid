@@ -426,7 +426,16 @@
   "themePaletteHint": "Light/Dark still switches on its own",
   "themeUseSystemColors": "Use system accent colors",
   "themeColorThemesTitle": "Color themes",
-  "serversTwoColumnsTitle": "Two columns",
+  "serversColumnsTitle": "Multiple columns",
+  "serversColumnsNoRoom": "Don't fit at this interface size",
+  "serversColumnsOnlyFit": "Only {count} fit at this interface size",
+  "@serversColumnsOnlyFit": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "appearanceServerIconThemeColors": "Flagless server icons in theme colours",
   "settingsLanProxyTitle": "LAN Proxy",
   "settingsOff": "Off",

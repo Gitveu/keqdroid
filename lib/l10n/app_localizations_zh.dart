@@ -535,7 +535,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get themeColorThemesTitle => '颜色主题';
 
   @override
-  String get serversTwoColumnsTitle => '两列显示';
+  String get serversColumnsTitle => '多列显示';
+
+  @override
+  String get serversColumnsNoRoom => '当前界面大小下放不下';
+
+  @override
+  String serversColumnsOnlyFit(int count) {
+    return '当前界面大小下只能放 $count 列';
+  }
 
   @override
   String get appearanceServerIconThemeColors => '无国旗的图标使用主题色';

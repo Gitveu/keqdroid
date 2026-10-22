@@ -105,6 +105,40 @@ void main() {
     }
   });
 
+  // Pixel 6a: 411 dp, на телефоне 100% интерфейса рисуются как 0.85
+  double pixel6a(double uiScale) => 411.4 / (uiScale * 0.85);
+  int fit(double width, int wanted, [TextScaler s = TextScaler.noScaling]) =>
+      ServerRow.fittingColumns(width, s, wanted);
+
+  test('две колонки сворачиваются в одну, когда и карточке тесно', () {
+    for (final scale in [0.7, 1.0, 1.15]) {
+      expect(fit(pixel6a(scale), 2), 2, reason: 'размер интерфейса $scale');
+    }
+    for (final scale in [1.2, 1.4]) {
+      expect(fit(pixel6a(scale), 2), 1, reason: 'размер интерфейса $scale');
+    }
+  });
+
+  test('три колонки на телефоне помещаются только в мелком интерфейсе', () {
+    expect(fit(pixel6a(0.8), 3), 3);
+    expect(fit(pixel6a(1.0), 3), 2);
+    expect(fit(pixel6a(1.4), 3), 1);
+  });
+
+  test('крупный системный шрифт тоже сворачивает в одну колонку', () {
+    expect(fit(484, 2), 2);
+    expect(fit(484, 2, const TextScaler.linear(1.5)), 1);
+  });
+
+  test('ячейка в две колонки считается так же, как в тесте строки', () {
+    for (final width in [320.0, 412.0, 800.0]) {
+      expect(
+        ServerRow.columnCell(width, 2),
+        moreOrLessEquals(_cell(width, ExpressiveListSegment.gap)),
+      );
+    }
+  });
+
   testWidgets('карточка умещается в свой шаг при любом масштабе шрифта', (
     tester,
   ) async {

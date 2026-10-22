@@ -150,6 +150,7 @@ class SettingsBackupService {
     'amoledBlack',
     'seasonalDecor',
     'serversTwoColumns',
+    'serversColumns',
     'serverIconThemeColors',
     'uiScale',
     'hapticFeedback',

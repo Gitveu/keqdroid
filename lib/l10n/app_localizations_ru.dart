@@ -549,7 +549,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get themeColorThemesTitle => 'Цветовые темы';
 
   @override
-  String get serversTwoColumnsTitle => 'Показывать в две колонки';
+  String get serversColumnsTitle => 'Показывать в несколько колонок';
+
+  @override
+  String get serversColumnsNoRoom => 'При таком размере интерфейса не помещаются';
+
+  @override
+  String serversColumnsOnlyFit(int count) {
+    return 'При таком размере интерфейса помещаются только $count';
+  }
 
   @override
   String get appearanceServerIconThemeColors => 'Красить значки серверов без флага в цвет темы';

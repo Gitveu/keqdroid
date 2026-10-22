@@ -539,7 +539,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String get themeColorThemesTitle => 'Farbdesigns';
 
   @override
-  String get serversTwoColumnsTitle => 'Zwei Spalten';
+  String get serversColumnsTitle => 'Mehrere Spalten';
+
+  @override
+  String get serversColumnsNoRoom => 'Passen bei dieser Oberflächengröße nicht';
+
+  @override
+  String serversColumnsOnlyFit(int count) {
+    return 'Bei dieser Oberflächengröße passen nur $count';
+  }
 
   @override
   String get appearanceServerIconThemeColors => 'Serversymbole ohne Flagge in Designfarben';

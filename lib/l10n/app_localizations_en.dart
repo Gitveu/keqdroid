@@ -539,7 +539,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get themeColorThemesTitle => 'Color themes';
 
   @override
-  String get serversTwoColumnsTitle => 'Two columns';
+  String get serversColumnsTitle => 'Multiple columns';
+
+  @override
+  String get serversColumnsNoRoom => 'Don\'t fit at this interface size';
+
+  @override
+  String serversColumnsOnlyFit(int count) {
+    return 'Only $count fit at this interface size';
+  }
 
   @override
   String get appearanceServerIconThemeColors => 'Flagless server icons in theme colours';

@@ -1,5 +1,8 @@
 part of '../settings_tab.dart';
 
+Widget appearanceGeneralTabForTest(AppSettings current) =>
+    _AppearanceGeneralTab(current: current, onSave: (_) async {});
+
 class _ThemeCustomizationCard extends ConsumerWidget {
   final AsyncValue<AppSettings> settingsAsync;
   const _ThemeCustomizationCard({required this.settingsAsync});
@@ -103,6 +106,19 @@ class _AppearanceGeneralTab extends ConsumerWidget {
   final Future<void> Function(AppSettings) onSave;
   const _AppearanceGeneralTab({required this.current, required this.onSave});
 
+  // по ширине экрана: на телефоне список серверов во всю ширину
+  String? _columnsNote(BuildContext context, AppLocalizations l10n) {
+    if (!current.serversTwoColumns) return null;
+    final wanted = ServerRow.wantedColumns(current);
+    final fit = ServerRow.fittingColumns(
+      MediaQuery.sizeOf(context).width,
+      MediaQuery.textScalerOf(context),
+      wanted,
+    );
+    if (fit == 1) return l10n.serversColumnsNoRoom;
+    return fit < wanted ? l10n.serversColumnsOnlyFit(fit) : null;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
@@ -131,11 +147,26 @@ class _AppearanceGeneralTab extends ConsumerWidget {
             children: [
               _AppearanceSwitchTile(
                 icon: Icons.view_column_rounded,
-                title: l10n.serversTwoColumnsTitle,
+                title: l10n.serversColumnsTitle,
+                subtitle: _columnsNote(context, l10n),
                 value: current.serversTwoColumns,
                 onChanged: (v) =>
                     onSave(current.copyWith(serversTwoColumns: v)),
               ),
+              if (current.serversTwoColumns)
+                ExpressiveGroupTile(
+                  padding: const EdgeInsets.all(12),
+                  child: ExpressiveConnectedButtons<int>(
+                    segments: const [
+                      ExpressiveSegment(value: 2, label: '2'),
+                      ExpressiveSegment(value: 3, label: '3'),
+                    ],
+                    selected: current.serversColumns,
+                    onChanged: (v) =>
+                        onSave(current.copyWith(serversColumns: v)),
+                    height: 48,
+                  ),
+                ),
               _AppearanceSwitchTile(
                 icon: Icons.palette_outlined,
                 title: l10n.appearanceServerIconThemeColors,

@@ -535,7 +535,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String get themeColorThemesTitle => 'پوسته‌های رنگی';
 
   @override
-  String get serversTwoColumnsTitle => 'دو ستونه';
+  String get serversColumnsTitle => 'چند ستونه';
+
+  @override
+  String get serversColumnsNoRoom => 'در این اندازهٔ رابط کاربری جا نمی‌شوند';
+
+  @override
+  String serversColumnsOnlyFit(int count) {
+    return 'در این اندازهٔ رابط کاربری فقط $count ستون جا می‌شود';
+  }
 
   @override
   String get appearanceServerIconThemeColors => 'آیکون سرورهای بدون پرچم به رنگ پوسته';

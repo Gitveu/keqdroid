@@ -74,6 +74,7 @@ import 'package:keqdroid/utils/traffic_routes.dart';
 import 'package:keqdroid/utils/route_servers.dart';
 import 'package:keqdroid/shared/ui/server_avatar.dart';
 import 'package:keqdroid/shared/ui/server_picker_sheet.dart';
+import 'package:keqdroid/shared/ui/server_row.dart';
 import 'package:keqdroid/utils/rule_lists.dart';
 import 'package:keqdroid/utils/split_tunneling_entries.dart';
 import 'package:keqdroid/utils/time_ago.dart';

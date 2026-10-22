@@ -64,6 +64,7 @@ class AppSettings {
   final bool fakeIp;
   final Map<String, String> hotkeys;
   final bool serversTwoColumns;
+  final int serversColumns;
   final bool amoledBlack;
   final bool seasonalDecor;
   final bool hapticFeedback;
@@ -84,6 +85,8 @@ class AppSettings {
 
   static double clampUiScale(double v) =>
       v.isFinite ? v.clamp(minUiScale, maxUiScale) : 1.0;
+
+  static int normalizeServersColumns(Object? v) => v == 3 ? 3 : 2;
 
   const AppSettings({
     this.localPort = 2080,
@@ -129,6 +132,7 @@ class AppSettings {
     this.fakeIp = false,
     this.hotkeys = const {},
     this.serversTwoColumns = false,
+    this.serversColumns = 2,
     this.amoledBlack = false,
     this.seasonalDecor = true,
     this.hapticFeedback = true,
@@ -187,6 +191,7 @@ class AppSettings {
     'fakeIp': fakeIp,
     'hotkeys': hotkeys,
     'serversTwoColumns': serversTwoColumns,
+    'serversColumns': serversColumns,
     'amoledBlack': amoledBlack,
     'seasonalDecor': seasonalDecor,
     'hapticFeedback': hapticFeedback,
@@ -276,6 +281,7 @@ class AppSettings {
       fakeIp: json['fakeIp'] as bool? ?? json['mihomoFakeIp'] as bool? ?? false,
       hotkeys: _readHotkeys(json['hotkeys']),
       serversTwoColumns: json['serversTwoColumns'] as bool? ?? false,
+      serversColumns: normalizeServersColumns(json['serversColumns']),
       amoledBlack: json['amoledBlack'] as bool? ?? false,
       seasonalDecor: json['seasonalDecor'] as bool? ?? true,
       hapticFeedback: json['hapticFeedback'] as bool? ?? true,
@@ -433,6 +439,7 @@ class AppSettings {
     bool? fakeIp,
     Map<String, String>? hotkeys,
     bool? serversTwoColumns,
+    int? serversColumns,
     bool? amoledBlack,
     bool? seasonalDecor,
     bool? hapticFeedback,
@@ -492,6 +499,8 @@ class AppSettings {
         fakeIp: fakeIp ?? this.fakeIp,
         hotkeys: hotkeys ?? this.hotkeys,
         serversTwoColumns: serversTwoColumns ?? this.serversTwoColumns,
+        serversColumns:
+            normalizeServersColumns(serversColumns ?? this.serversColumns),
         amoledBlack: amoledBlack ?? this.amoledBlack,
         seasonalDecor: seasonalDecor ?? this.seasonalDecor,
         hapticFeedback: hapticFeedback ?? this.hapticFeedback,
@@ -567,6 +576,7 @@ class AppSettings {
               vpnCore == other.vpnCore &&
               fakeIp == other.fakeIp &&
               serversTwoColumns == other.serversTwoColumns &&
+              serversColumns == other.serversColumns &&
               amoledBlack == other.amoledBlack &&
               seasonalDecor == other.seasonalDecor &&
               hapticFeedback == other.hapticFeedback &&
@@ -634,6 +644,7 @@ class AppSettings {
     vpnCore,
     fakeIp,
     serversTwoColumns,
+    serversColumns,
     amoledBlack,
     seasonalDecor,
     hapticFeedback,

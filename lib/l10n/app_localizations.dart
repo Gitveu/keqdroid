@@ -971,11 +971,23 @@ abstract class AppLocalizations {
   /// **'Color themes'**
   String get themeColorThemesTitle;
 
-  /// No description provided for @serversTwoColumnsTitle.
+  /// No description provided for @serversColumnsTitle.
   ///
   /// In en, this message translates to:
-  /// **'Two columns'**
-  String get serversTwoColumnsTitle;
+  /// **'Multiple columns'**
+  String get serversColumnsTitle;
+
+  /// No description provided for @serversColumnsNoRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t fit at this interface size'**
+  String get serversColumnsNoRoom;
+
+  /// No description provided for @serversColumnsOnlyFit.
+  ///
+  /// In en, this message translates to:
+  /// **'Only {count} fit at this interface size'**
+  String serversColumnsOnlyFit(int count);
 
   /// No description provided for @appearanceServerIconThemeColors.
   ///
