@@ -357,6 +357,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get routingProfileMain => 'Основной';
 
   @override
+  String get routingIgnoreProviderRules => 'Не учитывать правила провайдера';
+
+  @override
+  String get routingIgnoreProviderRulesHint => 'Работают только ваши маршруты';
+
+  @override
   String get routingProfileScopeAll => 'Все подписки и свои серверы';
 
   @override

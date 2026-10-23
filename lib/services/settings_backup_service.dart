@@ -130,6 +130,7 @@ class SettingsBackupService {
     'proxyRules',
     'blockedRules',
     'finalOutbound',
+    'ignoreProviderRules',
     'xrayCore',
     'vpnCore',
     'fakeIp',

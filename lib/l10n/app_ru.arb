@@ -211,6 +211,8 @@
   "routeAppsNeedTun": "работает только в режиме TUN",
   "routeAppsNeedVpn": "работает только в режиме VPN",
   "routingProfileMain": "Основной",
+  "routingIgnoreProviderRules": "Не учитывать правила провайдера",
+  "routingIgnoreProviderRulesHint": "Работают только ваши маршруты",
   "routingProfileScopeAll": "Все подписки и свои серверы",
   "routingProfileScopeRest": "Остальные подписки и свои серверы",
   "routingProfileRouteCount": "{count, plural, =0{нет маршрутов} one{{count} маршрут} few{{count} маршрута} many{{count} маршрутов} other{{count} маршрута}}",

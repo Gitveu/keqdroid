@@ -268,6 +268,26 @@ void main() {
     });
   });
 
+  group('golden: правила провайдера в конфиге Clash', () {
+    _golden('custom-clash-provider-rules', () {
+      return MihomoConfigGen.generate(
+        _providerClash,
+        _settings,
+        socksPort: 2080,
+        httpPort: 2081,
+      );
+    });
+
+    _golden('custom-clash-provider-rules-ignored', () {
+      return MihomoConfigGen.generate(
+        _providerClash,
+        _settings.copyWith(ignoreProviderRules: true),
+        socksPort: 2080,
+        httpPort: 2081,
+      );
+    });
+  });
+
   group('golden: MihomoConfigGen.generatePingConfig', () {
     _golden('ping-vless-reality', () {
       return const JsonEncoder.withIndent('  ').convert(jsonDecode(
@@ -335,3 +355,42 @@ void _golden(String name, String Function() generate) {
     expect(actual.replaceAll('\r\n', '\n'), expected);
   });
 }
+
+/// Конфиг Clash провайдера с его правилами всех видов.
+const _providerClash = '''
+mode: rule
+proxies:
+  - name: "NL"
+    type: trojan
+    server: 198.51.100.42
+    port: 443
+    password: password
+    sni: nl.example
+  - name: "DE"
+    type: trojan
+    server: 198.51.100.43
+    port: 443
+    password: password
+    sni: de.example
+proxy-groups:
+  - name: "Proxy"
+    type: select
+    proxies: ["NL", "DE"]
+rule-providers:
+  ads:
+    type: http
+    behavior: domain
+    url: https://provider.example/ads.yaml
+    path: ./ads.yaml
+rules:
+  - DOMAIN-SUFFIX,provider-direct.example,DIRECT
+  - GEOSITE,category-ru,DIRECT
+  - GEOIP,private,DIRECT,no-resolve
+  - IP-CIDR,203.0.113.0/24,REJECT,no-resolve
+  - RULE-SET,ads,REJECT
+  - AND,((DOMAIN-SUFFIX,quic.example),(NETWORK,UDP)),REJECT
+  - DOMAIN-SUFFIX,video.example,DE
+  - DST-PORT,53,DIRECT
+  - PROCESS-NAME,provider-tool.exe,DIRECT
+  - MATCH,DIRECT
+''';

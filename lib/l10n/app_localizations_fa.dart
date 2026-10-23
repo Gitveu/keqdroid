@@ -352,6 +352,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get routingProfileMain => 'اصلی';
 
   @override
+  String get routingIgnoreProviderRules => 'نادیده گرفتن قوانین ارائه‌دهنده';
+
+  @override
+  String get routingIgnoreProviderRulesHint => 'فقط مسیرهای خودتان اعمال می‌شود';
+
+  @override
   String get routingProfileScopeAll => 'همهٔ اشتراک‌ها و سرورهای خودتان';
 
   @override

@@ -245,6 +245,14 @@ class _RoutingScreenState extends ConsumerState<_RoutingScreen> {
         (a) => a.value?.finalOutbound ?? AppSettings.finalOutboundProxy,
       ),
     );
+    final ignoreProviderRules = ref.watch(
+      settingsNotifierProvider.select((a) => a.value?.ignoreProviderRules ?? false),
+    );
+    // выключать нечего, пока ни один сервер не принёс своих правил; включённую строку не прячем
+    final showProviderRules = ignoreProviderRules ||
+        servers.any((s) =>
+            (s.customConfig?.hasProviderRules ?? false) ||
+            (s.clashConfig?.hasProviderRules ?? false));
     final rowColor = Theme.of(context).colorScheme.surfaceContainer;
 
     List<Widget> routeRows(
@@ -390,6 +398,18 @@ class _RoutingScreenState extends ConsumerState<_RoutingScreen> {
         if (tunnelActive || hint)
           const SizedBox(height: ExpressiveSpacing.large),
         if (loaded) ...[
+          if (showProviderRules) ...[
+            ExpressiveGroup(children: [
+              _AppearanceSwitchTile(
+                icon: Icons.playlist_remove_rounded,
+                title: l10n.routingIgnoreProviderRules,
+                subtitle: l10n.routingIgnoreProviderRulesHint,
+                value: ignoreProviderRules,
+                onChanged: (v) => unawaited(_saveIgnoreProviderRules(ref, v)),
+              ),
+            ]),
+            const SizedBox(height: ExpressiveSpacing.large),
+          ],
           KeyedSubtree(
             key: _mainKey,
             child: _ProfileCard(
@@ -413,6 +433,12 @@ class _RoutingScreenState extends ConsumerState<_RoutingScreen> {
         ],
       ],
     );
+  }
+
+  static Future<void> _saveIgnoreProviderRules(WidgetRef ref, bool value) async {
+    final notifier = ref.read(settingsNotifierProvider.notifier);
+    final settings = ref.read(settingsNotifierProvider).value ?? const AppSettings();
+    await notifier.save(settings.copyWith(ignoreProviderRules: value));
   }
 
   static Future<void> _reconnect(WidgetRef ref) async {

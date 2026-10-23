@@ -353,6 +353,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get routingProfileMain => 'Hauptprofil';
 
   @override
+  String get routingIgnoreProviderRules => 'Regeln des Anbieters ignorieren';
+
+  @override
+  String get routingIgnoreProviderRulesHint => 'Es gelten nur deine Routen';
+
+  @override
   String get routingProfileScopeAll => 'Alle Abonnements und eigene Server';
 
   @override

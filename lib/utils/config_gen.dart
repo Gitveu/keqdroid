@@ -225,7 +225,10 @@ class ConfigGeneratorV2 {
         : OwnerGuard.off;
 
     final chain = ProxyChainConfig.tryParse(trimmed);
-    final custom = chain == null ? CustomXrayConfig.tryParse(trimmed) : null;
+    final parsedCustom = chain == null ? CustomXrayConfig.tryParse(trimmed) : null;
+    final custom = settings.ignoreProviderRules
+        ? parsedCustom?.withoutProviderRules()
+        : parsedCustom;
     final Map<String, dynamic> config;
     if (chain != null) {
       config = _buildChainConfig(

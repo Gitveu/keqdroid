@@ -352,6 +352,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get routingProfileMain => '主方案';
 
   @override
+  String get routingIgnoreProviderRules => '忽略订阅自带的规则';
+
+  @override
+  String get routingIgnoreProviderRulesHint => '仅使用自己的路由';
+
+  @override
   String get routingProfileScopeAll => '所有订阅和手动添加的服务器';
 
   @override

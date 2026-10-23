@@ -211,6 +211,8 @@
   "routeAppsNeedTun": "wirkt nur im TUN-Modus",
   "routeAppsNeedVpn": "wirkt nur im VPN-Modus",
   "routingProfileMain": "Hauptprofil",
+  "routingIgnoreProviderRules": "Regeln des Anbieters ignorieren",
+  "routingIgnoreProviderRulesHint": "Es gelten nur deine Routen",
   "routingProfileScopeAll": "Alle Abonnements und eigene Server",
   "routingProfileScopeRest": "Übrige Abonnements und eigene Server",
   "routingProfileRouteCount": "{count, plural, =0{keine Routen} =1{1 Route} other{{count} Routen}}",

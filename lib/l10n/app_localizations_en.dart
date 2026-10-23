@@ -353,6 +353,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routingProfileMain => 'Main';
 
   @override
+  String get routingIgnoreProviderRules => 'Ignore provider rules';
+
+  @override
+  String get routingIgnoreProviderRulesHint => 'Only your routes apply';
+
+  @override
   String get routingProfileScopeAll => 'All subscriptions and your own servers';
 
   @override

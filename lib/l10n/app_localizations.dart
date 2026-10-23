@@ -713,6 +713,18 @@ abstract class AppLocalizations {
   /// **'Main'**
   String get routingProfileMain;
 
+  /// No description provided for @routingIgnoreProviderRules.
+  ///
+  /// In en, this message translates to:
+  /// **'Ignore provider rules'**
+  String get routingIgnoreProviderRules;
+
+  /// No description provided for @routingIgnoreProviderRulesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Only your routes apply'**
+  String get routingIgnoreProviderRulesHint;
+
   /// No description provided for @routingProfileScopeAll.
   ///
   /// In en, this message translates to:

@@ -102,6 +102,8 @@
   "routeAppsNeedTun": "فقط در حالت TUN کار می‌کند",
   "routeAppsNeedVpn": "فقط در حالت VPN کار می‌کند",
   "routingProfileMain": "اصلی",
+  "routingIgnoreProviderRules": "نادیده گرفتن قوانین ارائه‌دهنده",
+  "routingIgnoreProviderRulesHint": "فقط مسیرهای خودتان اعمال می‌شود",
   "routingProfileScopeAll": "همهٔ اشتراک‌ها و سرورهای خودتان",
   "routingProfileScopeRest": "بقیهٔ اشتراک‌ها و سرورهای خودتان",
   "routingProfileRouteCount": "{count, plural, =0{بدون مسیر} other{{count} مسیر}}",

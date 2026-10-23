@@ -211,6 +211,8 @@
   "routeAppsNeedTun": "works only in TUN mode",
   "routeAppsNeedVpn": "works only in VPN mode",
   "routingProfileMain": "Main",
+  "routingIgnoreProviderRules": "Ignore provider rules",
+  "routingIgnoreProviderRulesHint": "Only your routes apply",
   "@routingProfileMain": {},
   "routingProfileScopeAll": "All subscriptions and your own servers",
   "@routingProfileScopeAll": {},

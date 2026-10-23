@@ -139,7 +139,10 @@ class MihomoConfigGen {
     // fake-ip держится на перехвате DNS из tun-блока, без своего туннеля подменный адрес некому вернуть
     final fakeIp = settings.fakeIp && tun != null;
 
-    final clash = CustomClashConfig.tryParse(input);
+    final parsedClash = CustomClashConfig.tryParse(input);
+    final clash = settings.ignoreProviderRules
+        ? parsedClash?.withoutProviderRules()
+        : parsedClash;
     if (clash != null) {
       return _buildCustom(
         clash,
@@ -298,13 +301,18 @@ class MihomoConfigGen {
         ...routeServerDirectRules(routeServers),
         if (tun != null) 'IP-CIDR,$tunInterfaceRange,DIRECT,no-resolve',
       ],
-      appendRules: buildUserRules(
-        settings,
-        proxyTarget: clash.primaryTarget,
-        ruleLists: ruleLists,
-        routeServers: routeServers,
-        appRoutes: appRoutes,
-      ),
+      appendRules: [
+        ...buildUserRules(
+          settings,
+          proxyTarget: clash.primaryTarget,
+          ruleLists: ruleLists,
+          routeServers: routeServers,
+          appRoutes: appRoutes,
+        ),
+        // MATCH провайдера выброшен вместе с его правилами, остальное решает человек
+        if (settings.ignoreProviderRules)
+          'MATCH,${_customFinalTarget(settings, clash, routingMode, managedProcessNames)}',
+      ],
       extraProxies: buildRouteServerProxies(routeServers),
       extra: {
         if (!ruleLists.isEmpty ||
@@ -2123,6 +2131,18 @@ class MihomoConfigGen {
         AppSettings.finalOutboundBlock => 'REJECT',
         _ => proxyTarget,
       };
+
+  // то же исключение, что у ссылок в buildUserRules: только выбранные без единого имени
+  static String _customFinalTarget(
+    AppSettings settings,
+    CustomClashConfig clash,
+    AppRoutingMode routingMode,
+    List<String> managedProcessNames,
+  ) =>
+      routingMode == AppRoutingMode.onlySelected &&
+              managedProcessNames.every((name) => name.trim().isEmpty)
+          ? 'DIRECT'
+          : _finalTarget(settings.finalOutbound, clash.primaryTarget);
 
   // голое слово это зона: DOMAIN-KEYWORD ловил буквы где угодно, su уводил напрямую AI Studio
   static String _domainRule(String raw) {

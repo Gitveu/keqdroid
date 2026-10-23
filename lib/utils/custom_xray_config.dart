@@ -242,6 +242,64 @@ class CustomXrayConfig {
     return out;
   }
 
+  // «Не учитывать правила провайдера»: уходят его сайты напрямую и в блок и его catch-all.
+  // правила к его узлам и технические (протокол, порт, вход) остаются, без них ломаются конфиги на несколько узлов
+  CustomXrayConfig withoutProviderRules() {
+    final routing = json['routing'];
+    if (routing is! Map) return this;
+    final routingMap = _asStringMap(routing);
+    final rules = _rulesOf(routingMap);
+    if (rules == null) return this;
+    final local = <String>{
+      for (final outbound in _outboundsOf(json))
+        if (const {'freedom', 'blackhole'}
+            .contains(outbound['protocol']?.toString().toLowerCase()))
+          outbound['tag']?.toString() ?? '',
+    }..remove('');
+    return CustomXrayConfig._({
+      ...json,
+      'routing': {
+        ...routingMap,
+        'rules': [
+          for (final rule in rules)
+            if (!_isProviderSiteRule(rule, local) && !_isCatchAll(rule)) rule,
+        ],
+      },
+    });
+  }
+
+  bool get hasProviderRules {
+    final routing = json['routing'];
+    if (routing is! Map) return false;
+    final before = _rulesOf(_asStringMap(routing))?.length ?? 0;
+    final after = _rulesOf(
+          _asStringMap(withoutProviderRules().json['routing'] as Map),
+        )?.length ??
+        0;
+    return after < before;
+  }
+
+  static bool _isProviderSiteRule(Map<String, dynamic> rule, Set<String> local) =>
+      local.contains(rule['outboundTag']?.toString()) &&
+      (rule['domain'] != null || rule['ip'] != null);
+
+  static const _notConditions = {
+    'type',
+    'ruleTag',
+    'outboundTag',
+    'balancerTag',
+    'network',
+  };
+
+  // порт 0-65535 тоже catch-all: так его пишут провайдеры, у которых в конце «всё напрямую»
+  static bool _isCatchAll(Map<String, dynamic> rule) {
+    final conditions = rule.keys.where((k) => !_notConditions.contains(k)).toSet();
+    if (conditions.isEmpty) return true;
+    if (conditions.length != 1 || conditions.single != 'port') return false;
+    final port = rule['port']?.toString().replaceAll(' ', '');
+    return port == '0-65535' || port == '1-65535';
+  }
+
   static Map<String, dynamic> _asStringMap(Map<dynamic, dynamic> raw) =>
       <String, dynamic>{for (final e in raw.entries) e.key.toString(): e.value};
 

@@ -268,6 +268,86 @@ class CustomClashConfig {
     return out;
   }
 
+  // то же, что у xray: его сайты в DIRECT и REJECT и его MATCH уходят, свой MATCH ставит генератор
+  CustomClashConfig withoutProviderRules() {
+    final raw = map['rules'];
+    if (raw is! List) return this;
+    return CustomClashConfig._({
+      ...map,
+      'rules': [
+        for (final rule in raw)
+          if (!_isProviderSiteRule(rule.toString())) rule,
+      ],
+    });
+  }
+
+  bool get hasProviderRules => _rulesOf(map).any(_isProviderSiteRule);
+
+  static const _siteRuleTypes = {
+    'DOMAIN',
+    'DOMAIN-SUFFIX',
+    'DOMAIN-KEYWORD',
+    'DOMAIN-REGEX',
+    'DOMAIN-WILDCARD',
+    'GEOSITE',
+    'GEOIP',
+    'IP-CIDR',
+    'IP-CIDR6',
+    'IP-SUFFIX',
+    'IP-ASN',
+    'RULE-SET',
+  };
+
+  static const _localTargets = {'DIRECT', 'REJECT', 'REJECT-DROP'};
+
+  static bool _isProviderSiteRule(String rule) {
+    final parsed = _parseRule(rule);
+    if (parsed == null) return false;
+    if (parsed.type == 'MATCH') return true;
+    if (!_localTargets.contains(parsed.target.toUpperCase())) return false;
+    if (_siteRuleTypes.contains(parsed.type)) return true;
+    if (const {'AND', 'OR', 'NOT'}.contains(parsed.type)) {
+      final payload = parsed.payload.toUpperCase();
+      return _siteRuleTypes.any((type) => payload.contains('($type,'));
+    }
+    return false;
+  }
+
+  // у AND, OR, NOT и SUB-RULE условие в скобках со своими запятыми, цель после закрывающей
+  static ({String type, String payload, String target})? _parseRule(String rule) {
+    final text = rule.trim();
+    final comma = text.indexOf(',');
+    if (comma < 0) return null;
+    final type = text.substring(0, comma).trim().toUpperCase();
+    var rest = text.substring(comma + 1).trimLeft();
+    if (type == 'MATCH') {
+      return (type: type, payload: '', target: rest.split(',').first.trim());
+    }
+    final String payload;
+    if (rest.startsWith('(')) {
+      var depth = 0;
+      var end = -1;
+      for (var i = 0; i < rest.length; i++) {
+        if (rest[i] == '(') depth++;
+        if (rest[i] == ')' && --depth == 0) {
+          end = i;
+          break;
+        }
+      }
+      if (end < 0) return null;
+      payload = rest.substring(0, end + 1);
+      rest = rest.substring(end + 1).trimLeft();
+      if (!rest.startsWith(',')) return null;
+      rest = rest.substring(1);
+    } else {
+      final next = rest.indexOf(',');
+      if (next < 0) return null;
+      payload = rest.substring(0, next);
+      rest = rest.substring(next + 1);
+    }
+    return (type: type, payload: payload, target: rest.split(',').first.trim());
+  }
+
   static List<String> _rulesOf(Map<String, dynamic> map) {
     final raw = map['rules'];
     if (raw is! List) return const [];

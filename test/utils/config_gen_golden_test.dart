@@ -282,6 +282,19 @@ void main() {
       );
     });
 
+    _golden('custom-json-provider-rules', () {
+      // правила провайдера всех видов: сайты напрямую и в блок, второй его узел,
+      // протокол, своя локалка и catch-all
+      return ConfigGeneratorV2.generateConfig(_providerJson, _settings);
+    });
+
+    _golden('custom-json-provider-rules-ignored', () {
+      return ConfigGeneratorV2.generateConfig(
+        _providerJson,
+        _settings.copyWith(ignoreProviderRules: true),
+      );
+    });
+
     _golden('custom-json-server', () {
       // Готовый конфиг как сервер: инбаунды остаются наши, аутбаунды провайдера.
       return ConfigGeneratorV2.generateConfig(
@@ -605,3 +618,55 @@ const _customNativeTun = {
     ],
   },
 };
+
+/// Готовый конфиг провайдера с его правилами, как их отдают подписки.
+final _providerJson = jsonEncode({
+  'routing': {
+    'domainStrategy': 'IPIfNonMatch',
+    'rules': [
+      {'type': 'field', 'ip': ['::/0'], 'outboundTag': 'block'},
+      {'type': 'field', 'protocol': ['bittorrent'], 'outboundTag': 'direct'},
+      {'type': 'field', 'ip': ['geoip:private'], 'outboundTag': 'direct'},
+      {'type': 'field', 'domain': ['geosite:private', 'domain:provider-direct.example'], 'outboundTag': 'direct'},
+      {'type': 'field', 'domain': ['domain:provider-block.example'], 'outboundTag': 'block'},
+      {'type': 'field', 'domain': ['domain:video.example'], 'outboundTag': 'proxy-fast'},
+      {'type': 'field', 'port': '0-65535', 'outboundTag': 'direct'},
+    ],
+  },
+  'outbounds': [
+    {
+      'tag': 'proxy',
+      'protocol': 'vless',
+      'settings': {
+        'vnext': [
+          {
+            'address': '198.51.100.40',
+            'port': 443,
+            'users': [
+              {'id': _uuid, 'encryption': 'none'},
+            ],
+          },
+        ],
+      },
+      'streamSettings': {'network': 'tcp', 'security': 'reality', 'realitySettings': {'serverName': 'decoy.example', 'publicKey': 'publickey', 'shortId': 'aabb', 'fingerprint': 'chrome'}},
+    },
+    {
+      'tag': 'proxy-fast',
+      'protocol': 'vless',
+      'settings': {
+        'vnext': [
+          {
+            'address': '198.51.100.41',
+            'port': 443,
+            'users': [
+              {'id': _uuid, 'encryption': 'none'},
+            ],
+          },
+        ],
+      },
+      'streamSettings': {'network': 'tcp', 'security': 'reality', 'realitySettings': {'serverName': 'decoy.example', 'publicKey': 'publickey', 'shortId': 'aabb', 'fingerprint': 'chrome'}},
+    },
+    {'tag': 'direct', 'protocol': 'freedom'},
+    {'tag': 'block', 'protocol': 'blackhole'},
+  ],
+});

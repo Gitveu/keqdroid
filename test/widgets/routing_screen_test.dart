@@ -1141,4 +1141,52 @@ void main() {
       expect(find.text('Стрим'), findsNothing);
     });
   });
+  group('правила провайдера', () {
+    final provider = ServerItem(
+      id: 'provider',
+      type: ServerItemType.manual,
+      config: '{"remarks":"Provider","outbounds":[{"tag":"proxy","protocol":"vless",'
+          '"settings":{"vnext":[{"address":"198.51.100.50","port":443,'
+          '"users":[{"id":"00000000-0000-4000-8000-000000000000"}]}]}},'
+          '{"tag":"direct","protocol":"freedom"}],'
+          '"routing":{"rules":[{"type":"field","domain":["domain:ru"],"outboundTag":"direct"}]}}',
+    );
+    final plain = ServerItem(
+      id: 'plain',
+      type: ServerItemType.manual,
+      config: 'trojan://pw@de.example:443?security=tls&sni=de.example#Germany',
+    );
+
+    testWidgets('без серверов со своими правилами строки нет', (tester) async {
+      await _pump(tester, servers: [plain]);
+      expect(find.text('Не учитывать правила провайдера'), findsNothing);
+    });
+
+    testWidgets('есть такой сервер: строка первой, выключена, включается',
+        (tester) async {
+      final container = await _pump(tester, servers: [plain, provider]);
+      final row = find.text('Не учитывать правила провайдера');
+      expect(row, findsOneWidget);
+      expect(find.text('Работают только ваши маршруты'), findsOneWidget);
+      expect(tester.getRect(row).top,
+          lessThan(tester.getRect(find.text('Основной')).top));
+
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(
+        container.read(settingsNotifierProvider).value?.ignoreProviderRules,
+        isTrue,
+      );
+    });
+
+    testWidgets('включённую строку не прячем, даже если таких серверов не осталось',
+        (tester) async {
+      await _pump(
+        tester,
+        servers: [plain],
+        settings: const AppSettings(ignoreProviderRules: true),
+      );
+      expect(find.text('Не учитывать правила провайдера'), findsOneWidget);
+    });
+  });
 }
