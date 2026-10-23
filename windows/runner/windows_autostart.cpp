@@ -17,6 +17,10 @@ constexpr wchar_t kRunKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 constexpr wchar_t kRunValue[] = L"KeqDroid";
 
+// тот же ключ, где window_placement.cpp держит границы окна
+constexpr wchar_t kSettingsKey[] = L"Software\\KeqDroid";
+constexpr wchar_t kInTrayValue[] = L"AutostartInTray";
+
 std::wstring CurrentExePath() {
   wchar_t path[MAX_PATH] = {};
   const DWORD len = ::GetModuleFileNameW(nullptr, path, MAX_PATH);
@@ -309,6 +313,32 @@ bool KeqdroidIsAutostartEnabled() {
       ::RegQueryValueExW(key, kRunValue, nullptr, &type, nullptr, &size);
   ::RegCloseKey(key);
   return status == ERROR_SUCCESS && type == REG_SZ;
+}
+
+void KeqdroidSetAutostartInTray(bool enabled) {
+  HKEY key = nullptr;
+  if (::RegCreateKeyExW(HKEY_CURRENT_USER, kSettingsKey, 0, nullptr, 0,
+                        KEY_SET_VALUE, nullptr, &key,
+                        nullptr) != ERROR_SUCCESS) {
+    return;
+  }
+  if (enabled) {
+    const DWORD one = 1;
+    ::RegSetValueExW(key, kInTrayValue, 0, REG_DWORD,
+                     reinterpret_cast<const BYTE*>(&one), sizeof(one));
+  } else {
+    ::RegDeleteValueW(key, kInTrayValue);
+  }
+  ::RegCloseKey(key);
+}
+
+bool KeqdroidAutostartInTray() {
+  DWORD value = 0;
+  DWORD size = sizeof(value);
+  return ::RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, kInTrayValue,
+                        RRF_RT_REG_DWORD, nullptr, &value,
+                        &size) == ERROR_SUCCESS &&
+         value != 0;
 }
 
 bool KeqdroidApplyAutostart(bool enabled, bool elevated, bool allow_elevation) {

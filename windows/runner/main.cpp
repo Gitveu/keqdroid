@@ -8,6 +8,7 @@
 #include "tunnel_channel_handler.h"
 #include "utils.h"
 #include "window_placement.h"
+#include "windows_autostart.h"
 #include "windows_tray.h"
 
 namespace {
@@ -113,6 +114,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   const bool admin_restart = HasAdminRestartFlag();
   const std::string deep_link = KeqdroidDeepLinkFromCommandLine();
+  const bool start_in_tray = HasAutostartFlag() && KeqdroidAutostartInTray();
 
   if (admin_restart) {
     for (int attempt = 0; attempt < 100; ++attempt) {
@@ -144,7 +146,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
       if (HasAutostartFlag()) {
         NotifyExistingInstanceAutostart();
       }
-      ActivateExistingInstance();
+      // Run и задача планировщика могут сработать обе, и вторая подняла бы окно из трея
+      if (!start_in_tray) {
+        ActivateExistingInstance();
+      }
       ::CloseHandle(g_instance_mutex);
       g_instance_mutex = nullptr;
       return EXIT_SUCCESS;
@@ -158,6 +163,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
 
   FlutterWindow window(project);
+  window.SetShowOnFirstFrame(!start_in_tray);
   const Win32Window::Size size(920, 720);
   const Win32Window::Point origin = Win32Window::ComputeCenteredOrigin(size);
   if (!window.Create(L"keqdroid", origin, size)) {
@@ -167,6 +173,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (KeqdroidRestoreWindowPlacement(window.GetHandle(), &restore_maximized) &&
       restore_maximized) {
     window.SetPreferredShowCommand(SW_SHOWMAXIMIZED);
+  }
+  if (start_in_tray) {
+    WindowsTrayStartHidden(restore_maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
   }
   window.SetQuitOnClose(true);
 

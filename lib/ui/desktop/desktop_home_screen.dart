@@ -69,6 +69,12 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
       () => _maybeAutostartConnect(force: true),
     );
     VpnNativeBridge.registerWindowVisibilityHandler(_onWindowVisibility);
+    if (Platform.isWindows) {
+      // при автозапуске в трей окно не показывалось, и сказать об этом раннер мог только до подписки
+      unawaited(WindowsDesktopService.isHiddenInTray().then((hidden) {
+        if (hidden) _onWindowVisibility(false);
+      }));
+    }
     HotkeyService.onPressed = _onHotkeyAction;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;

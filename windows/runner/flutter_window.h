@@ -15,6 +15,8 @@ class FlutterWindow : public Win32Window {
   explicit FlutterWindow(const flutter::DartProject& project);
   virtual ~FlutterWindow();
 
+  void SetShowOnFirstFrame(bool show) { show_on_first_frame_ = show; }
+
  protected:
   // Win32Window:
   bool OnCreate() override;
@@ -31,8 +33,10 @@ class FlutterWindow : public Win32Window {
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
 
-  // по первому кадру, а не по видимости: при автозапуске Dart законно прячет окно в трей
+  // по первому кадру, а не по видимости: при автозапуске в трей окно законно так и не показывается
   bool first_frame_seen_ = false;
+
+  bool show_on_first_frame_ = true;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

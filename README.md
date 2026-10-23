@@ -154,7 +154,7 @@ On Android TV the app is driven by the remote. A subscription gets to the TV fro
 | **Proxy** | System proxy for browsers and most apps. No administrator rights. |
 | **TUN** | All traffic through a VPN adapter. Needs administrator rights; the app offers to restart with them. |
 
-The window minimizes to the tray and remembers its size and position. Launch at system startup with optional auto-connect. Global hotkeys are in Settings → Advanced → Hotkeys. Subscriptions refresh while the app is open. After an in-app update the app reconnects if the VPN was on.
+The window minimizes to the tray and remembers its size and position. Launch at system startup with optional auto-connect, and optionally straight to the tray without showing the window. Global hotkeys are in Settings → Advanced → Hotkeys. Subscriptions refresh while the app is open. After an in-app update the app reconnects if the VPN was on.
 
 **Settings location:** `%APPDATA%\com.keqdroid\keqdroid\`, not next to the exe. To move to another PC, use backup and restore.
 
@@ -381,7 +381,7 @@ Hysteria v1 не поддерживается.
 | **Proxy** | Системный прокси — браузеры и большинство программ. Без прав администратора. |
 | **TUN** | Весь трафик через VPN-адаптер. Нужны права администратора — приложение предложит перезапуститься с ними. |
 
-Окно сворачивается в трей и запоминает свой размер и позицию. Автозапуск вместе с системой, при желании с автоподключением. Глобальные хоткеи — в Настройки → Дополнительно → Горячие клавиши. Подписки обновляются, пока приложение открыто. После обновления из приложения оно переподключается, если VPN был включён.
+Окно сворачивается в трей и запоминает свой размер и позицию. Автозапуск вместе с системой, при желании с автоподключением и сразу в трей, без окна. Глобальные хоткеи — в Настройки → Дополнительно → Горячие клавиши. Подписки обновляются, пока приложение открыто. После обновления из приложения оно переподключается, если VPN был включён.
 
 **Где лежат настройки:** `%APPDATA%\com.keqdroid\keqdroid\`, не в папке с exe. Для переноса на другой ПК есть резервная копия и восстановление.
 

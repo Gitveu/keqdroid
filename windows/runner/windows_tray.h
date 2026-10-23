@@ -10,6 +10,9 @@ void WindowsTraySetMinimizeToTray(bool enabled);
 bool WindowsTrayGetMinimizeToTray();
 HWND WindowsTrayGetMainHwnd();
 bool WindowsTrayActivateMainWindow();
+// автозапуск в трей: окно ни разу не показывали, и разворот из сохранённых границ ждёт первого показа
+void WindowsTrayStartHidden(int first_show_command);
+bool WindowsTrayIsHiddenInTray();
 bool WindowsTrayRestoreMainWindow();
 bool WindowsTrayToggleMainWindow();
 void WindowsTrayExitApplication(HWND hwnd);

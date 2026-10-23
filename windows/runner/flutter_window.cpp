@@ -71,7 +71,9 @@ bool FlutterWindow::OnCreate() {
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     first_frame_seen_ = true;
     ::KillTimer(GetHandle(), kStartupWatchdogTimerId);
-    this->Show();
+    if (show_on_first_frame_) {
+      this->Show();
+    }
   });
   ::SetTimer(GetHandle(), kStartupWatchdogTimerId, kStartupWatchdogMs,
              nullptr);

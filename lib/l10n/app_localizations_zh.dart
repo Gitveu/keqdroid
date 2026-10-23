@@ -1495,6 +1495,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsLaunchAtStartupAdmin => '以管理员权限启动';
 
   @override
+  String get settingsAutostartInTray => '在托盘中启动，不显示窗口';
+
+  @override
   String get settingsAutostartAdminFailed => '未获得管理员权限';
 
   @override

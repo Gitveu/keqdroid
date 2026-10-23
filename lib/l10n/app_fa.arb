@@ -449,6 +449,7 @@
   "settingsLaunchAtStartup": "اجرا همراه ویندوز",
   "settingsLaunchAtLogin": "اجرا هنگام ورود به سیستم",
   "settingsLaunchAtStartupAdmin": "اجرا با دسترسی مدیر",
+  "settingsAutostartInTray": "اجرا در سینی سیستم، بدون پنجره",
   "settingsAutostartAdminFailed": "دسترسی مدیر داده نشد",
   "settingsAutoConnectOnAutostart": "اتصال هنگام اجرای خودکار",
   "settingsAutoConnectRequiresAutostart": "اول «اجرا همراه ویندوز» را روشن کنید",

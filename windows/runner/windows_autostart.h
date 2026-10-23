@@ -12,4 +12,8 @@ bool KeqdroidIsAutostartElevated();
 
 bool KeqdroidIsAutostartEnabled();
 
+// в реестре, а не аргументом в команде автозапуска: задачу планировщика без UAC не переписать
+void KeqdroidSetAutostartInTray(bool enabled);
+bool KeqdroidAutostartInTray();
+
 #endif  // RUNNER_WINDOWS_AUTOSTART_H_

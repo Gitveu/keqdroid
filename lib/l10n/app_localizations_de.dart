@@ -1499,6 +1499,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsLaunchAtStartupAdmin => 'Mit Administratorrechten starten';
 
   @override
+  String get settingsAutostartInTray => 'Im Infobereich starten, ohne Fenster';
+
+  @override
   String get settingsAutostartAdminFailed => 'Administratorrechte wurden nicht erteilt';
 
   @override

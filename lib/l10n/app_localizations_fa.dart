@@ -1495,6 +1495,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsLaunchAtStartupAdmin => 'اجرا با دسترسی مدیر';
 
   @override
+  String get settingsAutostartInTray => 'اجرا در سینی سیستم، بدون پنجره';
+
+  @override
   String get settingsAutostartAdminFailed => 'دسترسی مدیر داده نشد';
 
   @override

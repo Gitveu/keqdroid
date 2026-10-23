@@ -2795,6 +2795,12 @@ abstract class AppLocalizations {
   /// **'Start with admin rights'**
   String get settingsLaunchAtStartupAdmin;
 
+  /// No description provided for @settingsAutostartInTray.
+  ///
+  /// In en, this message translates to:
+  /// **'Start in the tray, without a window'**
+  String get settingsAutostartInTray;
+
   /// No description provided for @settingsAutostartAdminFailed.
   ///
   /// In en, this message translates to:

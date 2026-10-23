@@ -20,6 +20,10 @@ class WindowsDesktopService {
     await _channel.invokeMethod<void>('setMinimizeToTray', {
       'enabled': settings.minimizeToTray,
     });
+    // раннер решает до первого кадра, а настройки Dart к тому времени ещё не прочитаны
+    await _channel.invokeMethod<void>('setAutostartInTray', {
+      'enabled': settings.autostartInTray,
+    });
     // без UAC: это приведение системы к настройкам на каждом запуске
     await applyLaunchAtStartup(
       enabled: settings.launchAtStartup,
@@ -134,6 +138,17 @@ class WindowsDesktopService {
       return null;
     } on MissingPluginException {
       return null;
+    }
+  }
+
+  static Future<bool> isHiddenInTray() async {
+    if (!Platform.isWindows) return false;
+    try {
+      return await _channel.invokeMethod<bool>('isHiddenInTray') ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
     }
   }
 

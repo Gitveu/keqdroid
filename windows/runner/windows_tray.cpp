@@ -11,6 +11,8 @@ HWND g_tray_hwnd = nullptr;
 // спрятано в трей, а не свёрнуто: кнопки на панели нет, и любая активация приходит извне
 bool g_window_hidden_in_tray = false;
 
+int g_first_show_command = 0;
+
 void HideWindowToTray(HWND hwnd) {
   g_window_hidden_in_tray = true;
   ::ShowWindow(hwnd, SW_HIDE);
@@ -42,13 +44,25 @@ bool WindowsTrayActivateMainWindow() {
   }
   KeqdisNotifyWindowVisibility(true);
   g_window_hidden_in_tray = false;
-  if (::IsIconic(g_tray_hwnd)) {
+  if (g_first_show_command != 0) {
+    ::ShowWindow(g_tray_hwnd, g_first_show_command);
+    g_first_show_command = 0;
+  } else if (::IsIconic(g_tray_hwnd)) {
     ::ShowWindow(g_tray_hwnd, SW_RESTORE);
   } else {
     ::ShowWindow(g_tray_hwnd, SW_SHOW);
   }
   ::SetForegroundWindow(g_tray_hwnd);
   return true;
+}
+
+void WindowsTrayStartHidden(int first_show_command) {
+  g_window_hidden_in_tray = true;
+  g_first_show_command = first_show_command;
+}
+
+bool WindowsTrayIsHiddenInTray() {
+  return g_window_hidden_in_tray;
 }
 
 bool WindowsTrayRestoreMainWindow() {

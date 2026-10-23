@@ -52,6 +52,7 @@ const _machineLocalKeys = <String>{
   // И то, чем именно он поднимается: задача планировщика заведена на пути
   // этого exe и на SID этого пользователя — на другой машине пустой звук.
   'launchAtStartupElevated',
+  'autostartInTray',
   'hotkeys',
   'linuxTunRememberDismissed',
   // Состояние отладки, а не настройка: перевезти включённый debug на чистую

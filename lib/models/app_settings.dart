@@ -55,6 +55,7 @@ class AppSettings {
   final bool launchAtStartup;
 
   final bool launchAtStartupElevated;
+  final bool autostartInTray;
   final bool serverIconThemeColors;
 
   final String coreEngine;
@@ -127,6 +128,7 @@ class AppSettings {
     this.minimizeToTray = true,
     this.launchAtStartup = false,
     this.launchAtStartupElevated = false,
+    this.autostartInTray = false,
     this.serverIconThemeColors = true,
     this.coreEngine = coreEngineKeqrnel,
     this.vpnCore = vpnCoreXray,
@@ -187,6 +189,7 @@ class AppSettings {
     'minimizeToTray': minimizeToTray,
     'launchAtStartup': launchAtStartup,
     'launchAtStartupElevated': launchAtStartupElevated,
+    'autostartInTray': autostartInTray,
     'serverIconThemeColors': serverIconThemeColors,
     'coreEngine': coreEngine,
     'vpnCore': vpnCore,
@@ -277,6 +280,7 @@ class AppSettings {
       launchAtStartup: json['launchAtStartup'] as bool? ?? false,
       launchAtStartupElevated:
           json['launchAtStartupElevated'] as bool? ?? false,
+      autostartInTray: json['autostartInTray'] as bool? ?? false,
       serverIconThemeColors: json['serverIconThemeColors'] as bool? ?? true,
       coreEngine: normalizeCoreEngine(json['coreEngine'] as String?),
       vpnCore: normalizeVpnCore(json['vpnCore'] as String?),
@@ -437,6 +441,7 @@ class AppSettings {
     bool? minimizeToTray,
     bool? launchAtStartup,
     bool? launchAtStartupElevated,
+    bool? autostartInTray,
     bool? serverIconThemeColors,
     String? coreEngine,
     String? vpnCore,
@@ -497,6 +502,7 @@ class AppSettings {
         launchAtStartup: launchAtStartup ?? this.launchAtStartup,
         launchAtStartupElevated:
             launchAtStartupElevated ?? this.launchAtStartupElevated,
+        autostartInTray: autostartInTray ?? this.autostartInTray,
         serverIconThemeColors:
             serverIconThemeColors ?? this.serverIconThemeColors,
         coreEngine: coreEngine ?? this.coreEngine,
@@ -577,6 +583,7 @@ class AppSettings {
               minimizeToTray == other.minimizeToTray &&
               launchAtStartup == other.launchAtStartup &&
               launchAtStartupElevated == other.launchAtStartupElevated &&
+              autostartInTray == other.autostartInTray &&
               serverIconThemeColors == other.serverIconThemeColors &&
               coreEngine == other.coreEngine &&
               vpnCore == other.vpnCore &&
@@ -646,6 +653,7 @@ class AppSettings {
     minimizeToTray,
     launchAtStartup,
     launchAtStartupElevated,
+    autostartInTray,
     serverIconThemeColors,
     coreEngine,
     vpnCore,

@@ -130,6 +130,15 @@ class _DesktopSettingsScreenState
                         )
                     : null,
               ),
+            if (!linux)
+              _AppearanceSwitchTile(
+                icon: Icons.web_asset_off_rounded,
+                title: l10n.settingsAutostartInTray,
+                value: settings.autostartInTray,
+                onChanged: settings.launchAtStartup
+                    ? (v) => _save(settings.copyWith(autostartInTray: v))
+                    : null,
+              ),
             _AppearanceSwitchTile(
               icon: Icons.vpn_lock_rounded,
               title: l10n.settingsAutoConnectOnAutostart,

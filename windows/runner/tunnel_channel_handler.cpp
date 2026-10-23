@@ -1208,6 +1208,26 @@ void RegisterKeqdisTunnelChannel(flutter::FlutterEngine* engine) {
           return;
         }
 
+        if (call.method_name() == "setAutostartInTray") {
+          bool enabled = false;
+          const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+          if (args) {
+            auto it = args->find(flutter::EncodableValue("enabled"));
+            if (it != args->end()) {
+              const auto* value = std::get_if<bool>(&it->second);
+              enabled = value != nullptr && *value;
+            }
+          }
+          KeqdroidSetAutostartInTray(enabled);
+          result->Success();
+          return;
+        }
+
+        if (call.method_name() == "isHiddenInTray") {
+          result->Success(flutter::EncodableValue(WindowsTrayIsHiddenInTray()));
+          return;
+        }
+
         if (call.method_name() == "setGlobalHotkeys") {
           std::vector<KeqdroidHotkeySpec> specs;
           const auto* args =
