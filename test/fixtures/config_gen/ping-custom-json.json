@@ -1,0 +1,93 @@
+{
+  "log": {
+    "loglevel": "none"
+  },
+  "dns": {
+    "servers": [
+      "8.8.8.8",
+      "1.1.1.1"
+    ],
+    "queryStrategy": "UseIPv4"
+  },
+  "inbounds": [
+    {
+      "tag": "http-in",
+      "port": 28150,
+      "listen": "127.0.0.1",
+      "protocol": "http",
+      "settings": {
+        "allowTransparent": false
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "proxy",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "198.51.100.29",
+            "port": 443,
+            "users": [
+              {
+                "id": "00000000-0000-4000-8000-000000000000",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "sockopt": {
+          "dialerProxy": "front"
+        }
+      }
+    },
+    {
+      "tag": "front",
+      "protocol": "freedom",
+      "settings": {}
+    },
+    {
+      "tag": "drop",
+      "protocol": "blackhole"
+    },
+    {
+      "protocol": "freedom",
+      "tag": "keq-ping-direct"
+    }
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "type": "field",
+        "ip": [
+          "198.51.100.29"
+        ],
+        "outboundTag": "keq-ping-direct"
+      },
+      {
+        "type": "field",
+        "ip": [
+          "0.0.0.0/8",
+          "10.0.0.0/8",
+          "127.0.0.0/8",
+          "172.16.0.0/12",
+          "192.168.0.0/16",
+          "::1/128",
+          "fc00::/7",
+          "fe80::/10"
+        ],
+        "outboundTag": "keq-ping-direct"
+      },
+      {
+        "type": "field",
+        "outboundTag": "proxy",
+        "network": "tcp,udp"
+      }
+    ]
+  }
+}

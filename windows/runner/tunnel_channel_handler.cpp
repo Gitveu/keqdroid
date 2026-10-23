@@ -5,6 +5,7 @@
 #include "windows_autostart.h"
 #include "windows_core_lifecycle.h"
 #include "windows_hotkeys.h"
+#include "windows_outbound_interface.h"
 #include "windows_process_memory.h"
 #include "windows_traffic_stats.h"
 #include "windows_tray.h"
@@ -1515,6 +1516,35 @@ void RegisterKeqdisTunnelChannel(flutter::FlutterEngine* engine) {
           response[flutter::EncodableValue("outOctets")] =
               flutter::EncodableValue(static_cast<int64_t>(out_octets));
           result->Success(flutter::EncodableValue(response));
+          return;
+        }
+
+        if (call.method_name() == "getTunBypassInterface") {
+          int64_t tun_index = -1;
+          bool mihomo_rule = false;
+          const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+          if (args != nullptr) {
+            const auto index_it = args->find(flutter::EncodableValue("tunIndex"));
+            if (index_it != args->end()) {
+              tun_index = index_it->second.TryGetLongValue().value_or(-1);
+            }
+            const auto rule_it = args->find(flutter::EncodableValue("rule"));
+            if (rule_it != args->end()) {
+              const auto* rule = std::get_if<std::string>(&rule_it->second);
+              mihomo_rule = rule != nullptr && *rule == "mihomo";
+            }
+          }
+          if (tun_index <= 0) {
+            result->Success();
+            return;
+          }
+          const std::wstring alias =
+              FindTunBypassInterface(static_cast<uint32_t>(tun_index), mihomo_rule);
+          if (alias.empty()) {
+            result->Success();
+          } else {
+            result->Success(flutter::EncodableValue(WideToUtf8(alias)));
+          }
           return;
         }
 

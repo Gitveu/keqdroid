@@ -267,6 +267,20 @@ void main() {
       );
     });
   });
+
+  group('golden: MihomoConfigGen.generatePingConfig', () {
+    _golden('ping-vless-reality', () {
+      return const JsonEncoder.withIndent('  ').convert(jsonDecode(
+        MihomoConfigGen.generatePingConfig(
+          'vless://$_uuid@198.51.100.31:443?type=tcp&security=reality'
+          '&sni=decoy.example&pbk=publickey&sid=aabb&fp=chrome#ping',
+          _settings,
+          socksPort: 28150,
+          httpInbound: true,
+        ),
+      ));
+    });
+  });
 }
 
 const _androidTun = MihomoTunOptions(

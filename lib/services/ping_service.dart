@@ -8,8 +8,11 @@ import '../platform/platform_bootstrap.dart';
 import '../models/ping_test_config.dart';
 import '../models/server_item.dart';
 import '../services/vpn_engine.dart';
+import '../services/windows_desktop_service.dart';
 import '../tunnel/vpn_backend.dart';
+import '../tunnel/windows_tunnel_backend.dart';
 import '../utils/config_gen.dart';
+import '../utils/desktop_tun.dart';
 import '../utils/hysteria_uri.dart';
 import '../utils/mihomo_config_gen.dart';
 import '../utils/multi_ping_config.dart';
@@ -429,6 +432,7 @@ class PingService {
 
     final ips = resolvedIps ?? await _resolveServerIps(servers);
     final takenPorts = <int>{};
+    final outboundInterface = await _tunBypassInterface(settings);
 
     if (multiPingSupported) {
       final byCore = <VpnBackend, List<ServerItem>>{};
@@ -464,6 +468,7 @@ class PingService {
             timeoutMs: timeoutSeconds * 1000,
             ips: ips,
             takenPorts: takenPorts,
+            outboundInterface: outboundInterface,
             onResult: onResult,
           ),
         );
@@ -480,6 +485,7 @@ class PingService {
             timeoutMs: timeoutSeconds * 1000,
             resolvedIp: ips[server.id],
             takenPorts: takenPorts,
+            outboundInterface: outboundInterface,
           );
           onResult?.call(result);
           return result;
@@ -509,6 +515,7 @@ class PingService {
         timeoutMs: timeoutSeconds * 1000,
         resolvedIp: ips[server.id],
         takenPorts: takenPorts,
+        outboundInterface: outboundInterface,
       );
       onResult?.call(result);
       return result;
@@ -543,6 +550,7 @@ class PingService {
     required int timeoutMs,
     required Map<String, String> ips,
     required Set<int> takenPorts,
+    required String? outboundInterface,
     void Function(PingResult)? onResult,
   }) async {
     if (servers.isEmpty) return [];
@@ -554,6 +562,7 @@ class PingService {
         timeoutMs: timeoutMs,
         resolvedIp: ips[servers.first.id],
         takenPorts: takenPorts,
+        outboundInterface: outboundInterface,
       );
       onResult?.call(result);
       return [result];
@@ -574,6 +583,7 @@ class PingService {
             settings,
             socksPort: port,
             resolvedServerIp: ips[server.id],
+            outboundInterface: outboundInterface,
           ),
           port: port,
         ));
@@ -638,6 +648,7 @@ class PingService {
         timeoutMs: timeoutMs,
         ips: ips,
         takenPorts: takenPorts,
+        outboundInterface: outboundInterface,
         onResult: onResult,
       );
       final right = await _pingUrlMulti(
@@ -648,6 +659,7 @@ class PingService {
         timeoutMs: timeoutMs,
         ips: ips,
         takenPorts: takenPorts,
+        outboundInterface: outboundInterface,
         onResult: onResult,
       );
       return [...failed, ...left, ...right];
@@ -681,6 +693,7 @@ class PingService {
     AppSettings settings, {
     required int socksPort,
     String? resolvedServerIp,
+    required String? outboundInterface,
   }) =>
       core == VpnBackend.mihomo
           ? MihomoConfigGen.generatePingConfig(
@@ -688,6 +701,7 @@ class PingService {
               settings,
               socksPort: socksPort,
               httpInbound: !Platform.isAndroid,
+              outboundInterface: outboundInterface,
             )
           : ConfigGeneratorV2.generatePingConfig(
               serverConfig,
@@ -695,7 +709,33 @@ class PingService {
               socksPort: socksPort,
               resolvedServerIp: resolvedServerIp,
               httpInbound: !Platform.isAndroid,
+              outboundInterface: outboundInterface,
             );
+
+  // в TUN туннель нюхает SNI раньше правила своих процессов и подменяет адрес REALITY на маску:
+  // замер сервера с маской store.teamfortress.com уходил к Valve. выходим той сетью, что ядро туннеля
+  static Future<String?> _tunBypassInterface(AppSettings settings) async {
+    if (!Platform.isWindows || !settings.tun.autoRoute) return null;
+    final backend = WindowsTunnelBackend.activeInstance;
+    if (backend == null || backend.activeMode != ConnectionMode.tun) return null;
+    final cores = backend.activeCorePids;
+    if (cores.isEmpty) return null;
+    int? tunIndex;
+    try {
+      for (final iface in await NetworkInterface.list()) {
+        if (iface.name == kTunInterfaceName ||
+            iface.addresses.any((a) => a.address == kTunInterfaceAddress)) {
+          tunIndex = iface.index;
+          break;
+        }
+      }
+    } catch (_) {}
+    if (tunIndex == null) return null;
+    return WindowsDesktopService.tunBypassInterface(
+      tunIndex: tunIndex,
+      mihomoRule: cores.containsKey('mihomo'),
+    );
+  }
 
   static Future<PingResult> _pingUrlSingle(
     ServerItem server,
@@ -704,6 +744,7 @@ class PingService {
     required int timeoutMs,
     String? resolvedIp,
     Set<int>? takenPorts,
+    required String? outboundInterface,
   }) async {
     // порт на каждый замер: с общим проба уходила в чужое ядро и мерила не тот сервер
     final socksPort = await _freePort(avoid: takenPorts);
@@ -716,6 +757,7 @@ class PingService {
         settings,
         socksPort: socksPort,
         resolvedServerIp: resolvedIp,
+        outboundInterface: outboundInterface,
       );
       final raw = await VpnEngine().xrayUrlTest(
         xrayConfig: config,
@@ -756,6 +798,7 @@ class PingService {
     final ips = resolvedIps ?? await _resolveServerIps(servers);
     final timeoutMs = timeoutSeconds * 1000;
     final results = <PingResult>[];
+    final outboundInterface = await _tunBypassInterface(settings);
 
     for (final s in servers) {
       final socksPort = await _freePort();
@@ -768,6 +811,7 @@ class PingService {
           settings,
           socksPort: socksPort,
           resolvedServerIp: ips[s.id],
+          outboundInterface: outboundInterface,
         );
         final raw = await VpnEngine().xraySpeedTest(
           xrayConfig: config,

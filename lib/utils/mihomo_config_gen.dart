@@ -477,6 +477,7 @@ class MihomoConfigGen {
     AppSettings settings, {
     required int socksPort,
     bool httpInbound = false,
+    String? outboundInterface,
   }) {
     final proxies = buildProxies(input.trim());
     return jsonEncode(<String, dynamic>{
@@ -489,6 +490,7 @@ class MihomoConfigGen {
       'log-level': 'silent',
       'find-process-mode': 'off',
       'geo-auto-update': false,
+      'interface-name': ?outboundInterface,
       'dns': _pingDns(),
       'proxies': proxies,
       'rules': ['MATCH,$proxyName'],

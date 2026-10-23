@@ -58,16 +58,48 @@ class ConfigGeneratorV2 {
     required int socksPort,
     String? resolvedServerIp,
     bool httpInbound = false,
+    String? outboundInterface,
   }) {
-    return jsonEncode(
-      _buildXrayConfig(
-        input,
-        settings,
-        resolvedServerIp: resolvedServerIp,
-        pingSocksPort: socksPort,
-        pingHttpInbound: httpInbound,
-      ),
+    final config = _buildXrayConfig(
+      input,
+      settings,
+      resolvedServerIp: resolvedServerIp,
+      pingSocksPort: socksPort,
+      pingHttpInbound: httpInbound,
     );
+    if (outboundInterface != null) {
+      _bindToInterface(config, outboundInterface);
+    }
+    return jsonEncode(config);
+  }
+
+  // копии, а не правка на месте: свой direct готового JSON собран как Map<String, String>
+  static void _bindToInterface(Map<String, dynamic> config, String name) {
+    final outbounds = config['outbounds'];
+    if (outbounds is! List) return;
+    config['outbounds'] = [
+      for (final outbound in outbounds) _boundOutbound(outbound, name),
+    ];
+  }
+
+  // сокет наружу открывает аутбаунд без dialerProxy и proxySettings, остальные едут через него
+  static Object? _boundOutbound(Object? outbound, String name) {
+    if (outbound is! Map) return outbound;
+    final protocol = outbound['protocol'];
+    if (protocol == 'blackhole' || protocol == 'loopback') return outbound;
+    if (outbound['proxySettings'] != null) return outbound;
+    final stream = Map<String, dynamic>.from(
+      outbound['streamSettings'] as Map? ?? const <String, dynamic>{},
+    );
+    final sockopt = Map<String, dynamic>.from(
+      stream['sockopt'] as Map? ?? const <String, dynamic>{},
+    );
+    if ((sockopt['dialerProxy']?.toString() ?? '').isNotEmpty) return outbound;
+    sockopt.putIfAbsent('interface', () => name);
+    return <String, dynamic>{
+      ...Map<String, dynamic>.from(outbound),
+      'streamSettings': {...stream, 'sockopt': sockopt},
+    };
   }
 
   static const int ephemeralPingPort = 28150;

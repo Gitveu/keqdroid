@@ -8,6 +8,7 @@ import 'package:keqdroid/tunnel/app_routing_mode.dart';
 import 'package:keqdroid/utils/config_gen.dart';
 import 'package:keqdroid/utils/desktop_tun.dart';
 import 'package:keqdroid/utils/owner_guard.dart';
+import 'package:keqdroid/utils/proxy_chain.dart';
 import 'package:keqdroid/utils/socks5_credentials.dart';
 
 /// Побайтовая отсечка на форму конфига целиком.
@@ -440,6 +441,98 @@ void main() {
         _settings,
         socksPort: 28150,
         httpInbound: false,
+      );
+    }, compact: true);
+
+    _golden('ping-reality-xhttp', () {
+      return ConfigGeneratorV2.generatePingConfig(
+        'vless://$_uuid@198.51.100.25:443?type=xhttp&security=reality'
+        '&sni=decoy.example&pbk=publickey&sid=aabb&fp=chrome&path=%2Fx#ping',
+        _settings,
+        socksPort: 28150,
+        resolvedServerIp: '198.51.100.25',
+        httpInbound: true,
+      );
+    }, compact: true);
+
+    _golden('ping-fragment', () {
+      return ConfigGeneratorV2.generatePingConfig(
+        'vless://$_uuid@198.51.100.26:443?type=ws&security=tls'
+        '&sni=ws.example&host=ws.example&path=%2Fw#ping',
+        _settings.copyWith(
+          xrayCore: const XrayCoreSettings(fragmentEnabled: true),
+        ),
+        socksPort: 28150,
+        httpInbound: true,
+      );
+    }, compact: true);
+
+    _golden('ping-chain', () {
+      return ConfigGeneratorV2.generatePingConfig(
+        ProxyChainConfig(
+          name: 'chain',
+          hops: [
+            ProxyChainHop(
+              config: 'vless://$_uuid@198.51.100.27:443?type=tcp&security=reality'
+                  '&sni=decoy.example&pbk=publickey&sid=aabb&fp=chrome#hop1',
+            ),
+            const ProxyChainHop(
+              config: 'trojan://pass@198.51.100.28:8443?sni=tr.example&type=ws&path=%2Fw#hop2',
+            ),
+          ],
+        ).encode(),
+        _settings,
+        socksPort: 28150,
+        httpInbound: true,
+      );
+    }, compact: true);
+
+    _golden('ping-custom-json', () {
+      return ConfigGeneratorV2.generatePingConfig(
+        jsonEncode({
+          'outbounds': [
+            {
+              'tag': 'proxy',
+              'protocol': 'vless',
+              'settings': {
+                'vnext': [
+                  {
+                    'address': '198.51.100.29',
+                    'port': 443,
+                    'users': [
+                      {'id': _uuid, 'encryption': 'none'},
+                    ],
+                  },
+                ],
+              },
+              'streamSettings': {
+                'network': 'tcp',
+                'sockopt': {'dialerProxy': 'front'},
+              },
+            },
+            {
+              'tag': 'front',
+              'protocol': 'freedom',
+              'settings': <String, dynamic>{},
+            },
+            {
+              'tag': 'drop',
+              'protocol': 'blackhole',
+            },
+          ],
+        }),
+        _settings,
+        socksPort: 28150,
+        httpInbound: true,
+      );
+    }, compact: true);
+
+    _golden('ping-hysteria2', () {
+      return ConfigGeneratorV2.generatePingConfig(
+        'hysteria2://password@198.51.100.30:443?sni=hy2.example#ping',
+        _settings,
+        socksPort: 28150,
+        httpInbound: true,
       );
     }, compact: true);
   });

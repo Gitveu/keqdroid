@@ -1,0 +1,45 @@
+{
+  "port": 28150,
+  "bind-address": "127.0.0.1",
+  "allow-lan": false,
+  "ipv6": false,
+  "mode": "rule",
+  "log-level": "silent",
+  "find-process-mode": "off",
+  "geo-auto-update": false,
+  "dns": {
+    "enable": true,
+    "ipv6": false,
+    "enhanced-mode": "normal",
+    "default-nameserver": [
+      "https://1.1.1.1/dns-query"
+    ],
+    "nameserver": [
+      "https://1.1.1.1/dns-query#DIRECT",
+      "https://8.8.8.8/dns-query#DIRECT",
+      "system"
+    ]
+  },
+  "proxies": [
+    {
+      "name": "proxy",
+      "type": "vless",
+      "server": "198.51.100.31",
+      "port": 443,
+      "uuid": "00000000-0000-4000-8000-000000000000",
+      "udp": true,
+      "tls": true,
+      "servername": "decoy.example",
+      "client-fingerprint": "chrome",
+      "reality-opts": {
+        "public-key": "publickey",
+        "short-id": "aabb",
+        "support-x25519mlkem768": true
+      },
+      "network": "tcp"
+    }
+  ],
+  "rules": [
+    "MATCH,proxy"
+  ]
+}

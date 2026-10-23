@@ -13,6 +13,7 @@ add_executable(${BINARY_NAME} WIN32
   "windows_core_lifecycle.cpp"
   "windows_hotkeys.cpp"
   "windows_traffic_stats.cpp"
+  "windows_outbound_interface.cpp"
   "windows_process_memory.cpp"
   "windows_tray.cpp"
   "proxy_debug_log.cpp"
