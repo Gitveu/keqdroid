@@ -502,8 +502,11 @@ void main() {
       expect(rules.last['ruleTag'], 'final');
       expect(rules.last['outboundTag'], 'keq-block');
       expect(_outboundTags(config), contains('keq-block'));
-      // freedom никто не просил — и его нет.
-      expect(_outboundTags(config), isNot(contains('keq-direct')));
+      // freedom просит только локалка: она напрямую и при блоке остального, как у ссылок
+      expect(_outboundTags(config), contains('keq-direct'));
+      final private = rules.singleWhere((r) => r['ruleTag'] == 'direct-private');
+      expect(private['outboundTag'], 'keq-direct');
+      expect(rules.indexOf(private), lessThan(rules.length - 1));
     });
 
     test('ping config sends everything to the author primary outbound', () {

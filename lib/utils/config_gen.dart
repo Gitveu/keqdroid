@@ -991,6 +991,11 @@ class ConfigGeneratorV2 {
     final appendRules = <Map<String, dynamic>>[
       ...dnsRules,
       ...userRules,
+      // как у ссылок. у кого провайдер прислал своё правило на локалку, оно стоит раньше и решает само
+      customRule('direct-private', {
+        'ip': [...kBasePrivateRanges],
+        'outboundTag': directTag,
+      }),
       ...resolverRules,
       if (desktopTun != null)
         ..._desktopTunTailRules(
