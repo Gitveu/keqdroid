@@ -2480,6 +2480,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsInternalsSubtitle => 'Версия, ядра, geo-базы и текущая сессия';
 
   @override
+  String get settingsCoreAuto => 'Автоматически';
+
+  @override
+  String get settingsCoreAutoSubtitle => 'Ссылки идут на Xray, а готовые конфиги на своё ядро';
+
+  @override
   String get settingsCoreXraySubtitle => 'Ядро по умолчанию. Исполняет ссылки, цепочки и готовые конфиги Xray.';
 
   @override
@@ -2905,4 +2911,70 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get cardImageRejectUnreadable => 'Не удалось прочитать эту картинку.';
+
+  @override
+  String get macosTunDnsWarning => 'Подключено, но DNS-запросы не удались';
+
+  @override
+  String get macosTunDnsOk => 'DNS-запросы успешны';
+
+  @override
+  String get macosTunDnsChecking => 'Проверка DNS…';
+
+  @override
+  String get macosTunDnsTitle => 'TUN DNS';
+
+  @override
+  String get macosLaunchAtLogin => 'Запускать при входе в систему';
+
+  @override
+  String get macosAutoConnectOnLogin => 'Подключаться автоматически при входе';
+
+  @override
+  String get macosAutoConnectOnLoginHint => 'При запуске после входа в систему подключается к последнему выбранному серверу в режиме из боковой панели. Для TUN нужно заранее предоставить разрешение; без него автоматического подключения не будет. Для Proxy разрешение администратора не требуется.';
+
+  @override
+  String get macosAutoConnectRequiresLogin => 'Сначала включите «Запускать при входе в систему»';
+
+  @override
+  String get macosSplitProcessHint => 'Правила учитывают пути процессов и помощников внутри приложения. Общие системные службы не всегда можно связать с приложением.';
+
+  @override
+  String get macosAppNeedsMatching => 'Приложение не найдено в списке. Выберите его заново, если оно перемещено или удалено.';
+
+  @override
+  String get macosNetworkServiceTitle => 'Сетевая служба';
+
+  @override
+  String get macosNetworkServiceHint => 'Proxy подключается и переключает системный прокси без прав администратора. Для TUN нужно разрешение один раз для установленной версии.';
+
+  @override
+  String get macosNetworkServiceMissing => 'Установите или обновите keqdroid полным пакетом PKG, чтобы включить сетевую службу.';
+
+  @override
+  String get macosAuthorizeAccount => 'Разрешить TUN этому аккаунту';
+
+  @override
+  String get macosWaitingNetwork => 'Ожидание восстановления сети';
+
+  @override
+  String get macosRestoringNetwork => 'Восстановление прежних настроек сети';
+
+  @override
+  String get macosRetryingNetwork => 'Автоматическое переподключение';
+
+  @override
+  String get macosRecoveryPaused => 'Автоматическое восстановление приостановлено';
+
+  @override
+  String get macosRetryRecovery => 'Повторить восстановление сети';
+
+  @override
+  String get appearanceShowMenuBarSpeed => 'Показывать текущую скорость в строке меню';
+
+  @override
+  String get appearanceShowMenuBarSpeedSubtitle => 'Трафик, обрабатываемый keqdroid';
+
+  @override
+  String get macosMenuOpenServers => 'Открыть окно выбора узла';
 }

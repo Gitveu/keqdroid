@@ -2466,6 +2466,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsInternalsSubtitle => 'Version, Kerne, Geo-Datenbanken und aktuelle Sitzung';
 
   @override
+  String get settingsCoreAuto => 'Automatisch';
+
+  @override
+  String get settingsCoreAutoSubtitle => 'Links gehen an Xray, fertige Konfigurationen an ihren eigenen Kern';
+
+  @override
   String get settingsCoreXraySubtitle => 'Standard-Kern. Führt Links, Ketten und fertige Xray-Konfigurationen aus.';
 
   @override
@@ -2889,4 +2895,70 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get cardImageRejectUnreadable => 'Bild konnte nicht gelesen werden.';
+
+  @override
+  String get macosTunDnsWarning => 'Verbunden, aber DNS-Abfragen fehlgeschlagen';
+
+  @override
+  String get macosTunDnsOk => 'DNS-Abfragen erfolgreich';
+
+  @override
+  String get macosTunDnsChecking => 'DNS wird geprüft…';
+
+  @override
+  String get macosTunDnsTitle => 'TUN DNS';
+
+  @override
+  String get macosLaunchAtLogin => 'Bei Anmeldung starten';
+
+  @override
+  String get macosAutoConnectOnLogin => 'Bei Anmeldung automatisch verbinden';
+
+  @override
+  String get macosAutoConnectOnLoginHint => 'Verbindet beim Start zur Anmeldung mit dem zuletzt gewählten Server im Modus der Seitenleiste. TUN muss vorher autorisiert werden und verbindet sich ohne diese Freigabe nicht automatisch. Proxy benötigt keine Administratorfreigabe.';
+
+  @override
+  String get macosAutoConnectRequiresLogin => 'Zuerst „Bei Anmeldung starten“ aktivieren';
+
+  @override
+  String get macosSplitProcessHint => 'Regeln verwenden Programmpfade einschließlich interner Hilfsprozesse. Gemeinsame Systemdienste lassen sich nicht immer einer App zuordnen.';
+
+  @override
+  String get macosAppNeedsMatching => 'App nicht in der Liste gefunden. Nach Verschieben oder Entfernen erneut auswählen.';
+
+  @override
+  String get macosNetworkServiceTitle => 'Netzwerkdienst';
+
+  @override
+  String get macosNetworkServiceHint => 'Proxy verbindet sich und stellt den Systemproxy ohne Administratorfreigabe um. TUN benötigt eine Freigabe pro installierter Version.';
+
+  @override
+  String get macosNetworkServiceMissing => 'Installiere oder aktualisiere keqdroid mit dem vollständigen PKG, um den Netzwerkdienst zu aktivieren.';
+
+  @override
+  String get macosAuthorizeAccount => 'TUN für dieses Konto autorisieren';
+
+  @override
+  String get macosWaitingNetwork => 'Warten auf Netzwerkwiederherstellung';
+
+  @override
+  String get macosRestoringNetwork => 'Vorherige Netzwerkeinstellungen werden wiederhergestellt';
+
+  @override
+  String get macosRetryingNetwork => 'Automatische Wiederverbindung';
+
+  @override
+  String get macosRecoveryPaused => 'Automatische Wiederherstellung pausiert';
+
+  @override
+  String get macosRetryRecovery => 'Netzwerkwiederherstellung wiederholen';
+
+  @override
+  String get appearanceShowMenuBarSpeed => 'Aktuelle Geschwindigkeit in der Menüleiste anzeigen';
+
+  @override
+  String get appearanceShowMenuBarSpeedSubtitle => 'Von keqdroid verarbeiteter Datenverkehr';
+
+  @override
+  String get macosMenuOpenServers => 'Fenster zur Knotenauswahl öffnen';
 }

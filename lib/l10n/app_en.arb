@@ -857,8 +857,6 @@
       "name": {}
     }
   },
-  "splitShowSystemApps": "Show system apps",
-  "splitHideSystemApps": "Hide system apps",
   "splitProxyModeWarning": "Split tunneling is not applied in Proxy mode: all traffic goes through the system proxy. Switch the connection mode to TUN (in the side panel) so per-process rules work.",
   "settingsLatestVersionInstalled": "You have the latest version",
   "serversPingServer": "Ping server",
@@ -1282,6 +1280,8 @@
   },
   "settingsInternalsTitle": "About",
   "settingsInternalsSubtitle": "Version, cores, geo databases and current session",
+  "settingsCoreAuto": "Automatic",
+  "settingsCoreAutoSubtitle": "Links go to Xray, ready-made configs to their own core",
   "settingsCoreXraySubtitle": "Default core. Runs links, chains and ready-made Xray configs.",
   "settingsCoreMihomoSubtitle": "Clash-compatible core. Ready-made xray configs stay on Xray.",
   "settingsCoreHint": "Applies on the next connection, the running session is not restarted.",
@@ -1400,7 +1400,7 @@
   "subscriptionCardThemeTitle": "Backdrop",
   "subscriptionCardThemeNone": "None",
   "subscriptionCardThemeInServers": "Show in server list",
-"subscriptionCardLookTitle": "Card look",
+  "subscriptionCardLookTitle": "Card look",
   "subscriptionCardVeilTitle": "Image dimming",
   "subscriptionCardVeilNone": "Off",
   "subscriptionCardVeilLight": "Light",
@@ -1452,5 +1452,27 @@
       }
     }
   },
-  "cardImageRejectUnreadable": "Could not read this image."
+  "cardImageRejectUnreadable": "Could not read this image.",
+  "macosTunDnsWarning": "Connected, but DNS queries failed",
+  "macosTunDnsOk": "DNS queries succeeded",
+  "macosTunDnsChecking": "Checking DNS…",
+  "macosTunDnsTitle": "TUN DNS",
+  "macosLaunchAtLogin": "Launch at login",
+  "macosAutoConnectOnLogin": "Connect automatically at login",
+  "macosAutoConnectOnLoginHint": "Connect to the last selected server using the mode from the sidebar when launched at login. TUN requires prior authorization and will not connect automatically without it. Proxy requires no administrator authorization.",
+  "macosAutoConnectRequiresLogin": "Enable \"Launch at login\" first",
+  "macosSplitProcessHint": "Rules match executable paths, including helpers inside the selected app. Shared system services may not be attributable to an app.",
+  "macosAppNeedsMatching": "App not found in this list. Locate it again if it moved or was removed.",
+  "macosNetworkServiceTitle": "Network service",
+  "macosNetworkServiceHint": "Proxy connects and switches the system proxy without administrator authorization. TUN requires authorization once per installed version.",
+  "macosNetworkServiceMissing": "Install or update keqdroid using the complete PKG installer to enable the network service.",
+  "macosAuthorizeAccount": "Authorize TUN for this account",
+  "macosWaitingNetwork": "Waiting for network to recover",
+  "macosRestoringNetwork": "Restoring previous network settings",
+  "macosRetryingNetwork": "Reconnecting automatically",
+  "macosRecoveryPaused": "Automatic recovery paused",
+  "macosRetryRecovery": "Retry network restoration",
+  "appearanceShowMenuBarSpeed": "Show real-time speed in the menu bar",
+  "appearanceShowMenuBarSpeedSubtitle": "Traffic handled by keqdroid",
+  "macosMenuOpenServers": "Open window to select a node"
 }

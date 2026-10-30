@@ -130,6 +130,7 @@ class _PermissionsScreenState extends ConsumerState<_PermissionsScreen>
       children: [
         if (Platform.isAndroid) ..._androidPermissions(l10n),
         if (Platform.isLinux) ..._linuxPermissions(l10n),
+        if (Platform.isMacOS) const _MacOSNetworkPermissionTile(),
       ],
     );
   }
@@ -325,6 +326,102 @@ class _LinuxTunPasswordlessTileState
           ? ShapeLoadingIndicator(size: 24, color: accent)
           : Icon(Icons.lock_open_rounded, color: accent),
       title: Text(l10n.settingsPermTunPasswordlessTitle),
+    );
+  }
+}
+
+class _MacOSNetworkPermissionTile extends StatefulWidget {
+  const _MacOSNetworkPermissionTile();
+
+  @override
+  State<_MacOSNetworkPermissionTile> createState() =>
+      _MacOSNetworkPermissionTileState();
+}
+
+class _MacOSNetworkPermissionTileState
+    extends State<_MacOSNetworkPermissionTile> {
+  static const _network = MethodChannel('com.keqdroid.keqdroid/network');
+  Map<String, dynamic> _status = {};
+  Object? _error;
+  bool _busy = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh({bool authorize = false}) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final result = await _network.invokeMapMethod<String, dynamic>(
+        authorize ? 'authorize' : 'getServiceStatus',
+      );
+      if (mounted) setState(() => _status = result ?? {});
+    } catch (error) {
+      if (mounted) setState(() => _error = error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final installed = _status['installed'] == true;
+    final authorized = _status['authorized'] == true;
+    return ExpressiveCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.macosNetworkServiceTitle,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            installed
+                ? l10n.macosNetworkServiceHint
+                : l10n.macosNetworkServiceMissing,
+          ),
+          if (installed)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'TUN: ${authorized ? l10n.settingsPermStatusGranted : l10n.settingsPermStatusDenied}',
+              ),
+            ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: SelectableText('$_error'),
+            ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              if (installed && !authorized)
+                FilledButton(
+                  onPressed: _busy ? null : () => _refresh(authorize: true),
+                  child: Text(l10n.macosAuthorizeAccount),
+                ),
+              TextButton(
+                onPressed: _busy ? null : _refresh,
+                child: const Icon(Icons.refresh_rounded),
+              ),
+              if (_busy)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

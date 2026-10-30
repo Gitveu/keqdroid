@@ -152,7 +152,7 @@ class _XrayCoreSettingsScreenState extends ConsumerState<_XrayCoreSettingsScreen
           const _XrayNoiseSection(),
         ],
         const _XrayGeneralSection(),
-        if (Platform.isWindows || Platform.isLinux) const _XrayTunSection(),
+        if (PlatformBootstrap.isDesktop) const _XrayTunSection(),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: () => _resetDefaults(settings),

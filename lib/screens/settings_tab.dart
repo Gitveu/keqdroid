@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -29,6 +29,9 @@ import 'package:keqdroid/providers/providers.dart';
 import 'package:keqdroid/services/app_icon_cache.dart';
 import 'package:keqdroid/services/app_internals_service.dart';
 import 'package:keqdroid/services/app_log_service.dart';
+import 'package:keqdroid/models/macos_app_routing.dart';
+import 'package:keqdroid/services/macos_app_routing_store.dart';
+import 'package:keqdroid/services/macos_desktop_service.dart';
 import 'package:keqdroid/services/file_dialog_service.dart';
 import 'package:keqdroid/services/geo_base_downloader.dart';
 import 'package:keqdroid/services/connections_service.dart';
@@ -45,6 +48,8 @@ import 'package:keqdroid/shared/ui/add_process_dialog.dart';
 import 'package:keqdroid/shared/ui/app_list_tile.dart';
 import 'package:keqdroid/shared/ui/app_theme.dart';
 import 'package:keqdroid/shared/ui/commit_on_blur.dart';
+import 'package:keqdroid/shared/ui/desktop_dns_notice.dart';
+import 'package:keqdroid/shared/ui/desktop_recovery_notice.dart';
 import 'package:keqdroid/shared/ui/expressive.dart';
 import 'package:keqdroid/shared/ui/expressive_elements.dart';
 import 'package:keqdroid/shared/ui/expressive_button_group.dart';
@@ -85,6 +90,7 @@ import 'package:keqdroid/screens/split_tunneling_screen.dart';
 import 'package:keqdroid/tunnel/linux_tunnel_backend.dart';
 import 'package:keqdroid/tunnel/vpn_backend.dart';
 import 'package:keqdroid/tunnel/local_port_plan.dart';
+import 'package:keqdroid/platform/desktop_lan_state.dart';
 import 'package:keqdroid/ui/responsive/desktop_page_layout.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -157,13 +163,17 @@ class SettingsTab extends ConsumerWidget {
                         children: [
                           _LanSharingCard(settingsAsync: settingsAsync),
                           const _SplitTunnelingSettingsCard(),
-                          if (Platform.isWindows || Platform.isLinux)
+                          if (Platform.isWindows || Platform.isLinux || Platform.isMacOS)
                             _SettingsCard(
-                              title: Platform.isLinux
-                                  ? l10n.settingsDesktopTitleLinux
-                                  : l10n.settingsDesktopTitle,
+                              title: Platform.isMacOS
+                                  ? 'macOS'
+                                  : (Platform.isLinux
+                                      ? l10n.settingsDesktopTitleLinux
+                                      : l10n.settingsDesktopTitle),
                               subtitle: l10n.settingsDesktopSubtitle,
-                              icon: Icons.desktop_windows_rounded,
+                              icon: Platform.isMacOS
+                                  ? Icons.desktop_mac_rounded
+                                  : Icons.desktop_windows_rounded,
                               accent: ExpressiveAccent.secondary,
                               onTap: () => Navigator.push(
                                 context,
@@ -397,6 +407,23 @@ class _SplitTunnelingSettingsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
+    if (Platform.isMacOS) {
+      return FutureBuilder<MacOSAppRoutingSettings>(
+        future: MacOSAppRoutingStore.load(),
+        builder: (context, snapshot) => _SettingsCard(
+          title: l10n.settingsSplitTitle,
+          subtitle: l10n.settingsSplitConfigured(
+            snapshot.data?.apps.length ?? 0,
+          ),
+          icon: Icons.alt_route_rounded,
+          accent: ExpressiveAccent.tertiary,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SplitTunnelingScreen()),
+          ),
+        ),
+      );
+    }
     final packageCount = ref.watch(
       splitTunnelingProvider.select(
         (s) => s.excludePackages.length + s.includePackages.length,

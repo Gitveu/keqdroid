@@ -91,6 +91,7 @@ class _AppInternalsScreen extends ConsumerWidget {
       else ...[
         ExpressiveGroup(
           children: [
+            if (mihomoShipsHere) const _AutoCoreTile(),
             for (final core in data.cores)
               if (_selectableCore(core) case final vpnCore?)
                 _SelectableCoreTile(core: core, value: vpnCore)
@@ -129,6 +130,8 @@ class _AppInternalsScreen extends ConsumerWidget {
 
       ExpressiveSectionHeader(l10n.settingsInternalsSession),
       ExpressiveGroup(children: _sessionRows(context, l10n, data.session)),
+      if (Platform.isMacOS) const DesktopDnsNotice(showDetails: true),
+      if (Platform.isMacOS) const DesktopRecoveryNotice(showDetails: true),
 
       ExpressiveSectionHeader(l10n.settingsAdvancedGroupDiagnostics),
       ExpressiveGroup(
@@ -652,7 +655,7 @@ VpnCoreSkip? _coreMismatch(WidgetRef ref) {
   if (server == null) return null;
   final core = ref.watch(
     settingsNotifierProvider.select(
-      (a) => a.value?.vpnCore ?? AppSettings.vpnCoreXray,
+      (a) => a.value?.vpnCore ?? AppSettings.vpnCoreAuto,
     ),
   );
   return resolveVpnBackend(
@@ -821,8 +824,74 @@ class _TunnelModeTile extends ConsumerWidget {
   }
 }
 
+class _AutoCoreTile extends ConsumerWidget {
+  const _AutoCoreTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final selected = ref.watch(
+          settingsNotifierProvider.select((a) => a.value?.vpnCore),
+        ) ==
+        AppSettings.vpnCoreAuto;
+
+    Future<void> select() async {
+      if (selected) return;
+      final settings = await ref.read(settingsNotifierProvider.future);
+      await ref
+          .read(settingsNotifierProvider.notifier)
+          .save(settings.copyWith(vpnCore: AppSettings.vpnCoreAuto));
+    }
+
+    return ExpressiveGroupTile(
+      padding: const EdgeInsets.all(16),
+      onTap: select,
+      child: Row(
+        children: [
+          const ExpressiveIconBadge(
+            icon: Icons.auto_awesome_rounded,
+            accent: ExpressiveAccent.primary,
+          ),
+          const SizedBox(width: ExpressiveSpacing.large),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.settingsCoreAuto,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: AppTheme.text(context),
+                  ),
+                ),
+                Text(
+                  l10n.settingsCoreAutoSubtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppTheme.textLight(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: ExpressiveSpacing.large),
+          Icon(
+            selected
+                ? Icons.radio_button_checked_rounded
+                : Icons.radio_button_unchecked_rounded,
+            color: selected
+                ? AppTheme.accent(context)
+                : AppTheme.textLight(context),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 const _selectableCores = <String, String>{
   'libxray.so': AppSettings.vpnCoreXray,
+  'keqrnel.exe': AppSettings.vpnCoreXray,
+  'keqrnel': AppSettings.vpnCoreXray,
   'xray.exe': AppSettings.vpnCoreXray,
   'xray': AppSettings.vpnCoreXray,
   'libmihomo.so': AppSettings.vpnCoreMihomo,
@@ -845,7 +914,7 @@ class _SelectableCoreTile extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final current = ref.watch(
       settingsNotifierProvider.select(
-        (a) => a.value?.vpnCore ?? AppSettings.vpnCoreXray,
+        (a) => a.value?.vpnCore ?? AppSettings.vpnCoreAuto,
       ),
     );
 

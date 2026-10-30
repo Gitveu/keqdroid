@@ -17,11 +17,39 @@ class _DesktopSettingsScreenState
   }
 
   Future<void> _save(AppSettings next) async {
+    if (Platform.isMacOS) {
+      try {
+        final previous = ref.read(settingsNotifierProvider).value;
+        await MacOSDesktopService.applySettings(
+          next,
+          updateLoginItem: previous?.launchAtStartup != next.launchAtStartup,
+        );
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('$error')));
+        }
+        return;
+      }
+    }
     await ref.read(settingsNotifierProvider.notifier).save(next);
-    await WindowsDesktopService.applySettings(next);
+    if (Platform.isWindows) await WindowsDesktopService.applySettings(next);
   }
 
   Future<void> _syncWithSystem() async {
+    if (Platform.isMacOS) {
+      final status = await MacOSDesktopService.loginStatus();
+      if (!mounted) return;
+      final actual = status['enabled'] as bool?;
+      if (actual == null) return;
+      final settings = ref.read(settingsNotifierProvider).value;
+      if (settings == null || settings.launchAtStartup == actual) return;
+      await ref
+          .read(settingsNotifierProvider.notifier)
+          .save(settings.copyWith(launchAtStartup: actual));
+      return;
+    }
     if (Platform.isLinux) {
       final enabled = LinuxAutostart.isEnabled();
       final settings = ref.read(settingsNotifierProvider).value;
@@ -47,6 +75,10 @@ class _DesktopSettingsScreenState
   }
 
   Future<void> _applyAutostart(AppSettings next) async {
+    if (Platform.isMacOS) {
+      await _save(next);
+      return;
+    }
     if (Platform.isLinux) {
       await LinuxAutostart.setEnabled(next.launchAtStartup);
       if (!mounted) return;
@@ -95,8 +127,11 @@ class _DesktopSettingsScreenState
         );
 
     final linux = Platform.isLinux;
+    final macos = Platform.isMacOS;
     return ExpressivePage(
-      title: linux ? l10n.settingsDesktopTitleLinux : l10n.settingsDesktopTitle,
+      title: macos
+          ? 'macOS'
+          : (linux ? l10n.settingsDesktopTitleLinux : l10n.settingsDesktopTitle),
       physics: const ClampingScrollPhysics(),
       children: [
         ExpressiveGroup(
@@ -107,17 +142,27 @@ class _DesktopSettingsScreenState
               value: settings.minimizeToTray,
               onChanged: (v) => _save(settings.copyWith(minimizeToTray: v)),
             ),
+            if (macos)
+              _AppearanceSwitchTile(
+                icon: Icons.speed_rounded,
+                title: l10n.appearanceShowMenuBarSpeed,
+                subtitle: l10n.appearanceShowMenuBarSpeedSubtitle,
+                value: settings.showMenuBarSpeed,
+                onChanged: (v) => _save(settings.copyWith(showMenuBarSpeed: v)),
+              ),
             _AppearanceSwitchTile(
               icon: Icons.power_settings_new_rounded,
-              title: linux
-                  ? l10n.settingsLaunchAtLogin
-                  : l10n.settingsLaunchAtStartup,
+              title: macos
+                  ? l10n.macosLaunchAtLogin
+                  : (linux
+                      ? l10n.settingsLaunchAtLogin
+                      : l10n.settingsLaunchAtStartup),
               value: settings.launchAtStartup,
               onChanged: (v) => unawaited(
                 _applyAutostart(settings.copyWith(launchAtStartup: v)),
               ),
             ),
-            if (!linux)
+            if (Platform.isWindows)
               _AppearanceSwitchTile(
                 icon: Icons.admin_panel_settings_rounded,
                 title: l10n.settingsLaunchAtStartupAdmin,
@@ -130,7 +175,7 @@ class _DesktopSettingsScreenState
                         )
                     : null,
               ),
-            if (!linux)
+            if (Platform.isWindows)
               _AppearanceSwitchTile(
                 icon: Icons.web_asset_off_rounded,
                 title: l10n.settingsAutostartInTray,
@@ -141,7 +186,9 @@ class _DesktopSettingsScreenState
               ),
             _AppearanceSwitchTile(
               icon: Icons.vpn_lock_rounded,
-              title: l10n.settingsAutoConnectOnAutostart,
+              title: macos
+                  ? l10n.macosAutoConnectOnLogin
+                  : l10n.settingsAutoConnectOnAutostart,
               value: settings.autoConnectLastServer,
               onChanged: settings.launchAtStartup
                   ? (v) => _save(settings.copyWith(autoConnectLastServer: v))
@@ -150,9 +197,14 @@ class _DesktopSettingsScreenState
           ],
         ),
         if (!settings.launchAtStartup)
-          note(linux
-              ? l10n.settingsAutoConnectRequiresLogin
-              : l10n.settingsAutoConnectRequiresAutostart),
+          note(
+            macos
+                ? l10n.macosAutoConnectRequiresLogin
+                : (linux
+                    ? l10n.settingsAutoConnectRequiresLogin
+                    : l10n.settingsAutoConnectRequiresAutostart),
+          ),
+        if (macos) note(l10n.macosAutoConnectOnLoginHint),
       ],
     );
   }

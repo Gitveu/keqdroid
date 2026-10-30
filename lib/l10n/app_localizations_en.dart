@@ -2466,6 +2466,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsInternalsSubtitle => 'Version, cores, geo databases and current session';
 
   @override
+  String get settingsCoreAuto => 'Automatic';
+
+  @override
+  String get settingsCoreAutoSubtitle => 'Links go to Xray, ready-made configs to their own core';
+
+  @override
   String get settingsCoreXraySubtitle => 'Default core. Runs links, chains and ready-made Xray configs.';
 
   @override
@@ -2889,4 +2895,70 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cardImageRejectUnreadable => 'Could not read this image.';
+
+  @override
+  String get macosTunDnsWarning => 'Connected, but DNS queries failed';
+
+  @override
+  String get macosTunDnsOk => 'DNS queries succeeded';
+
+  @override
+  String get macosTunDnsChecking => 'Checking DNS…';
+
+  @override
+  String get macosTunDnsTitle => 'TUN DNS';
+
+  @override
+  String get macosLaunchAtLogin => 'Launch at login';
+
+  @override
+  String get macosAutoConnectOnLogin => 'Connect automatically at login';
+
+  @override
+  String get macosAutoConnectOnLoginHint => 'Connect to the last selected server using the mode from the sidebar when launched at login. TUN requires prior authorization and will not connect automatically without it. Proxy requires no administrator authorization.';
+
+  @override
+  String get macosAutoConnectRequiresLogin => 'Enable \"Launch at login\" first';
+
+  @override
+  String get macosSplitProcessHint => 'Rules match executable paths, including helpers inside the selected app. Shared system services may not be attributable to an app.';
+
+  @override
+  String get macosAppNeedsMatching => 'App not found in this list. Locate it again if it moved or was removed.';
+
+  @override
+  String get macosNetworkServiceTitle => 'Network service';
+
+  @override
+  String get macosNetworkServiceHint => 'Proxy connects and switches the system proxy without administrator authorization. TUN requires authorization once per installed version.';
+
+  @override
+  String get macosNetworkServiceMissing => 'Install or update keqdroid using the complete PKG installer to enable the network service.';
+
+  @override
+  String get macosAuthorizeAccount => 'Authorize TUN for this account';
+
+  @override
+  String get macosWaitingNetwork => 'Waiting for network to recover';
+
+  @override
+  String get macosRestoringNetwork => 'Restoring previous network settings';
+
+  @override
+  String get macosRetryingNetwork => 'Reconnecting automatically';
+
+  @override
+  String get macosRecoveryPaused => 'Automatic recovery paused';
+
+  @override
+  String get macosRetryRecovery => 'Retry network restoration';
+
+  @override
+  String get appearanceShowMenuBarSpeed => 'Show real-time speed in the menu bar';
+
+  @override
+  String get appearanceShowMenuBarSpeedSubtitle => 'Traffic handled by keqdroid';
+
+  @override
+  String get macosMenuOpenServers => 'Open window to select a node';
 }

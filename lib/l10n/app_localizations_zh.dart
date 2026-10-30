@@ -2460,6 +2460,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsInternalsSubtitle => '版本、内核、地理数据库与当前会话';
 
   @override
+  String get settingsCoreAuto => '自动';
+
+  @override
+  String get settingsCoreAutoSubtitle => '链接交给 Xray，现成配置交给各自的内核';
+
+  @override
   String get settingsCoreXraySubtitle => '默认内核。运行链接、链式代理和现成的 Xray 配置。';
 
   @override
@@ -2882,4 +2888,70 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get cardImageRejectUnreadable => '无法读取该图片。';
+
+  @override
+  String get macosTunDnsWarning => '已连接，但 DNS 查询失败';
+
+  @override
+  String get macosTunDnsOk => 'DNS 查询正常';
+
+  @override
+  String get macosTunDnsChecking => '正在检查 DNS…';
+
+  @override
+  String get macosTunDnsTitle => 'TUN DNS';
+
+  @override
+  String get macosLaunchAtLogin => '登录时启动';
+
+  @override
+  String get macosAutoConnectOnLogin => '登录启动时自动连接';
+
+  @override
+  String get macosAutoConnectOnLoginHint => '登录启动时连接上次选择的服务器，使用侧栏中的模式。TUN 需提前授权；未授权时不会自动连接。Proxy 无需管理员授权。';
+
+  @override
+  String get macosAutoConnectRequiresLogin => '请先启用“登录时启动”';
+
+  @override
+  String get macosSplitProcessHint => '规则匹配应用及其包内辅助进程的可执行文件路径。部分共享系统服务无法归属到具体应用。';
+
+  @override
+  String get macosAppNeedsMatching => '当前列表中未找到此应用；如已移动或删除，请重新选择。';
+
+  @override
+  String get macosNetworkServiceTitle => '网络服务';
+
+  @override
+  String get macosNetworkServiceHint => 'Proxy 连接时无需管理员授权，并会自动切换系统代理。TUN 每个已安装版本需要授权一次。';
+
+  @override
+  String get macosNetworkServiceMissing => '请使用完整 PKG 安装或更新 keqdroid，以启用网络服务。';
+
+  @override
+  String get macosAuthorizeAccount => '授权当前账户使用 TUN';
+
+  @override
+  String get macosWaitingNetwork => '等待网络恢复';
+
+  @override
+  String get macosRestoringNetwork => '正在恢复原网络设置';
+
+  @override
+  String get macosRetryingNetwork => '正在自动重连';
+
+  @override
+  String get macosRecoveryPaused => '自动恢复已暂停';
+
+  @override
+  String get macosRetryRecovery => '重试恢复网络';
+
+  @override
+  String get appearanceShowMenuBarSpeed => '菜单栏显示实时速率';
+
+  @override
+  String get appearanceShowMenuBarSpeedSubtitle => 'keqdroid处理流量';
+
+  @override
+  String get macosMenuOpenServers => '打开窗口选择节点';
 }

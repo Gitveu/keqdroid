@@ -2462,6 +2462,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsInternalsSubtitle => 'نسخه، هسته‌ها، پایگاه‌های جغرافیایی و نشست جاری';
 
   @override
+  String get settingsCoreAuto => 'خودکار';
+
+  @override
+  String get settingsCoreAutoSubtitle => 'لینک‌ها به Xray می‌روند و کانفیگ‌های آماده به هستهٔ خودشان';
+
+  @override
   String get settingsCoreXraySubtitle => 'هستهٔ پیش‌فرض. لینک‌ها، زنجیره‌ها و کانفیگ‌های آمادهٔ Xray را اجرا می‌کند.';
 
   @override
@@ -2884,4 +2890,70 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get cardImageRejectUnreadable => 'خواندن این تصویر ممکن نشد.';
+
+  @override
+  String get macosTunDnsWarning => 'متصل است، اما درخواست‌های DNS ناموفق بود';
+
+  @override
+  String get macosTunDnsOk => 'درخواست‌های DNS موفق بود';
+
+  @override
+  String get macosTunDnsChecking => 'در حال بررسی DNS…';
+
+  @override
+  String get macosTunDnsTitle => 'TUN DNS';
+
+  @override
+  String get macosLaunchAtLogin => 'اجرا هنگام ورود به سیستم';
+
+  @override
+  String get macosAutoConnectOnLogin => 'اتصال خودکار هنگام ورود به سیستم';
+
+  @override
+  String get macosAutoConnectOnLoginHint => 'هنگام اجرای برنامه پس از ورود به سیستم، به آخرین سرور انتخاب‌شده با حالت پنل کناری متصل می‌شود. برای TUN باید از قبل مجوز داده شود؛ بدون مجوز، اتصال خودکار انجام نمی‌شود. Proxy به مجوز مدیر نیاز ندارد.';
+
+  @override
+  String get macosAutoConnectRequiresLogin => 'ابتدا «اجرا هنگام ورود به سیستم» را فعال کنید';
+
+  @override
+  String get macosSplitProcessHint => 'قواعد مسیر فایل اجرایی برنامه و پردازش‌های کمکی آن را تطبیق می‌دهند. سرویس‌های مشترک سیستم همیشه به یک برنامه قابل انتساب نیستند.';
+
+  @override
+  String get macosAppNeedsMatching => 'برنامه در فهرست یافت نشد. اگر جابه‌جا یا حذف شده است، دوباره انتخاب کنید.';
+
+  @override
+  String get macosNetworkServiceTitle => 'سرویس شبکه';
+
+  @override
+  String get macosNetworkServiceHint => 'Proxy بدون مجوز مدیر متصل می‌شود و پراکسی سیستم را تغییر می‌دهد. TUN برای هر نسخهٔ نصب‌شده یک بار به مجوز نیاز دارد.';
+
+  @override
+  String get macosNetworkServiceMissing => 'برای فعال‌سازی سرویس شبکه، keqdroid را با نصب‌کنندهٔ کامل PKG نصب یا به‌روز کنید.';
+
+  @override
+  String get macosAuthorizeAccount => 'اجازهٔ TUN به این حساب';
+
+  @override
+  String get macosWaitingNetwork => 'در انتظار بازیابی شبکه';
+
+  @override
+  String get macosRestoringNetwork => 'در حال بازیابی تنظیمات قبلی شبکه';
+
+  @override
+  String get macosRetryingNetwork => 'اتصال مجدد خودکار';
+
+  @override
+  String get macosRecoveryPaused => 'بازیابی خودکار متوقف شد';
+
+  @override
+  String get macosRetryRecovery => 'تلاش مجدد برای بازیابی شبکه';
+
+  @override
+  String get appearanceShowMenuBarSpeed => 'نمایش سرعت لحظه‌ای در نوار منو';
+
+  @override
+  String get appearanceShowMenuBarSpeedSubtitle => 'ترافیک پردازش‌شده توسط keqdroid';
+
+  @override
+  String get macosMenuOpenServers => 'باز کردن پنجره برای انتخاب گره';
 }

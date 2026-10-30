@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:keqdroid/shared/ui/expressive.dart';
 import 'dart:io';
 
@@ -13,6 +14,9 @@ import '../../services/desktop_background_service.dart';
 import '../../services/hotkey_service.dart';
 import '../../services/linux_autostart.dart';
 import '../../services/linux_background_service.dart';
+import '../../services/macos_desktop_service.dart';
+import '../../services/macos_status_item.dart';
+import '../../services/macos_status_menu.dart';
 import '../../services/resume_after_update.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -27,12 +31,14 @@ import '../../services/update_service.dart';
 import '../../services/vpn_engine.dart';
 import '../../services/windows_desktop_service.dart';
 import '../../services/windows_tray_menu.dart';
+import '../../tunnel/desktop_recovery_status.dart';
 import '../../tunnel/linux_tunnel_backend.dart';
 import '../../shared/ui/app_theme.dart';
 import '../../shared/ui/expressive_button_group.dart';
 import '../../shared/ui/halloween/halloween_icons.dart';
 import '../../shared/ui/update_dialog.dart';
 import '../../utils/clipboard_import.dart';
+import '../../utils/error_messages.dart';
 import 'desktop_connection_mode.dart';
 import 'sidebar_group_nav.dart';
 
@@ -51,6 +57,9 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
   bool _startupConnectInFlight = false;
   StreamSubscription<void>? _tunRememberSub;
   bool _tunRememberDialogOpen = false;
+  MacOSStatusItem? _macOSStatusItem;
+  bool _macOSMenuActionBusy = false;
+  String? _lastMacOSMenu;
 
   @override
   void initState() {
@@ -64,6 +73,22 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
       _tunRememberSub = linuxTunRememberOffers.listen((_) {
         if (mounted) unawaited(_maybeOfferTunRemember());
       });
+    }
+    if (Platform.isMacOS) {
+      VpnNativeBridge.registerQuitHandler(_disconnectForQuit);
+      VpnNativeBridge.registerStatusMenuHandler(_onMacOSMenuAction);
+      VpnNativeBridge.registerWakeHandler(() => _macOSStatusItem?.invalidateSample());
+      desktopRecoveryStatus.addListener(_onMacOSRecoveryChanged);
+      ref.listenManual(vpnStateProvider, (previous, next) {
+        _macOSStatusItem?.updateState(next.value ?? VpnState.disconnected);
+        if (previous?.value?.status != next.value?.status) _syncMacOSMenu();
+      });
+      ref.listenManual(settingsNotifierProvider, (_, next) {
+        _macOSStatusItem?.setShowSpeed(next.value?.showMenuBarSpeed ?? true);
+        _syncMacOSMenu();
+      });
+      ref.listenManual(serversProvider, (_, _) => _syncMacOSMenu());
+      ref.listenManual(subscriptionsProvider, (_, _) => _syncMacOSMenu());
     }
     VpnNativeBridge.registerAutostartHandler(
       () => _maybeAutostartConnect(force: true),
@@ -95,6 +120,123 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
         show: l10n.trayOpenApp,
         quit: l10n.trayExit,
       ));
+    }
+    if (Platform.isMacOS && l10n != null) {
+      if (_macOSStatusItem == null) {
+        _macOSStatusItem = MacOSStatusItem(
+          labels: l10n,
+          send: (payload) => _sendMacOSPresentation(
+            MacOSDesktopService.updateStatusItem(payload),
+          ),
+        );
+        _macOSStatusItem!.setShowSpeed(
+          ref.read(settingsNotifierProvider).value?.showMenuBarSpeed ?? true,
+        );
+        _macOSStatusItem!.updateRecovery(desktopRecoveryStatus.value);
+        _macOSStatusItem!.updateState(
+          ref.read(vpnStateProvider).value ?? VpnState.disconnected,
+        );
+      } else {
+        _macOSStatusItem!.updateLabels(l10n);
+      }
+      _syncMacOSMenu();
+    }
+  }
+
+  void _sendMacOSPresentation(Future<void> update) {
+    unawaited(update.catchError((Object error, StackTrace stack) {
+      AppLogger.instance.warn('macOS menu update failed', error: error, stackTrace: stack);
+    }));
+  }
+
+  void _onMacOSRecoveryChanged() {
+    _macOSStatusItem?.updateRecovery(desktopRecoveryStatus.value);
+    _syncMacOSMenu();
+  }
+
+  void _syncMacOSMenu() {
+    if (!mounted || _macOSStatusItem == null) return;
+    final labels = AppLocalizations.of(context)!;
+    final servers = ref.read(serversProvider);
+    final settings = ref.read(settingsNotifierProvider).value ?? const AppSettings();
+    final menu = buildMacOSStatusMenu(
+      labels: labels,
+      status: _macOSStatusItem!.visualStatus,
+      statusText: _macOSStatusItem!.statusText,
+      mode: settings.connectionModeEnum,
+      servers: servers.servers,
+      activeId: servers.activeServerId,
+      subscriptionNames: {
+        for (final subscription in ref.read(subscriptionsProvider).value ?? [])
+          subscription.id: subscription.name,
+      },
+      operationBusy: _macOSMenuActionBusy,
+    );
+    final encoded = jsonEncode(menu);
+    if (_lastMacOSMenu == encoded) return;
+    _sendMacOSPresentation(MacOSDesktopService.updateStatusMenu(menu).then((_) {
+      if (mounted) _lastMacOSMenu = encoded;
+    }));
+  }
+
+  Future<void> _onMacOSMenuAction(String action, String? value) async {
+    if (!mounted) return;
+    final visual = _macOSStatusItem?.visualStatus ?? VpnStatus.disconnected;
+    if (action == 'toggleConnection' && !macOSMenuToggleMatches(visual, value)) return;
+    final cancel = action == 'toggleConnection' && visual == VpnStatus.connecting;
+    if ((_macOSMenuActionBusy && !cancel) || visual == VpnStatus.disconnecting) return;
+    if (visual == VpnStatus.connecting && !cancel) return;
+    if (!const {'toggleConnection', 'setMode', 'selectServer'}.contains(action)) return;
+    _macOSMenuActionBusy = true;
+    _syncMacOSMenu();
+    try {
+      final vpn = ref.read(vpnStateProvider.notifier);
+      switch (action) {
+        case 'toggleConnection':
+          if (cancel) {
+            await vpn.cancelConnect();
+          } else if (ref.read(vpnStateProvider).value?.status == VpnStatus.connected) {
+            await vpn.disconnect();
+          } else if (ref.read(serversProvider).activeServer != null) {
+            await vpn.connect();
+          }
+        case 'setMode':
+          if (value != 'proxy' && value != 'tun') return;
+          final settings = ref.read(settingsNotifierProvider).value ?? const AppSettings();
+          if (settings.connectionMode == value) return;
+          await MacOSDesktopService.showWindow();
+          if (!mounted) return;
+          await applyDesktopConnectionMode(
+            context, DesktopModeDeps.of(ref), settings,
+            value == 'tun' ? ConnectionMode.tun : ConnectionMode.proxy,
+          );
+        case 'selectServer':
+          final servers = ref.read(serversProvider);
+          final target = servers.servers.where((s) => s.id == value).firstOrNull;
+          if (target == null) return;
+          if (servers.activeServerId == target.id) return;
+          final subs = ref.read(subscriptionsProvider).value ?? const [];
+          if (subs.any((s) => s.autoSelect)) {
+            unawaited(ref.read(subscriptionsProvider.notifier).handAutoSelectTo(null));
+          }
+          await ref.read(serversProvider.notifier).setActive(target);
+          final status = ref.read(vpnStateProvider).value?.status;
+          if (status == VpnStatus.connected || status == VpnStatus.connecting) {
+            await ref.read(vpnStateProvider.notifier).reconnectToActiveServer();
+          }
+      }
+    } catch (error) {
+      if (mounted) {
+        await MacOSDesktopService.showWindow();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(friendlyError(error, context))),
+          );
+        }
+      }
+    } finally {
+      _macOSMenuActionBusy = false;
+      _syncMacOSMenu();
     }
   }
 
@@ -231,10 +373,22 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
     await _maybeAutostartConnect();
   }
 
+  Future<void> _runMacOSStartupTasks() async {
+    if (!Platform.isMacOS || _startupTasksDone) return;
+    _startupTasksDone = true;
+
+    final storage = ref.read(storageProvider);
+    final settings = await storage.getSettings();
+    await MacOSDesktopService.applySettings(settings);
+
+    await _maybeAutostartConnect();
+  }
+
   Future<void> _runStartupTasks() async {
     try {
       await _runWindowsStartupTasks();
       await _runLinuxStartupTasks();
+      await _runMacOSStartupTasks();
     } finally {
       // после автостарта: оба подключают один и тот же сервер
       await _maybeResumeAfterUpdate();
@@ -249,7 +403,8 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
   }
 
   Future<void> _maybeAutostartConnect({bool force = false}) async {
-    if (!(Platform.isWindows || Platform.isLinux) || _startupConnectInFlight) {
+    if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS) ||
+        _startupConnectInFlight) {
       return;
     }
 
@@ -258,7 +413,9 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
       if (!force) {
         final isAutostart = Platform.isLinux
             ? LinuxAutostart.launchedAtLogin()
-            : await WindowsDesktopService.isAutostartLaunch();
+            : (Platform.isMacOS
+                ? await MacOSDesktopService.isAutostartLaunch()
+                : await WindowsDesktopService.isAutostartLaunch());
         if (!isAutostart) return;
       }
 
@@ -426,6 +583,13 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
       LinuxBackgroundService.instance.uiVisible
           .removeListener(_onLinuxWindowVisibility);
     }
+    if (Platform.isMacOS) {
+      VpnNativeBridge.registerQuitHandler(null);
+      VpnNativeBridge.registerStatusMenuHandler(null);
+      VpnNativeBridge.registerWakeHandler(null);
+      desktopRecoveryStatus.removeListener(_onMacOSRecoveryChanged);
+      _macOSStatusItem?.dispose();
+    }
     HotkeyService.onPressed = null;
     VpnNativeBridge.registerAutostartHandler(null);
     VpnNativeBridge.registerWindowVisibilityHandler(null);
@@ -506,7 +670,9 @@ class _DesktopHomeScreenState extends ConsumerState<DesktopHomeScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 16),
-                    if (Platform.isWindows || Platform.isLinux) ...[
+                    if (Platform.isWindows ||
+                        Platform.isLinux ||
+                        Platform.isMacOS) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: MediaQuery.sizeOf(context).width >= 900

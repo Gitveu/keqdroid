@@ -453,10 +453,14 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       final split = ref.read(splitTunnelingProvider);
       final excludePkgs = split.excludePackages.toList();
       final includePkgs = split.includePackages.toList();
-      final routingMode = routingModeFromSplit(
+      var routingMode = routingModeFromSplit(
         includePackages: split.includePackages,
         excludePackages: split.excludePackages,
       );
+      final macRouting = Platform.isMacOS
+          ? await MacOSAppRoutingStore.load()
+          : null;
+      if (macRouting != null) routingMode = macRouting.mode;
       final processNames = (Platform.isWindows || Platform.isLinux)
           ? processNamesForSplit(
               includePackages: split.includePackages,
@@ -674,6 +678,30 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
           (settings.tun.blockIpv6Leak || (Platform.isLinux && strictRoute)) &&
           await hostHasGlobalIpv6(excludeInterfaceName: kTunInterfaceName);
 
+      final processPaths =
+          macRouting != null && connectionMode == ConnectionMode.tun
+              ? await MacOSAppRoutingStore.resolvePaths(
+                  macRouting,
+                  routingMode == AppRoutingMode.allProxy
+                      ? const []
+                      : await engine.getInstalledApps(includeSystem: true),
+                )
+              : const <String>[];
+
+      final chinaDnsDomains = !mihomoPicked &&
+              Platform.isMacOS &&
+              connectionMode == ConnectionMode.tun &&
+              SingBoxTunConfigGen.needsChinaDnsDomains(settings)
+          ? await GeoAssetService.chinaDnsDomains()
+          : const <GeoDomain>[];
+
+      final hostHasIpv6 = connectionMode == ConnectionMode.tun &&
+              (Platform.isWindows || Platform.isLinux || Platform.isMacOS) &&
+              settings.tun.blockIpv6Leak &&
+              !mihomoPicked
+          ? await hostHasGlobalIpv6(excludeInterfaceName: kTunInterfaceName)
+          : false;
+
       final listedSettings =
           mihomoPicked ? settings : ruleLists.expand(settings);
 
@@ -688,6 +716,9 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
               nativeTunInbound: Platform.isAndroid &&
                   connectionMode == ConnectionMode.tun &&
                   !mihomoPicked,
+              physicalBootstrapDns: TunnelSessionBuilder.usePhysicalBootstrapDns(
+                connectionMode,
+              ),
               desktopTun: xrayDesktopTun
                   ? DesktopTunOptions(
                       windows: Platform.isWindows,
@@ -715,7 +746,7 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
       if (mihomoPicked &&
           connectionMode == ConnectionMode.tun &&
           settings.tun.blockIpv6Leak &&
-          (Platform.isWindows || Platform.isLinux) &&
+          (Platform.isWindows || Platform.isLinux || Platform.isMacOS) &&
           await hostHasGlobalIpv6(excludeInterfaceName: kTunInterfaceName)) {
         AppLogger.instance.warn(
           'This machine has global IPv6, but the tunnel here belongs to the '
@@ -731,6 +762,13 @@ class VpnStateNotifier extends AsyncNotifier<VpnState> {
         xrayConfig: xrayConfig,
         vpnBackend: vpnBackend,
         mihomoConfig: mihomoConfig,
+        resolvedServerIp: serverIp,
+        socksUsername: creds.username,
+        socksPassword: creds.password,
+        routingMode: routingMode,
+        managedProcessPaths: processPaths,
+        chinaDnsDomains: chinaDnsDomains,
+        hostHasIpv6: hostHasIpv6,
         excludePackages: excludePkgs,
         includePackages: includePkgs,
         excludeProcesses: routingMode == AppRoutingMode.allExceptSelected

@@ -4637,6 +4637,18 @@ abstract class AppLocalizations {
   /// **'Version, cores, geo databases and current session'**
   String get settingsInternalsSubtitle;
 
+  /// No description provided for @settingsCoreAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic'**
+  String get settingsCoreAuto;
+
+  /// No description provided for @settingsCoreAutoSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Links go to Xray, ready-made configs to their own core'**
+  String get settingsCoreAutoSubtitle;
+
   /// No description provided for @settingsCoreXraySubtitle.
   ///
   /// In en, this message translates to:
@@ -5452,6 +5464,138 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not read this image.'**
   String get cardImageRejectUnreadable;
+
+  /// No description provided for @macosTunDnsWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected, but DNS queries failed'**
+  String get macosTunDnsWarning;
+
+  /// No description provided for @macosTunDnsOk.
+  ///
+  /// In en, this message translates to:
+  /// **'DNS queries succeeded'**
+  String get macosTunDnsOk;
+
+  /// No description provided for @macosTunDnsChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking DNS…'**
+  String get macosTunDnsChecking;
+
+  /// No description provided for @macosTunDnsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'TUN DNS'**
+  String get macosTunDnsTitle;
+
+  /// No description provided for @macosLaunchAtLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Launch at login'**
+  String get macosLaunchAtLogin;
+
+  /// No description provided for @macosAutoConnectOnLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect automatically at login'**
+  String get macosAutoConnectOnLogin;
+
+  /// No description provided for @macosAutoConnectOnLoginHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to the last selected server using the mode from the sidebar when launched at login. TUN requires prior authorization and will not connect automatically without it. Proxy requires no administrator authorization.'**
+  String get macosAutoConnectOnLoginHint;
+
+  /// No description provided for @macosAutoConnectRequiresLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable \"Launch at login\" first'**
+  String get macosAutoConnectRequiresLogin;
+
+  /// No description provided for @macosSplitProcessHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Rules match executable paths, including helpers inside the selected app. Shared system services may not be attributable to an app.'**
+  String get macosSplitProcessHint;
+
+  /// No description provided for @macosAppNeedsMatching.
+  ///
+  /// In en, this message translates to:
+  /// **'App not found in this list. Locate it again if it moved or was removed.'**
+  String get macosAppNeedsMatching;
+
+  /// No description provided for @macosNetworkServiceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Network service'**
+  String get macosNetworkServiceTitle;
+
+  /// No description provided for @macosNetworkServiceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Proxy connects and switches the system proxy without administrator authorization. TUN requires authorization once per installed version.'**
+  String get macosNetworkServiceHint;
+
+  /// No description provided for @macosNetworkServiceMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Install or update keqdroid using the complete PKG installer to enable the network service.'**
+  String get macosNetworkServiceMissing;
+
+  /// No description provided for @macosAuthorizeAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorize TUN for this account'**
+  String get macosAuthorizeAccount;
+
+  /// No description provided for @macosWaitingNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for network to recover'**
+  String get macosWaitingNetwork;
+
+  /// No description provided for @macosRestoringNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring previous network settings'**
+  String get macosRestoringNetwork;
+
+  /// No description provided for @macosRetryingNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting automatically'**
+  String get macosRetryingNetwork;
+
+  /// No description provided for @macosRecoveryPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic recovery paused'**
+  String get macosRecoveryPaused;
+
+  /// No description provided for @macosRetryRecovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry network restoration'**
+  String get macosRetryRecovery;
+
+  /// No description provided for @appearanceShowMenuBarSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Show real-time speed in the menu bar'**
+  String get appearanceShowMenuBarSpeed;
+
+  /// No description provided for @appearanceShowMenuBarSpeedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Traffic handled by keqdroid'**
+  String get appearanceShowMenuBarSpeedSubtitle;
+
+  /// No description provided for @macosMenuOpenServers.
+  ///
+  /// In en, this message translates to:
+  /// **'Open window to select a node'**
+  String get macosMenuOpenServers;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

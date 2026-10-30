@@ -29,6 +29,8 @@ import '../services/card_image_service.dart';
 import '../services/core_dial_failures.dart';
 import '../services/exit_ip_service.dart';
 import '../services/geo_asset_service.dart';
+import '../services/macos_app_routing_store.dart';
+import '../services/macos_status_item.dart';
 import '../services/notification_service.dart';
 import '../services/ping_service.dart';
 import '../services/rule_list_service.dart';
@@ -64,7 +66,9 @@ import '../utils/route_servers.dart';
 import '../utils/routing_profiles.dart';
 import '../utils/traffic_routes.dart';
 import '../utils/rule_lists.dart';
+import '../utils/geo_dat_reader.dart';
 import '../utils/singbox_outbounds.dart';
+import '../utils/singbox_tun_config.dart' hide kTunInterfaceName;
 import '../utils/socks5_credentials.dart';
 import '../utils/split_tunnel_routing.dart';
 import '../utils/split_tunneling_entries.dart';
@@ -176,8 +180,25 @@ final vpnEngineProvider = Provider<VpnEngine>((ref) {
   // поэтому видимость берём ещё и из натива
   var lifecycleForeground = true;
   var uiVisible = true;
-  void applyPolling() =>
-      engine.setTrafficStatsPollingEnabled(lifecycleForeground && uiVisible);
+  var menuBarSpeed = Platform.isMacOS &&
+      (ref.read(settingsNotifierProvider).value?.showMenuBarSpeed ?? true);
+  void applyPolling() => engine.setTrafficStatsPollingEnabled(
+    desktopTrafficPollingNeeded(
+      visible: uiVisible,
+      foreground: lifecycleForeground,
+      macOS: Platform.isMacOS,
+      showMenuBarSpeed: menuBarSpeed,
+    ),
+  );
+  if (Platform.isMacOS) {
+    ref.listen(
+      settingsNotifierProvider.select((s) => s.value?.showMenuBarSpeed ?? true),
+      (_, next) {
+        menuBarSpeed = next;
+        applyPolling();
+      },
+    );
+  }
   final lifecycle = AppLifecycleListener(
     onStateChange: (state) {
       final hidden = state == AppLifecycleState.hidden ||

@@ -27,7 +27,7 @@ class AppLogger {
   }
 
   Future<void> enableFileLog() async {
-    if (!Platform.isWindows && !Platform.isLinux && !Platform.isAndroid) return;
+    if (!Platform.isWindows && !Platform.isLinux && !Platform.isAndroid && !Platform.isMacOS) return;
     try {
       enableFileLogIn(await getApplicationSupportDirectory());
     } catch (_) {}

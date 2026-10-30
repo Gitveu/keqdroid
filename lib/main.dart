@@ -22,6 +22,7 @@ import 'package:keqdroid/services/vpn_engine.dart';
 import 'package:keqdroid/screens/subscriptions_tab.dart';
 import 'package:keqdroid/screens/settings_tab.dart';
 import 'package:keqdroid/services/linux_background_service.dart';
+import 'package:keqdroid/services/macos_desktop_service.dart';
 import 'package:keqdroid/services/memory_watch.dart';
 import 'package:keqdroid/services/storage_service.dart';
 import 'package:keqdroid/services/update_service.dart';
@@ -67,6 +68,9 @@ Future<void> main() async {
       await PlatformBootstrap.initialize();
     } else if (Platform.isLinux || Platform.isMacOS) {
       await DesktopBackgroundService.init();
+      if (Platform.isMacOS) {
+        await MacOSDesktopService.initialize();
+      }
       if (Platform.isLinux) {
         final primary =
             await LinuxBackgroundService.instance.ensureSingleInstance();
@@ -101,7 +105,7 @@ Future<void> main() async {
     // до первого кадра, иначе выбранная картинка карточки не покажется
     await CardImageService.warmUp();
 
-    final home = Platform.isWindows || Platform.isLinux
+    final home = PlatformBootstrap.isDesktop
         ? const DesktopHomeScreen()
         : const VpnHomeScreen();
 
