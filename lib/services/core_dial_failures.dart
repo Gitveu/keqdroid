@@ -4,6 +4,10 @@ abstract final class CoreDialFailures {
 
   static int get count => _count;
 
+  static void add(int failures) {
+    if (failures > 0) _count += failures;
+  }
+
   static void observe(String line) {
     if (isServerDialFailure(line)) _count++;
   }

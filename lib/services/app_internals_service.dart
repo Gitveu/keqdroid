@@ -8,8 +8,9 @@ import 'package:path/path.dart' as p;
 import '../models/app_internals.dart';
 import '../models/app_settings.dart';
 import '../platform/vpn_native_bridge.dart';
+import '../tunnel/desktop_core_paths.dart';
+import '../tunnel/desktop_runtime.dart';
 import '../tunnel/linux_core_paths.dart';
-import '../tunnel/linux_tunnel_backend.dart';
 import '../tunnel/tunnel_state.dart';
 import '../tunnel/windows_core_paths.dart';
 import '../tunnel/windows_tunnel_backend.dart';
@@ -23,6 +24,7 @@ class AppInternalsService {
 
   static const _engineModules = <String, String>{
     'xtls/xray-core': 'xray-core',
+    'sagernet/sing-box': 'sing-box',
   };
 
   static Future<AppInternals> collect({
@@ -81,6 +83,17 @@ class AppInternalsService {
         await _core(await LinuxCorePaths.xrayExecutable(), 'xray', CoreRole.core),
         await _core(
             await LinuxCorePaths.mihomoExecutable(), 'mihomo', CoreRole.core),
+      ];
+    }
+    if (Platform.isMacOS) {
+      final xrayPath = await DesktopCorePaths.xrayExecutable();
+      return [
+        await _core(xrayPath, 'xray', CoreRole.core),
+        await _core(
+          await DesktopCorePaths.mihomoExecutable(),
+          'mihomo',
+          CoreRole.core,
+        ),
       ];
     }
     return const [];
@@ -176,7 +189,7 @@ class AppInternalsService {
       status: state?.status ?? VpnStatus.disconnected,
       engine: Platform.isAndroid
           ? _androidCoreBinary(android)
-          : _desktopEngine(),
+          : _desktopEngine(settings),
       mode: Platform.isAndroid ? null : settings.connectionModeEnum,
       socksPort: settings.localPort,
       httpPort: settings.httpPort,
@@ -189,20 +202,18 @@ class AppInternalsService {
           ? WindowsTunnelBackend.activeInstance?.clashApiPort
           : Platform.isAndroid
               ? MihomoApiSession().port
-              : Platform.isLinux
-                  ? LinuxTunnelBackend.activeInstance?.clashApiPort
+              : DesktopRuntime.supported
+                  ? DesktopRuntime.clashApiPort
                   : null,
     );
   }
 
-  static String _desktopEngine() {
-    final pids = Platform.isWindows
-        ? WindowsTunnelBackend.activeInstance?.activeCorePids
-        : LinuxTunnelBackend.activeInstance?.activeCorePids;
-    if (pids != null && pids.keys.any((k) => k.startsWith('mihomo'))) {
+  static String _desktopEngine(AppSettings settings) {
+    final pids = DesktopRuntime.corePids;
+    if (pids.keys.any((k) => k.startsWith('mihomo'))) {
       return 'mihomo';
     }
-    return 'xray';
+    return Platform.isMacOS ? settings.coreEngine : 'xray';
   }
 
   static String _androidCoreBinary(Map<String, Object?> android) =>
@@ -215,12 +226,7 @@ class AppInternalsService {
         if (core > 0) _androidCoreBinary(android): core,
       };
     }
-    if (Platform.isWindows) {
-      return WindowsTunnelBackend.activeInstance?.activeCorePids ?? const {};
-    }
-    if (Platform.isLinux) {
-      return LinuxTunnelBackend.activeInstance?.activeCorePids ?? const {};
-    }
+    if (DesktopRuntime.supported) return DesktopRuntime.corePids;
     return const {};
   }
 

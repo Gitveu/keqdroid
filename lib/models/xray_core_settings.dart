@@ -534,6 +534,7 @@ class XrayCoreSettings {
     required List<String> directDomains,
     List<String> bootstrapDomains = const [],
     bool proxiedDoh = false,
+    bool physicalBootstrapDns = false,
   }) {
     final servers = <Map<String, dynamic>>[];
 
@@ -544,12 +545,14 @@ class XrayCoreSettings {
         : const <Map<String, dynamic>>[];
 
     if (bootstrapDomains.isNotEmpty) {
-      for (final server in _bootstrapResolvers(custom)) {
-        servers.add({
-          ...server,
-          'domains': bootstrapDomains,
-          'skipFallback': true,
-        });
+      if (!physicalBootstrapDns || dnsUseCustom) {
+        for (final server in _bootstrapResolvers(custom)) {
+          servers.add({
+            ...server,
+            'domains': bootstrapDomains,
+            'skipFallback': true,
+          });
+        }
       }
       servers.add({
         'address': 'localhost',
@@ -614,6 +617,29 @@ class XrayCoreSettings {
       if (hosts.isNotEmpty) 'hosts': hosts,
       'servers': [for (final server in servers) _withDnsLimits(server)],
       'queryStrategy': dnsQueryStrategy,
+      if (dnsDisableCache) 'disableCache': true,
+    };
+  }
+
+  Map<String, dynamic> buildBootstrapDnsBlock({
+    bool splitDirectDomains = false,
+    bool physicalBootstrapDns = false,
+  }) {
+    final custom = dnsUseCustom
+        ? xrayDnsServers(dnsServers).servers
+        : const <Map<String, dynamic>>[];
+    return {
+      'servers': [
+        if (!physicalBootstrapDns || dnsUseCustom)
+          for (final server in _bootstrapResolvers(
+            splitDirectDomains && dnsSplitDirectDomains && custom.length > 1
+                ? [custom.first]
+                : custom,
+          ))
+            _withDnsLimits(server),
+        _withDnsLimits({'address': 'localhost'}),
+      ],
+      'queryStrategy': 'UseIPv4',
       if (dnsDisableCache) 'disableCache': true,
     };
   }

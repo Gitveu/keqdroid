@@ -146,7 +146,7 @@ class RuleListService {
           await request.close().timeout(const Duration(seconds: 30));
       if (response.statusCode != HttpStatus.ok) {
         await response.drain<void>().catchError((_) {});
-        return _saveFailure(
+        return await _saveFailure(
           previous,
           RuleListFailure.http,
           httpStatus: response.statusCode,
@@ -154,20 +154,20 @@ class RuleListService {
       }
       final declared = response.contentLength;
       if (declared > maxBytes) {
-        return _saveFailure(previous, RuleListFailure.tooLarge);
+        return await _saveFailure(previous, RuleListFailure.tooLarge);
       }
       final bytes = BytesBuilder(copy: false);
       await for (final chunk
           in response.timeout(const Duration(seconds: 60))) {
         bytes.add(chunk);
         if (bytes.length > maxBytes) {
-          return _saveFailure(previous, RuleListFailure.tooLarge);
+          return await _saveFailure(previous, RuleListFailure.tooLarge);
         }
       }
       final body = bytes.takeBytes();
       final domains = await Isolate.run(() => _parseSorted(body));
       if (domains.isEmpty) {
-        return _saveFailure(previous, RuleListFailure.empty);
+        return await _saveFailure(previous, RuleListFailure.empty);
       }
       final dir = await _dir();
       final id = fileId(url);

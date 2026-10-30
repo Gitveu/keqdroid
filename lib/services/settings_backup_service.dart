@@ -158,6 +158,7 @@ class SettingsBackupService {
     'hapticFeedback',
     'showTrafficStats',
     'showConnectionTime',
+    'showMenuBarSpeed',
     'showTrafficSplit',
     'waveLatencyColor',
     'showSpeedInNotification',

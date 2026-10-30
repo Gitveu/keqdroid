@@ -30,6 +30,7 @@ class ConfigGeneratorV2 {
     String? resolvedServerIp,
     bool localInboundsNoAuth = false,
     bool nativeTunInbound = false,
+    bool physicalBootstrapDns = false,
     DesktopTunOptions? desktopTun,
     GeoAssetIndex? geoIndex,
     List<RouteServerOutbound> routeServers = const [],
@@ -43,6 +44,7 @@ class ConfigGeneratorV2 {
         resolvedServerIp: resolvedServerIp,
         localInboundsNoAuth: localInboundsNoAuth,
         nativeTunInbound: nativeTunInbound,
+        physicalBootstrapDns: physicalBootstrapDns,
         desktopTun: desktopTun,
         geoIndex: geoIndex,
         routeServers: routeServers,
@@ -211,6 +213,7 @@ class ConfigGeneratorV2 {
     bool pingHttpInbound = false,
     bool localInboundsNoAuth = false,
     bool nativeTunInbound = false,
+    bool physicalBootstrapDns = false,
     DesktopTunOptions? desktopTun,
     GeoAssetIndex? geoIndex,
     List<RouteServerOutbound> routeServers = const [],
@@ -239,6 +242,7 @@ class ConfigGeneratorV2 {
         pingHttpInbound: pingHttpInbound,
         localInboundsNoAuth: localInboundsNoAuth,
         nativeTunInbound: tunInbound,
+        physicalBootstrapDns: physicalBootstrapDns,
         desktopTun: pc,
         routeServers: routeServers,
         appRoutes: appRoutes,
@@ -253,6 +257,7 @@ class ConfigGeneratorV2 {
         pingHttpInbound: pingHttpInbound,
         localInboundsNoAuth: localInboundsNoAuth,
         nativeTunInbound: tunInbound,
+        physicalBootstrapDns: physicalBootstrapDns,
         desktopTun: pc,
         geoIndex: geoIndex,
         routeServers: routeServers,
@@ -273,6 +278,7 @@ class ConfigGeneratorV2 {
         pingHttpInbound: pingHttpInbound,
         localInboundsNoAuth: localInboundsNoAuth,
         nativeTunInbound: tunInbound,
+        physicalBootstrapDns: physicalBootstrapDns,
         desktopTun: pc,
         routeServers: routeServers,
         appRoutes: appRoutes,
@@ -422,6 +428,7 @@ class ConfigGeneratorV2 {
     bool pingHttpInbound = false,
     bool localInboundsNoAuth = false,
     bool nativeTunInbound = false,
+    bool physicalBootstrapDns = false,
     DesktopTunOptions? desktopTun,
     List<RouteServerOutbound> routeServers = const [],
     List<RouteAppRules> appRoutes = const [],
@@ -466,6 +473,7 @@ class ConfigGeneratorV2 {
       pingHttpInbound: pingHttpInbound,
       localInboundsNoAuth: localInboundsNoAuth,
       nativeTunInbound: nativeTunInbound,
+      physicalBootstrapDns: physicalBootstrapDns,
       desktopTun: desktopTun,
       routeServers: routeServers,
       appRoutes: appRoutes,
@@ -828,6 +836,7 @@ class ConfigGeneratorV2 {
     bool pingHttpInbound = false,
     bool localInboundsNoAuth = false,
     bool nativeTunInbound = false,
+    bool physicalBootstrapDns = false,
     DesktopTunOptions? desktopTun,
     GeoAssetIndex? geoIndex,
     List<RouteServerOutbound> routeServers = const [],
@@ -840,6 +849,7 @@ class ConfigGeneratorV2 {
       pingHttpInbound: pingHttpInbound,
       localInboundsNoAuth: localInboundsNoAuth,
       nativeTunInbound: nativeTunInbound,
+      physicalBootstrapDns: physicalBootstrapDns,
       desktopTun: desktopTun,
     );
 
@@ -1845,7 +1855,7 @@ class ConfigGeneratorV2 {
 
   static Map<String, dynamic> _wrapConfig(
       List<Map<String, dynamic>> proxyOutbounds, AppSettings settings, String serverAddress, int serverPort,
-      {String? originalServerAddress, List<String> extraServerAddresses = const [], int? pingSocksPort, bool pingHttpInbound = false, bool localInboundsNoAuth = false, bool nativeTunInbound = false, DesktopTunOptions? desktopTun, List<RouteServerOutbound> routeServers = const [], List<RouteAppRules> appRoutes = const [], OwnerGuard ownerGuard = OwnerGuard.off}) {
+      {String? originalServerAddress, List<String> extraServerAddresses = const [], int? pingSocksPort, bool pingHttpInbound = false, bool localInboundsNoAuth = false, bool nativeTunInbound = false, bool physicalBootstrapDns = false, DesktopTunOptions? desktopTun, List<RouteServerOutbound> routeServers = const [], List<RouteAppRules> appRoutes = const [], OwnerGuard ownerGuard = OwnerGuard.off}) {
 
     originalServerAddress ??= serverAddress;
     final isPingMode = pingSocksPort != null;
@@ -1936,6 +1946,7 @@ class ConfigGeneratorV2 {
             directDomains: directDomains,
             bootstrapDomains: bootstrapDomains,
             proxiedDoh: globalProxy,
+            physicalBootstrapDns: physicalBootstrapDns,
           );
 
     // ruleTag печатается в логе на Info, по нему экран Соединения показывает правило
@@ -2146,6 +2157,7 @@ class ConfigGeneratorV2 {
       pingHttpInbound: pingHttpInbound,
       localInboundsNoAuth: localInboundsNoAuth,
       nativeTunInbound: nativeTunInbound,
+      physicalBootstrapDns: physicalBootstrapDns,
       desktopTun: desktopTun,
     );
     final fakeDns = _fakeDnsApplies(
@@ -2358,6 +2370,7 @@ class ConfigGeneratorV2 {
     bool pingHttpInbound = false,
     bool localInboundsNoAuth = false,
     bool nativeTunInbound = false,
+    bool physicalBootstrapDns = false,
     DesktopTunOptions? desktopTun,
   }) {
     final core = settings.xrayCore;

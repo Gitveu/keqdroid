@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import '../services/hotkey_service.dart';
+import '../services/macos_desktop_service.dart';
 import '../utils/system_accent.dart';
 
 class VpnNativeBridge {
@@ -12,14 +13,45 @@ class VpnNativeBridge {
   static const channel = MethodChannel('keqdis_vpn_channel');
 
   static bool get supportsNotificationLaunch => Platform.isAndroid;
-  static bool get supportsDeepLinks => Platform.isAndroid || Platform.isWindows;
+  static bool get supportsDeepLinks =>
+      Platform.isAndroid || Platform.isWindows || Platform.isMacOS;
   static bool get supportsAutostartNotification => Platform.isWindows;
-  static bool get supportsWindowVisibilityEvents => Platform.isWindows;
-  static bool get supportsGlobalHotkeys => Platform.isWindows;
+  static bool get supportsWindowVisibilityEvents =>
+      Platform.isWindows || Platform.isMacOS;
+  static bool get supportsGlobalHotkeys =>
+      Platform.isWindows || Platform.isMacOS;
 
   static Future<void> Function(MethodCall call)? _launchHandler;
   static Future<void> Function()? _autostartHandler;
   static void Function(bool visible)? _windowVisibilityHandler;
+  static Future<void> Function()? _quitHandler;
+  static bool _quitInFlight = false;
+  static Future<void> Function(String action, String? value)? _statusMenuHandler;
+  static void Function()? _wakeHandler;
+
+  static void registerWakeHandler(void Function()? handler) {
+    _wakeHandler = handler;
+    _syncMethodCallHandler();
+  }
+
+  static void registerStatusMenuHandler(
+    Future<void> Function(String action, String? value)? handler,
+  ) {
+    _statusMenuHandler = handler;
+    _syncMethodCallHandler();
+  }
+
+  static void registerQuitHandler(Future<void> Function()? handler) {
+    _quitHandler = handler;
+    _syncMethodCallHandler();
+    if (Platform.isMacOS) {
+      unawaited(
+        channel.invokeMethod<void>('setQuitHandlerReady', {
+          'ready': handler != null,
+        }),
+      );
+    }
+  }
 
   static Future<String?> getLaunchAction() async {
     if (!supportsNotificationLaunch) return null;
@@ -158,12 +190,39 @@ class VpnNativeBridge {
         supportsDeepLinks ||
         supportsAutostartNotification ||
         supportsSystemAccentEvents ||
-        supportsWindowVisibilityEvents;
+        supportsWindowVisibilityEvents ||
+        Platform.isMacOS;
     if (!needsHandler) {
       channel.setMethodCallHandler(null);
       return;
     }
     channel.setMethodCallHandler((call) async {
+      if (call.method == 'onSystemWake' && Platform.isMacOS) {
+        _wakeHandler?.call();
+        return;
+      }
+      if (call.method == 'onStatusMenuAction' && Platform.isMacOS) {
+        final args = call.arguments;
+        if (args is Map &&
+            args['action'] is String &&
+            (args['value'] == null || args['value'] is String)) {
+          await _statusMenuHandler?.call(
+            args['action'] as String,
+            args['value'] as String?,
+          );
+        }
+        return;
+      }
+      if (call.method == 'onQuitRequest' && Platform.isMacOS) {
+        if (_quitInFlight) return;
+        _quitInFlight = true;
+        try {
+          await MacOSDesktopService.quitAfter(_quitHandler);
+        } finally {
+          _quitInFlight = false;
+        }
+        return;
+      }
       if (call.method == 'onAutostartConnect' && supportsAutostartNotification) {
         await _autostartHandler?.call();
         return;

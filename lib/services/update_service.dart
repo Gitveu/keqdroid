@@ -122,7 +122,7 @@ class UpdateService {
         }
         // сеть или лимит: попытку не считаем, следующий ре-ран перепроверит сразу
         _lastAutoCheckAt = null;
-        return _cachedResultRespectingSkip();
+        return await _cachedResultRespectingSkip();
       }
 
       final result =

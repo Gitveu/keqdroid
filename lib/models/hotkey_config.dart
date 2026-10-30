@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 
 enum HotkeyAction {
@@ -64,11 +66,13 @@ class HotkeyBinding {
     return ctrl || alt || shift || meta;
   }
 
-  String get label => [
-        if (ctrl) 'Ctrl',
-        if (alt) 'Alt',
-        if (shift) 'Shift',
-        if (meta) 'Win',
+  String get label => labelForPlatform(defaultTargetPlatform);
+
+  String labelForPlatform(TargetPlatform platform) => [
+        if (ctrl) platform == TargetPlatform.macOS ? '⌃' : 'Ctrl',
+        if (alt) platform == TargetPlatform.macOS ? '⌥' : 'Alt',
+        if (shift) platform == TargetPlatform.macOS ? '⇧' : 'Shift',
+        if (meta) platform == TargetPlatform.macOS ? '⌘' : 'Win',
         HotkeyKeys.labelFor(key),
       ].join(' + ');
 

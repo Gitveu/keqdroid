@@ -6,9 +6,9 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 
 import '../core/app_logger.dart';
-import '../tunnel/linux_core_paths.dart';
-import '../tunnel/windows_core_paths.dart';
+import '../tunnel/desktop_core_paths.dart';
 import '../tunnel/vpn_backend.dart';
+import '../utils/keqrnel_config.dart';
 import 'windows_desktop_service.dart';
 
 final _ansiEscape = RegExp(r'\x1B\[[0-9;]*[A-Za-z]');
@@ -43,17 +43,9 @@ class _CoreLog {
 class EphemeralXrayPing {
   EphemeralXrayPing._();
 
-  static Future<String?> _resolveXray() {
-    if (Platform.isWindows) return WindowsCorePaths.xrayExecutable();
-    if (Platform.isLinux) return LinuxCorePaths.xrayExecutable();
-    return Future<String?>.value(null);
-  }
+  static Future<String?> _resolveXray() => DesktopCorePaths.xrayExecutable();
 
-  static Future<String?> _resolveMihomo() {
-    if (Platform.isWindows) return WindowsCorePaths.mihomoExecutable();
-    if (Platform.isLinux) return LinuxCorePaths.mihomoExecutable();
-    return Future<String?>.value(null);
-  }
+  static Future<String?> _resolveMihomo() => DesktopCorePaths.mihomoExecutable();
 
   static Future<String?> _resolveCore(VpnBackend core) =>
       core == VpnBackend.mihomo ? _resolveMihomo() : _resolveXray();
@@ -68,14 +60,50 @@ class EphemeralXrayPing {
           ? ['-d', sessionDirPath, '-f', configPath]
           : ['run', '-c', configPath];
 
-  static String _coreConfig(String configJson, int port, VpnBackend core) {
+  static String _coreConfig(
+    String configJson,
+    int port,
+    VpnBackend core, {
+    String? coreBin,
+  }) {
     if (core == VpnBackend.mihomo) return _mihomoConfig(configJson, port);
+    final isKeqrnel = coreBin != null &&
+        p.basenameWithoutExtension(coreBin).toLowerCase() == 'keqrnel';
+    if (isKeqrnel) {
+      final box = jsonDecode(KeqrnelConfig.wrapXray(configJson))
+          as Map<String, dynamic>;
+      final inbounds = box['inbounds'];
+      if (inbounds is List && inbounds.isNotEmpty) {
+        for (final inbound in inbounds) {
+          if (inbound is Map<String, dynamic>) inbound['listen_port'] = port;
+        }
+      } else {
+        box['inbounds'] = [
+          {
+            'type': 'socks',
+            'tag': 'socks-in',
+            'listen': '127.0.0.1',
+            'listen_port': port,
+          }
+        ];
+      }
+      return jsonEncode(box);
+    }
     final config = jsonDecode(configJson) as Map<String, dynamic>;
     final inbounds = config['inbounds'];
-    if (inbounds is List) {
+    if (inbounds is List && inbounds.isNotEmpty) {
       for (final inbound in inbounds) {
         if (inbound is Map<String, dynamic>) inbound['port'] = port;
       }
+    } else {
+      config['inbounds'] = [
+        {
+          'protocol': 'socks',
+          'listen': '127.0.0.1',
+          'port': port,
+          'settings': {'auth': 'noauth', 'udp': true},
+        }
+      ];
     }
     return jsonEncode(config);
   }
@@ -95,13 +123,9 @@ class EphemeralXrayPing {
     return port;
   }
 
-  static Future<Directory> _sessionDir() {
-    if (Platform.isLinux) return LinuxCorePaths.sessionDir();
-    return WindowsCorePaths.sessionDir();
-  }
+  static Future<Directory> _sessionDir() => DesktopCorePaths.sessionDir();
 
-  static String get _binariesHint =>
-      Platform.isLinux ? LinuxCorePaths.binariesHint : WindowsCorePaths.binariesHint;
+  static String get _binariesHint => DesktopCorePaths.binariesHint;
 
   static Future<void> _attachCoreProcess(int pid) async {
     if (Platform.isWindows) {
@@ -247,7 +271,7 @@ class EphemeralXrayPing {
     VpnBackend core = VpnBackend.xray,
     bool keepAlive = true,
   }) async {
-    if (!Platform.isWindows && !Platform.isLinux) {
+    if (!DesktopCorePaths.supported) {
       return (
         success: false,
         latencyMs: null,
@@ -278,7 +302,9 @@ class EphemeralXrayPing {
 
     try {
       for (var attempt = 0; attempt < 2; attempt++) {
-        await configFile.writeAsString(_coreConfig(xrayConfigJson, port, core));
+        await configFile.writeAsString(
+          _coreConfig(xrayConfigJson, port, core, coreBin: coreBin),
+        );
         process = await Process.start(
           coreBin,
           _coreArgs(core, configFile.path, sessionDir.path),
@@ -350,7 +376,7 @@ class EphemeralXrayPing {
     required int timeoutMs,
     VpnBackend core = VpnBackend.xray,
   }) async {
-    if (!Platform.isWindows && !Platform.isLinux) {
+    if (!DesktopCorePaths.supported) {
       return (success: false, kbps: null, error: 'Speed test runs on desktop only');
     }
 
@@ -371,8 +397,9 @@ class EphemeralXrayPing {
     Process? process;
 
     try {
-      await configFile
-          .writeAsString(_coreConfig(xrayConfigJson, socksPort, core));
+      await configFile.writeAsString(
+        _coreConfig(xrayConfigJson, socksPort, core, coreBin: coreBin),
+      );
       process = await Process.start(
         coreBin,
         _coreArgs(core, configFile.path, sessionDir.path),

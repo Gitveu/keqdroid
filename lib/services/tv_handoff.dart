@@ -170,7 +170,7 @@ class TvReceiveServer {
     try {
       final body = await _readBody(request);
       if (body == null) {
-        return _reply(response, HttpStatus.requestEntityTooLarge);
+        return await _reply(response, HttpStatus.requestEntityTooLarge);
       }
       json = jsonDecode(body);
     } catch (_) {
