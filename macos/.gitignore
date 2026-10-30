@@ -1,0 +1,11 @@
+# Flutter-related
+**/Flutter/ephemeral/
+**/Pods/
+**/.build/
+**/.swiftpm/
+Flutter/GeneratedPluginRegistrant.swift
+
+# Xcode-related
+**/dgph
+**/xcuserdata/
+**/xcshareddata/swiftpm/

@@ -13,6 +13,12 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - deprecated/**
+    - build/**
+    - android/**
+    - ios/**
+    - windows/**
+    - macos/**
+    - linux/**
 
 linter:
   # The lint rules applied to this project can be customized in the
