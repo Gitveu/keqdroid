@@ -13,6 +13,7 @@ How to set up the project, build it for every platform, run the tests and make a
 | **JDK** | 17+ | Gradle's jvmTarget is 17; the JDK shipped with Android Studio (21) works too |
 | **Visual Studio** + "Desktop development with C++" | 2022 or newer | VS 2026 (18.x) builds fine: `windows/CMakeLists.txt` already sets `_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS` for the newer STL |
 | **WSL + Ubuntu** | — | to build the Linux target (the Windows SDK cannot do it) |
+| **Xcode** | 15+ | for building the macOS desktop target (macOS 12.0+) |
 | **gh CLI** | — | only for publishing releases |
 
 `flutter doctor` shows what is missing.
@@ -86,6 +87,25 @@ wsl -d Ubuntu-22.04 -e bash /mnt/c/Users/<you>/StudioProjects/keqdroid/tool/pack
 - Proxy mode works without root; TUN asks for root through `pkexec` on connect. Without
   polkit, run the app as root (`sudo -E keqdroid`): it then starts the core directly.
 
+### macOS (Apple Silicon & Intel, macOS 12+)
+
+```bash
+# 1. Build Darwin cores for arm64 and x64 (hermetic Go toolchain):
+python3 tool/macos/build_cores.py --arch all
+
+# 2. Build the Flutter application bundle:
+flutter build macos --release
+
+# 3. Package into optimized, codesigned .dmg disk images with SHA256SUMS:
+python3 tool/macos/package_dmg.py --arch all
+# output: build/macos-release/keqdroid-<ver>-macos-{arm64,x64}.dmg + SHA256SUMS
+```
+
+- Target macOS 12.0 and newer.
+- Plugins are managed via native Swift Package Manager without CocoaPods.
+- TUN mode uses a privileged LaunchDaemon helper (`keqdroid-network-service`) communicating over XPC with code signature verification.
+- For local development and testing of the helper daemon: `sudo ./tool/macos/install_dev_helper.sh`.
+
 ## 4. Tests and analysis
 
 ```bash
@@ -109,6 +129,7 @@ The prebuilt cores are already in `assets/bin/` and `jniLibs/`. To update a core
 |--------|----------------|
 | `tool/build_mihomo.ps1` | mihomo with the patches from `tool/patches/`: `libmihomo.so` (arm64-v8a and armeabi-v7a), `mihomo.exe`, `mihomo` |
 | `tool/build_xray_cores.ps1` | patched xray from keqrnel's `tools/patchxray`: `xray.exe`, `xray`, `libxray.so` (arm64-v8a and armeabi-v7a) |
+| `tool/macos/build_cores.py` | macOS cores (`keqrnel`, `mihomo`) for Apple Silicon (`arm64`) and Intel (`x64`) with DNS patches |
 | `tool/build_linux_native.sh` | the Linux bundle + cores on native Linux |
 | `tool/fetch_xray_geo.ps1` | fresh `geoip.dat` / `geosite.dat` |
 
@@ -221,6 +242,7 @@ Rules:
 | **JDK** | 17+ | jvmTarget в Gradle — 17; JDK из Android Studio (21) тоже подходит |
 | **Visual Studio** + «Desktop development with C++» | 2022 или новее | на VS 2026 (18.x) собирается: для новых STL в `windows/CMakeLists.txt` уже стоит `_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS` |
 | **WSL + Ubuntu** | — | сборка Linux-таргета (из Windows-SDK её не сделать) |
+| **Xcode** | 15+ | сборка macOS-таргета (macOS 12.0+) |
 | **gh CLI** | — | только для публикации релизов |
 
 `flutter doctor` покажет, чего не хватает.
@@ -295,6 +317,25 @@ wsl -d Ubuntu-22.04 -e bash /mnt/c/Users/<ты>/StudioProjects/keqdroid/tool/pac
 - Proxy работает без root; TUN запрашивает root через `pkexec` при подключении. Без
   polkit запусти приложение от root (`sudo -E keqdroid`): тогда ядро стартует напрямую.
 
+### macOS (Apple Silicon и Intel, macOS 12+)
+
+```bash
+# 1. Сборка ядер для arm64 и x64 (герметичный Go-тулчейн):
+python3 tool/macos/build_cores.py --arch all
+
+# 2. Сборка Flutter release бандла:
+flutter build macos --release
+
+# 3. Упаковка в оптимизированные .dmg образы с подписью кода и SHA256SUMS:
+python3 tool/macos/package_dmg.py --arch all
+# результат: build/macos-release/keqdroid-<ver>-macos-{arm64,x64}.dmg + SHA256SUMS
+```
+
+- Поддерживаются macOS 12.0 и новее.
+- Плагины подключаются через нативный Swift Package Manager (без CocoaPods).
+- Для TUN используется легковесный LaunchDaemon-демон (`keqdroid-network-service`) через XPC с проверкой подписи клиента.
+- Для локальной разработки и проверки демона: `sudo ./tool/macos/install_dev_helper.sh`.
+
 ## 4. Тесты и анализ
 
 ```bash
@@ -318,6 +359,7 @@ storage/подписки/апдейтер/пинг, `test/models/`, `test/tunnel
 |--------|--------------|
 | `tool/build_mihomo.ps1` | mihomo с патчами из `tool/patches/`: `libmihomo.so` (arm64-v8a и armeabi-v7a), `mihomo.exe`, `mihomo` |
 | `tool/build_xray_cores.ps1` | пропатченный xray из `tools/patchxray` keqrnel: `xray.exe`, `xray`, `libxray.so` (arm64-v8a и armeabi-v7a) |
+| `tool/macos/build_cores.py` | macOS-ядра (`keqrnel`, `mihomo`) для Apple Silicon (`arm64`) и Intel (`x64`) с DNS-патчами |
 | `tool/build_linux_native.sh` | Linux-бандл + ядра на нативном Linux |
 | `tool/fetch_xray_geo.ps1` | свежие `geoip.dat` / `geosite.dat` |
 
