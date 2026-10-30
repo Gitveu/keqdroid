@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -82,7 +84,7 @@ void main() {
     final connect = tester.getRect(find.text('Connect on autostart'));
     expect(tray.top, greaterThan(admin.top));
     expect(tray.top, lessThan(connect.top));
-  });
+  }, skip: !Platform.isWindows);
 
   testWidgets('без автозапуска нажатие ничего не меняет', (tester) async {
     final (storage, calls) = await _openWindowsSettings(tester, autostart: false);
@@ -98,7 +100,7 @@ void main() {
       calls.where((c) => c.method == 'setAutostartInTray' && c.arguments['enabled'] == true),
       isEmpty,
     );
-  });
+  }, skip: !Platform.isWindows);
 
   testWidgets('с автозапуском включается и сразу уходит в раннер', (tester) async {
     final (storage, calls) = await _openWindowsSettings(tester, autostart: true);
@@ -114,5 +116,5 @@ void main() {
       calls.where((c) => c.method == 'setAutostartInTray').last.arguments,
       {'enabled': true},
     );
-  });
+  }, skip: !Platform.isWindows);
 }
